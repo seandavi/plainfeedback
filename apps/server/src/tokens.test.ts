@@ -130,6 +130,19 @@ describe("API tokens", () => {
     expect((await bearer(w, v.token, "GET", "/me")).status).toBe(401);
   });
 
+  it("is revoked when the member is removed and stays dead after re-adding (#57)", async () => {
+    const w = await world();
+    const mine = await mint(w, w.who.creator);
+    await join(w.other.id, w.who.creator, "creator");
+    const elsewhere = await mint(w, w.who.creator, "creator", w.other.id);
+    const member = `/groups/${w.g.id}/members/${w.who.creator.id}`;
+    expect((await call(w, "DELETE", member, w.who.owner)).status).toBe(204);
+    expect((await call(w, "PUT", member, w.who.owner, { role: "creator" })).status).toBe(200);
+    expect((await bearer(w, mine.token, "GET", `/groups/${w.g.id}`)).status).toBe(401);
+    // only this group's tokens are revoked
+    expect((await bearer(w, elsewhere.token, "GET", `/groups/${w.other.id}`)).status).toBe(200);
+  });
+
   it("stops working when expired or revoked; garbage tokens are 401 even with a cookie", async () => {
     const w = await world();
     const a = await mint(w, w.who.creator);
