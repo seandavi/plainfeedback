@@ -21,7 +21,7 @@ const seed = async () => {
   const db = getDb();
   const g = one(await db.insert(s.groups).values({ name: "g" }).returning());
   const ev = one(
-    await db.insert(s.events).values({ groupId: g.id, slug: "e", name: "E" }).returning(),
+    await db.insert(s.events).values({ groupId: g.id, slug: "e", title: "E" }).returning(),
   );
   const sv = one(await db.insert(s.surveys).values({ eventId: ev.id, slug: "s" }).returning());
   const v = one(
@@ -100,7 +100,7 @@ describe("schema", () => {
       db.insert(s.memberships).values({ groupId: g.id, userId: u.id, role: "viewer" }),
       "23505",
     );
-    await rejects(db.insert(s.events).values({ groupId: g.id, slug: "e", name: "dup" }), "23505");
+    await rejects(db.insert(s.events).values({ groupId: g.id, slug: "e", title: "dup" }), "23505");
     await rejects(db.insert(s.surveys).values({ eventId: ev.id, slug: "s" }), "23505");
     await rejects(
       db

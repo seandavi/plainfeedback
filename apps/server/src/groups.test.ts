@@ -1,105 +1,11 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { createApp } from "./app";
-import { hashSessionId } from "./auth";
-import { groups, memberships, sessions, users } from "./schema";
-import { useTestDb } from "./testdb";
+import { users } from "./schema";
+import { type U, useWorld, WHO, type World } from "./testworld";
 
-// RBAC (issue #4, ADR 0009). Sessions are inserted directly; the OIDC flow is covered in auth.test.ts.
-const ORIGIN = "https://pf.test";
-const getDb = useTestDb();
+// RBAC (issue #4, ADR 0009).
+const { getDb, makeApp, mkUser, world, call } = useWorld();
 
-const makeApp = () =>
-  createApp({
-    ping: async () => {},
-    log: () => {},
-    auth: {
-      db: getDb(),
-      provider: "Test",
-      oidc: async () => {
-        throw new Error("no IdP in these tests");
-      },
-      redirectUri: `${ORIGIN}/api/v1/auth/callback`,
-      allowedDomains: [],
-      adminEmails: [],
-      cookieSecure: true,
-      sessionTtlMs: 3600_000,
-    },
-  });
-
-let n = 0;
-const mkUser = async (isAdmin = false) => {
-  n++;
-  const [row] = await getDb()
-    .insert(users)
-    .values({
-      email: `u${n}@example.org`,
-      oidcIssuer: "https://idp.test",
-      oidcSubject: `s${n}`,
-      isAdmin,
-    })
-    .returning();
-  const u = row as typeof users.$inferSelect;
-  const sid = crypto.randomUUID();
-  await getDb()
-    .insert(sessions)
-    .values({
-      idHash: await hashSessionId(sid),
-      userId: u.id,
-      expiresAt: new Date(Date.now() + 3600_000),
-    });
-  return { ...u, sid };
-};
-type U = Awaited<ReturnType<typeof mkUser>>;
-
-const mkGroup = async (name: string) =>
-  (await getDb().insert(groups).values({ name }).returning())[0] as typeof groups.$inferSelect;
-const join = (groupId: string, u: U, role: "owner" | "creator" | "viewer") =>
-  getDb().insert(memberships).values({ groupId, userId: u.id, role });
-
-// A fresh group per test: g has a viewer, creator, owner and a target viewer; the non-member owns
-// a different group, so every non-member row is a cross-group check.
-const world = async () => {
-  const g = await mkGroup("G");
-  const other = await mkGroup("Other");
-  const who = {
-    anonymous: undefined,
-    nonMember: await mkUser(),
-    viewer: await mkUser(),
-    creator: await mkUser(),
-    owner: await mkUser(),
-    admin: await mkUser(true),
-  };
-  const target = await mkUser();
-  await join(other.id, who.nonMember, "owner");
-  await join(g.id, who.viewer, "viewer");
-  await join(g.id, who.creator, "creator");
-  await join(g.id, who.owner, "owner");
-  await join(g.id, target, "viewer");
-  return { app: makeApp(), g, other, who, target };
-};
-type World = Awaited<ReturnType<typeof world>>;
-
-const call = (
-  w: World,
-  method: string,
-  path: string,
-  as?: U,
-  body?: unknown,
-  origin: string | null = ORIGIN,
-) => {
-  const headers: Record<string, string> = {};
-  if (as) headers.cookie = `pf_session=${as.sid}`;
-  if (origin) headers.origin = origin;
-  if (body !== undefined) headers["content-type"] = "application/json";
-  return w.app.request(`/api/v1${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-};
-
-const WHO = ["anonymous", "nonMember", "viewer", "creator", "owner", "admin"] as const;
 type Case = {
   method: string;
   path: (w: World) => string;
@@ -338,8 +244,16 @@ describe("OpenAPI registry (#18 builds the spec page on this)", () => {
       info: { title: "t", version: "0" },
     });
     expect(Object.keys(doc.paths ?? {}).sort()).toEqual([
+      "/api/v1/events/{e}/surveys",
+      "/api/v1/events/{e}/surveys/{s}",
+      "/api/v1/events/{e}/surveys/{s}/publish",
+      "/api/v1/events/{e}/surveys/{s}/validate",
+      "/api/v1/events/{e}/surveys/{s}/versions",
+      "/api/v1/events/{e}/surveys/{s}/versions/{n}",
       "/api/v1/groups",
       "/api/v1/groups/{g}",
+      "/api/v1/groups/{g}/events",
+      "/api/v1/groups/{g}/events/{e}",
       "/api/v1/groups/{g}/members",
       "/api/v1/groups/{g}/members/{user}",
       "/api/v1/users",

@@ -9,7 +9,7 @@ import type { Db } from "./db";
 import { groups, memberships, users } from "./schema";
 
 const ErrorSchema = z.object({ error: z.string() }).openapi("Error");
-const err = (description: string) => ({
+export const err = (description: string) => ({
   description,
   content: { "application/json": { schema: ErrorSchema } },
 });
@@ -21,11 +21,11 @@ export const errors = {
   404: err("Not found, or not visible to you"),
   409: err("Conflict, e.g. removing the last owner or admin"),
 } as const;
-const json = <T extends z.ZodType>(schema: T, description = "OK") => ({
+export const json = <T extends z.ZodType>(schema: T, description = "OK") => ({
   description,
   content: { "application/json": { schema } },
 });
-const body = <T extends z.ZodType>(schema: T) => ({
+export const body = <T extends z.ZodType>(schema: T) => ({
   required: true,
   content: { "application/json": { schema } },
 });

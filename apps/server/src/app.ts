@@ -2,6 +2,7 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import type { MiddlewareHandler } from "hono";
 import { type AuthEnv, type AuthOptions, authRoutes, requireUser, sessionAuth } from "./auth";
 import { groupRoutes } from "./groups";
+import { surveyRoutes } from "./surveys";
 
 // Participant routes must stay identifier-free: no cookies, no caching, minimal logs.
 export const isParticipantPath = (p: string) =>
@@ -58,6 +59,7 @@ export const createApp = ({ ping, log = console.log, auth }: AppDeps) => {
       return c.json({ id, email, isAdmin });
     });
     app.route("/api/v1", groupRoutes(auth.db));
+    app.route("/api/v1", surveyRoutes(auth.db));
   }
   return app;
 };

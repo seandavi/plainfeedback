@@ -33,8 +33,8 @@ De-identified event-feedback surveys for the Common Fund Data Ecosystem (CFDE) m
 ## Data model
 
 - `users` (`is_admin`), `groups`, `memberships(group, user, role: owner|creator|viewer)`
-- `events` (belongs to a group, unique slug)
-- `surveys` (belongs to an event; slug; wave label such as pre, post, followup; current draft markdown)
+- `events` (belongs to a group, slug unique per group, title, description)
+- `surveys` (belongs to an event; slug; wave label such as pre, post, followup; current draft markdown and ETag; `closed_at`)
 - `survey_versions` (immutable; markdown, compiled JSON model, privacy statement, open/close dates)
 - `tokens` (deferred; event, hash of the code only)
 - `responses` (survey_version, optional token hash, answers JSONB, submitted_at)
@@ -102,11 +102,17 @@ PUT    /groups/{g}/members/{user}               owner: {user} is an id or the em
 DELETE /groups/{g}/members/{user}               owner (never the last owner)
 GET    /users                                   admin
 PATCH  /users/{id}                              admin: grant/revoke admin (never the last admin)
-PUT    /groups/{g}/events/{e}                   creator: upsert by slug
-PUT    /events/{e}/surveys/{s}                  creator: upsert draft from markdown (If-Match)
-POST   /events/{e}/surveys/{s}:validate         dry run, line-numbered errors, model preview
-POST   /events/{e}/surveys/{s}:publish          freeze a version
-GET    /events/{e}/surveys/{s}/versions
+GET    /groups/{g}/events                       viewer
+GET    /groups/{g}/events/{slug}                viewer
+PUT    /groups/{g}/events/{slug}                creator: upsert by slug {title, description}; returns the event id
+GET    /events/{e}/surveys                      viewer ({e} is the event id)
+GET    /events/{e}/surveys/{s}                  viewer: draft markdown, ETag, latest version number
+PUT    /events/{e}/surveys/{s}                  creator: upsert draft (text/markdown or JSON); If-Match to update
+PATCH  /events/{e}/surveys/{s}                  creator: {closed} stops or resumes accepting responses
+POST   /events/{e}/surveys/{s}/validate         viewer: dry run of supplied or stored markdown, no writes
+POST   /events/{e}/surveys/{s}/publish          creator: freeze the draft as a new version
+GET    /events/{e}/surveys/{s}/versions         viewer
+GET    /events/{e}/surveys/{s}/versions/{n}     viewer
 GET    /events/{e}/surveys/{s}/link             public URL and QR code (SVG/PNG)
 GET    /events/{e}/responses?format=jsonl|csv|parquet&since=   viewer
 
@@ -118,6 +124,14 @@ POST   /api/v1/public/surveys/{id}/responses    submit answers (no identifier)
 Outside your groups everything is 404; a role too low within your group is 403 ([ADR 0009](adr/0009-group-rbac-404.md)). Members must have signed in once before they can be added; invitations come later.
 
 Idempotent upserts by slug allow a GitOps flow. Publishing is always an explicit human action.
+
+Events and surveys (#6):
+- Slugs are lowercase letters, digits and single hyphens (max 64). Event slugs are unique per group, so `/groups/{g}/events/{slug}` takes a slug and `/events/{e}` takes the event id. Survey slugs are unique per event.
+- Action paths are `/validate` and `/publish`, not `:validate` / `:publish` (Hono routing treats `:` as a parameter).
+- Drafts: creating needs no `If-Match`; changing an existing draft needs `If-Match` with the current ETag (or `*`): 428 without it, 412 on mismatch. ETags are opaque and change on every write. Invalid drafts are saved; the response carries the compile result (`{model}` or `{errors:[{line,column,message}]}`).
+- Publish compiles the stored draft (422 with line-numbered errors if invalid) and inserts the next immutable version. `privacyStatement`, `opensAt`, `closesAt` left out of the body are inherited from the latest version; the privacy statement defaults to a template. If draft and settings equal the latest version, publish returns it (200) instead of creating a new one.
+- Close/reopen is `surveys.closed_at` (set = closed), not a version field: versions are immutable, and closing is an operational switch that applies to whichever version is live. `closes_at` on a version is the scheduled end.
+- In an archived group, event and survey writes return 409; reads still work.
 
 ## Auth
 
