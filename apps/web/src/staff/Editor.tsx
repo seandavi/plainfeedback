@@ -2,7 +2,15 @@
 // screens). compile() from core runs in the browser on every pause in typing; the server runs the
 // same compiler on save and publish. Viewers get the same page read-only.
 import { type CompileResult, compile, type Survey as Model } from "@plainfeedback/core";
-import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type FormEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import { Markdown } from "../markdown";
 import { ShareLink } from "../ShareLink";
 import { SurveyForm } from "../SurveyForm";
@@ -63,10 +71,23 @@ export function Editor({
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState<unknown>();
-  const [dialog, setDialog] = useState<"conflict" | "publish">();
+  const [dialog, setDialog] = useState<"conflict" | "publish" | "close">();
+  const [theirs, setTheirs] = useState<Survey>(); // the draft someone else saved (412)
+  const [published, setPublished] = useState<string>(); // markdown of the latest version
+  const [justPublished, setJustPublished] = useState(false);
   const code = useRef<CodeEditorHandle>(null);
   const dirty = !readOnly && survey !== undefined && text !== saved;
   useLeaveGuard(dirty);
+  const latest = versions[0];
+  // Same comparison as the server's publish dedupe (the markdown; settings aside).
+  const unpublished = latest !== undefined && published !== undefined && saved !== published;
+  useEffect(() => {
+    if (latest)
+      api.version(eventId, slug, latest.version).then(
+        (v) => setPublished(v.markdown),
+        () => undefined, // ponytail: the cue is a hint; without it the page still works
+      );
+  }, [eventId, slug, latest]);
 
   const show = useCallback((s: Survey) => {
     setSurvey(s);
@@ -110,27 +131,37 @@ export function Editor({
     }
   };
 
-  const save = (markdown: string, etag: string) =>
+  const save = async (markdown: string, etag: string) => {
+    try {
+      const s = await api.saveDraft(eventId, slug, markdown, etag);
+      setSurvey(s);
+      setSaved(markdown);
+      setDialog(undefined);
+      setStatus("Draft saved.");
+    } catch (x) {
+      if (!(x instanceof ApiError && x.kind === "stale")) throw x;
+      setTheirs(await api.survey(eventId, slug));
+      setDialog("conflict");
+    }
+  };
+  const saveNow = () => survey && !readOnly && run(() => save(text, survey.etag));
+  const setClosed = (closed: boolean) =>
     run(async () => {
-      try {
-        const s = await api.saveDraft(eventId, slug, markdown, etag);
-        setSurvey(s);
-        setSaved(markdown);
-        setDialog(undefined);
-        setStatus("Draft saved.");
-      } catch (x) {
-        if (x instanceof ApiError && x.kind === "stale") return setDialog("conflict");
-        throw x;
-      }
+      const s = await api.setClosed(eventId, slug, closed);
+      setSurvey(s);
+      setDialog(undefined);
+      setStatus(s.closed ? "Survey closed for responses." : "Survey reopened.");
     });
-  const saveNow = () => survey && !readOnly && save(text, survey.etag);
 
   if (loadError) return <ErrorNote error={loadError} />;
   if (!survey) return <p aria-busy="true">Loading…</p>;
 
   const errors = result?.errors ?? [];
   const title = good?.title ?? slug;
-  const latest = versions[0];
+  const share = (
+    // Keyed on the version so it re-reads `published` after a publish.
+    <ShareLink key={latest?.version ?? 0} eventId={eventId} survey={slug} focus={justPublished} />
+  );
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: Ctrl/Cmd+S shortcut for the whole editor
@@ -147,6 +178,10 @@ export function Editor({
         <h1>{title}</h1>
         <p className="meta">
           {latest ? `Published v${latest.version}` : "Not published"}
+          {unpublished && (
+            <strong> · unpublished changes: participants still see v{latest.version}</strong>
+          )}
+          {latest?.closesAt && !survey.closed && ` · closes ${when(latest.closesAt)}`}
           {survey.closed && " · closed for responses"}
           {readOnly && " · read-only (viewer)"}
           {dirty && " · unsaved changes"}
@@ -161,41 +196,35 @@ export function Editor({
             </button>
             <button
               type="button"
+              className={!latest || unpublished ? "primary" : undefined}
               onClick={() => setDialog("publish")}
               disabled={busy || dirty}
               title={dirty ? "Save the draft before publishing" : undefined}
             >
               Publish…
             </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                run(async () => {
-                  const s = await api.setClosed(eventId, slug, !survey.closed);
-                  setSurvey(s);
-                  setStatus(s.closed ? "Survey closed for responses." : "Survey reopened.");
-                })
+            <InsertMenu
+              onPick={(type) =>
+                code.current?.insert(SNIPPETS[type].replace("ID", freshId(type, text)))
               }
-            >
-              {survey.closed ? "Reopen survey" : "Close survey"}
-            </button>
-            <select
-              aria-label="Insert a question"
-              value=""
-              onChange={(e) => {
-                const type = e.target.value as keyof typeof SNIPPETS;
-                if (type in SNIPPETS)
-                  code.current?.insert(SNIPPETS[type].replace("ID", freshId(type, text)));
-              }}
-            >
-              <option value="">Insert question…</option>
-              {Object.entries(SNIPPET_LABELS).map(([k, label]) => (
-                <option key={k} value={k}>
-                  {label}
-                </option>
-              ))}
-            </select>
+            />
+            {survey.closed ? (
+              <button type="button" disabled={busy} onClick={() => setClosed(false)}>
+                Reopen survey
+              </button>
+            ) : (
+              // Closing only matters once published; it always asks first.
+              latest && (
+                <button
+                  type="button"
+                  className="danger"
+                  disabled={busy}
+                  onClick={() => setDialog("close")}
+                >
+                  Close survey…
+                </button>
+              )
+            )}
           </>
         )}
         <a href={GRAMMAR_URL} target="_blank" rel="noopener noreferrer">
@@ -207,6 +236,7 @@ export function Editor({
       </p>
       {error !== undefined && <ErrorNote error={error} />}
       {dirty && <p className="meta">Save the draft before publishing.</p>}
+      {latest && share}
 
       <div className="split">
         <section aria-labelledby="source-h" className="pane">
@@ -269,8 +299,7 @@ export function Editor({
 
       <section aria-labelledby="versions-h" className="versions">
         <h2 id="versions-h">Published versions</h2>
-        {/* Keyed on the version so it re-reads `published` after a publish. */}
-        <ShareLink key={latest?.version ?? 0} eventId={eventId} survey={slug} />
+        {!latest && share}
         {versions.length === 0 ? (
           <p>Not published yet. Participants see only published versions.</p>
         ) : (
@@ -286,38 +315,38 @@ export function Editor({
         )}
       </section>
 
-      {dialog === "conflict" && (
-        <Dialog title="This draft changed elsewhere" onClose={() => setDialog(undefined)}>
+      {dialog === "conflict" && theirs && (
+        <ConflictDialog
+          mine={text}
+          theirs={theirs}
+          busy={busy}
+          error={error}
+          onClose={() => setDialog(undefined)}
+          onOverwrite={() => run(() => save(text, theirs.etag))}
+          onReload={() => {
+            show(theirs);
+            setDialog(undefined);
+            setStatus("Loaded their version. Your changes were discarded.");
+          }}
+        />
+      )}
+      {dialog === "close" && (
+        <Dialog title="Close this survey?" onClose={() => setDialog(undefined)}>
           <p>
-            Someone saved this draft after you opened it. Reload their version (your changes are
-            lost), or overwrite it with yours.
+            Participants can no longer respond, even if they have the link. Responses already
+            submitted are kept. You can reopen it later.
           </p>
           <div className="actions">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                run(async () => {
-                  show(await api.survey(eventId, slug));
-                  setDialog(undefined);
-                  setStatus("Reloaded the latest draft.");
-                })
-              }
-            >
-              Reload theirs
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={async () => {
-                const fresh = await api.survey(eventId, slug).catch((x) => setError(x));
-                if (fresh) save(text, fresh.etag);
-              }}
-            >
-              Overwrite with mine
-            </button>
-            <button type="button" onClick={() => setDialog(undefined)}>
+            <button type="button" data-autofocus onClick={() => setDialog(undefined)}>
               Cancel
+            </button>
+            <button
+              type="button"
+              className="danger"
+              disabled={busy}
+              onClick={() => setClosed(true)}
+            >
+              Close survey
             </button>
           </div>
         </Dialog>
@@ -332,9 +361,11 @@ export function Editor({
             setDialog(undefined);
             setStatus(
               created
-                ? `Published version ${v.version}.`
+                ? `Published version ${v.version}. Share the link below.`
                 : `Nothing changed since version ${v.version}; nothing new was published.`,
             );
+            setPublished(v.markdown);
+            setJustPublished(true);
             setVersions(await api.versions(eventId, slug).catch(() => versions));
           }}
         />
@@ -418,6 +449,12 @@ function PublishDialog({
               name="closesAt"
               defaultValue={toLocalInput(prev?.closesAt ?? null)}
             />
+            {prev?.closesAt && (
+              <span className="meta">
+                Kept from version {latest?.version}. Change it if this version should close at
+                another time.
+              </span>
+            )}
           </label>
           {compileErrors ? (
             <div role="alert" className="form-message">
@@ -447,7 +484,172 @@ function PublishDialog({
   );
 }
 
-/** Modal dialog: focus moves in on open (first control) and back to the opener on close. */
+/** Toolbar menu button (WAI-ARIA APG menu button): arrow keys only move focus; nothing is
+ * inserted until an item is activated with Enter, Space or a click (#51). */
+function InsertMenu({ onPick }: { onPick: (type: keyof typeof SNIPPETS) => void }) {
+  const [open, setOpen] = useState<"first" | "last">();
+  const button = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const id = useId();
+  const items = () => [...(menu.current?.querySelectorAll<HTMLElement>("[role=menuitem]") ?? [])];
+  const focusItem = (i: number) => {
+    const all = items();
+    all[(i + all.length) % all.length]?.focus();
+  };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the menu opens
+  useEffect(() => {
+    if (open) focusItem(open === "first" ? 0 : -1);
+  }, [open]);
+  const close = () => {
+    setOpen(undefined);
+    button.current?.focus();
+  };
+  return (
+    <div className="menu">
+      <button
+        ref={button}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open !== undefined}
+        aria-controls={open && id}
+        onClick={() => (open ? setOpen(undefined) : setOpen("first"))}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            e.preventDefault();
+            setOpen(e.key === "ArrowDown" ? "first" : "last");
+          }
+        }}
+      >
+        Insert question
+      </button>
+      {open && (
+        <div
+          ref={menu}
+          id={id}
+          role="menu"
+          aria-label="Insert question"
+          onKeyDown={(e) => {
+            const i = items().indexOf(document.activeElement as HTMLElement);
+            const to = (
+              { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: -1 } as Record<string, number>
+            )[e.key];
+            if (to !== undefined) {
+              e.preventDefault();
+              focusItem(to);
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              e.stopPropagation();
+              close();
+            } else if (e.key === "Tab") setOpen(undefined);
+          }}
+          onBlur={(e) => {
+            const next = e.relatedTarget as Node | null;
+            if (!e.currentTarget.contains(next) && next !== button.current) setOpen(undefined);
+          }}
+        >
+          {(Object.keys(SNIPPET_LABELS) as (keyof typeof SNIPPETS)[]).map((k) => (
+            <button
+              key={k}
+              type="button"
+              role="menuitem"
+              tabIndex={-1}
+              onClick={() => {
+                setOpen(undefined);
+                onPick(k);
+              }}
+            >
+              {SNIPPET_LABELS[k]}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 412 on save: someone else saved first. The safe choice has focus; both versions are shown and
+ * the user's text can be copied before anything is discarded (#70). */
+function ConflictDialog({
+  mine,
+  theirs,
+  busy,
+  error,
+  onClose,
+  onOverwrite,
+  onReload,
+}: {
+  mine: string;
+  theirs: Survey;
+  busy: boolean;
+  error: unknown;
+  onClose: () => void;
+  onOverwrite: () => void;
+  onReload: () => void;
+}) {
+  const [note, setNote] = useState("");
+  const pre = useRef<HTMLPreElement>(null);
+  const copy = () =>
+    navigator.clipboard.writeText(mine).then(
+      () => setNote("Your version is on the clipboard."),
+      () => {
+        // Clipboard blocked: select the text so Ctrl+C works.
+        const r = document.createRange();
+        if (pre.current) r.selectNodeContents(pre.current);
+        getSelection()?.removeAllRanges();
+        getSelection()?.addRange(r);
+        setNote("Copying was blocked. Your version is selected below; press Ctrl+C or Cmd+C.");
+      },
+    );
+  // ponytail: lines missing from the other version are marked; a real diff if people need it.
+  const side = (label: string, text: string, other: string, ref?: typeof pre) => {
+    const others = new Set(other.split("\n"));
+    return (
+      <section className="pane">
+        <h3>{label}</h3>
+        <pre ref={ref} className="compare">
+          {text.split("\n").map((l, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: static lines
+            <span key={i}>
+              {others.has(l) ? l : <mark>{l}</mark>}
+              {"\n"}
+            </span>
+          ))}
+        </pre>
+      </section>
+    );
+  };
+  return (
+    <Dialog title="This draft changed elsewhere" onClose={onClose}>
+      <p>
+        Someone else saved this draft at {when(theirs.updatedAt)}, after you opened it. Your changes
+        are not saved yet. Changed lines are highlighted.
+      </p>
+      <div className="split">
+        {side("Your version", mine, theirs.markdown, pre)}
+        {side("Their version", theirs.markdown, mine)}
+      </div>
+      {error !== undefined && <ErrorNote error={error} />}
+      <p role="status">{note}</p>
+      <div className="actions">
+        <button type="button" data-autofocus onClick={onClose}>
+          Keep editing
+        </button>
+        <button type="button" onClick={copy}>
+          Copy my version
+        </button>
+        <button type="button" disabled={busy} onClick={onOverwrite}>
+          Overwrite with mine
+        </button>
+        <button type="button" className="danger" disabled={busy} onClick={onReload}>
+          Discard mine and load theirs
+        </button>
+      </div>
+    </Dialog>
+  );
+}
+
+/** Modal dialog: focus moves in on open (the [data-autofocus] control, else the first one) and
+ * back to the opener on close. */
 export function Dialog({
   title,
   onClose,
@@ -464,7 +666,10 @@ export function Dialog({
     const opener = document.activeElement as HTMLElement | null;
     if (typeof d.showModal === "function") d.showModal();
     else d.setAttribute("open", ""); // jsdom
-    d.querySelector<HTMLElement>("textarea, input, button")?.focus();
+    (
+      d.querySelector<HTMLElement>("[data-autofocus]") ??
+      d.querySelector<HTMLElement>("textarea, input, button")
+    )?.focus();
     return () => opener?.focus();
   }, []);
   return (
