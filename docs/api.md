@@ -68,10 +68,18 @@ curl -sS $BASE/api/v1/events/$EVENT/surveys/feedback/versions -b "pf_session=$PF
 curl -sS $BASE/api/v1/events/$EVENT/surveys/feedback/versions/1 -b "pf_session=$PF_SESSION"
 ```
 
+## Exporting responses
+
+```sh
+curl -sS "$BASE/api/v1/events/$EVENT/surveys/feedback/responses?format=csv" -b "pf_session=$PF_SESSION"
+curl -sS "$BASE/api/v1/events/$EVENT/surveys/feedback/versions/1/codebook" -b "pf_session=$PF_SESSION"
+```
+
+Viewer role or higher. `format=jsonl` (default) or `csv`; `version=<n>` limits to one version; `since` is exclusive and is an ISO time or a cursor `<submittedAt>_<responseId>` built from the last JSONL row you received. CSV is wide (multi answers joined with `;`, Likert as `<id>_<statement number>`, Other text in `<id>_other`, a `surveyVersion` column, union of columns across versions). Cells starting with `=`, `+`, `-` or `@` get a leading single quote (formula-injection guard). The codebook maps Likert statement numbers to text and lists scale anchors and free-text questions. Parquet is deferred: DuckDB and polars read these files directly.
+
 ## Coming
 
 - Participant link and QR code (#9): not yet merged, so not in the spec.
-- Response export (#10): not yet merged.
 - API tokens (#11): will make `bearerToken` usable.
 
 Update this section as those land (their routes appear in `/openapi.json` automatically).
