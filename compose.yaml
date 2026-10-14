@@ -15,6 +15,7 @@ services:
       ALLOWED_EMAIL_DOMAINS:
       ADMIN_EMAILS:
       COOKIE_SECURE:
+      SESSION_TTL_HOURS:
     depends_on:
       db:
         condition: service_healthy
