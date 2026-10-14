@@ -1,4 +1,5 @@
 import { Hono, type MiddlewareHandler } from "hono";
+import { type AuthEnv, type AuthOptions, authRoutes, requireUser, sessionAuth } from "./auth";
 
 // Participant routes must stay identifier-free: no cookies, no caching, minimal logs.
 export const isParticipantPath = (p: string) =>
@@ -21,10 +22,14 @@ export const accessLog =
     write(JSON.stringify({ method: c.req.method, path: c.req.path, status: c.res.status }));
   };
 
-export type AppDeps = { ping: () => Promise<void>; log?: (line: string) => void };
+export type AppDeps = {
+  ping: () => Promise<void>;
+  log?: (line: string) => void;
+  auth?: AuthOptions; // staff auth is mounted only when configured
+};
 
-export const createApp = ({ ping, log = console.log }: AppDeps) => {
-  const app = new Hono();
+export const createApp = ({ ping, log = console.log, auth }: AppDeps) => {
+  const app = new Hono<AuthEnv>();
   app.use(accessLog(log));
   app.use(participantGuard);
   app.get("/healthz", async (c) => {
@@ -35,5 +40,15 @@ export const createApp = ({ ping, log = console.log }: AppDeps) => {
       return c.json({ status: "db unavailable" }, 503);
     }
   });
+  if (auth) {
+    const session = sessionAuth(auth);
+    // Participant paths never read the session, even though /api/v1/public/* receives the cookie.
+    app.use("/api/v1/*", (c, next) => (isParticipantPath(c.req.path) ? next() : session(c, next)));
+    app.route("/api/v1/auth", authRoutes(auth));
+    app.get("/api/v1/me", requireUser, (c) => {
+      const { id, email, isAdmin } = c.get("user") as NonNullable<AuthEnv["Variables"]["user"]>;
+      return c.json({ id, email, isAdmin });
+    });
+  }
   return app;
 };

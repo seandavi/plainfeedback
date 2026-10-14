@@ -113,7 +113,7 @@ Idempotent upserts by slug allow a GitOps flow. Publishing is always an explicit
 
 ## Auth
 
-A provider interface wrapping OIDC (Authlib): issuer, client id, client secret, redirect URI, allowed email domains. Config comes from environment, with secrets read from GCP Secret Manager. Google is the first provider. The OAuth client must have this app's redirect URI registered before it works.
+OIDC (authorization code + PKCE, `openid-client`), configured by issuer, client id, client secret, redirect URI, allowed email domains and admin emails. Config comes from environment, with secrets read from GCP Secret Manager at deploy. Google is the first provider. Server-side sessions; the staff cookie is scoped to `/api/v1` and never set or read on participant routes ([ADR 0005](adr/0005-pluggable-oidc.md), [deploy guide](deploy-auth.md)). The OAuth client must have this app's redirect URI registered before it works.
 
 ## Conditionals and pages (phase 3 design)
 
