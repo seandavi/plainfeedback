@@ -196,6 +196,14 @@ describe("public survey API", () => {
     expect(await count(w.versionId)).toBe(0);
   });
 
+  it("rejects a NUL in free text (jsonb cannot store it) instead of failing the insert", async () => {
+    const w = await world();
+    const res = await w.submit({ versionId: w.versionId, answers: { role: "a\u0000b" } });
+    expect(res.status).toBe(422);
+    expect(Object.keys((await read(res)).errors)).toEqual(["role"]);
+    expect(await count(w.versionId)).toBe(0);
+  });
+
   it("rate limits per survey without looking at the client", async () => {
     const w = await world();
     const app = new OpenAPIHono().route(

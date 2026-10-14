@@ -18,10 +18,15 @@ import { body, err, errors, json } from "./groups";
 import { qrPng, qrSvg } from "./qr";
 import { events, surveys, surveyVersions } from "./schema";
 
+// Keep in line with docs/privacy-statement-template.md. Claims only what the software does; the
+// host's own logs and the author's use of the data are for the author to add.
 export const DEFAULT_PRIVACY_STATEMENT =
-  "This survey does not ask for your name or email address, sets no cookies and does not record " +
-  "your IP address or browser. Free-text answers can still contain identifying details, so leave " +
-  "them out if you want to stay anonymous. Answers are used only to evaluate and improve this event.";
+  "This survey does not ask for your name or email address. The survey page sets no cookies and " +
+  "stores nothing in your browser, and your answers are saved without your IP address or browser " +
+  "details. The service hosting this page and the networks in between may keep their own " +
+  "connection logs. Free-text answers can still identify you, so leave out names and other " +
+  "details if you want to stay anonymous. The survey organisers and the administrators of this " +
+  "service can read individual answers.";
 
 const MAX_MARKDOWN = 200_000;
 const Slug = z

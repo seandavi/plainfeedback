@@ -2,7 +2,8 @@ services:
   app:
     build: .
     ports:
-      - "${APP_PORT:-3000}:3000"
+      # Loopback by default: production traffic must come through the TLS reverse proxy (docs/deploy.md).
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-3000}:3000"
     environment:
       # POSTGRES_PASSWORD default is for local dev only; set a real one via .env or the environment.
       DATABASE_URL: postgresql://plainfeedback:${POSTGRES_PASSWORD:-plainfeedback-dev-only}@db:5432/plainfeedback

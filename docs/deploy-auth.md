@@ -1,6 +1,6 @@
 # Deploying staff authentication (Google OIDC)
 
-Staff sign in with OIDC (ADR 0005). Participants never sign in. This page covers the Google OAuth client, the redirect URI, and how production secrets reach the app.
+Staff sign in with OIDC (ADR 0005). Participants never sign in. This page covers the Google OAuth client, the redirect URI, and how production secrets reach the app. Reverse proxy, TLS, logging, backups and retention are in [deploy.md](deploy.md).
 
 ## 1. Create or reuse the Google OAuth client
 
