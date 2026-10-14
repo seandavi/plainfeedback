@@ -4,7 +4,7 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { AdminPage } from "./Admin";
 import { ApiError, api, canEdit, type Me } from "./api";
-import { Dashboard } from "./Dashboard";
+import { Dashboard, surveyStatus } from "./Dashboard";
 import { Editor } from "./Editor";
 import { Members, Tokens } from "./Manage";
 import { Link, navigate, usePath } from "./router";
@@ -253,8 +253,7 @@ function EventPage({ me, g, e }: { me: Me; g: string; e: string }) {
             <li key={x.slug}>
               <Link href={paths.survey(g, e, x.slug)}>{x.slug}</Link>{" "}
               <span className="meta">
-                {x.latestVersion ? `published v${x.latestVersion}` : "draft"}
-                {x.closed && ", closed"}
+                {x.latestVersion ? `published v${x.latestVersion}, ${surveyStatus(x)}` : "draft"}
                 {x.waveLabel && `, ${x.waveLabel}`}
               </span>
             </li>

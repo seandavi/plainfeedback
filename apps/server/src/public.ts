@@ -2,7 +2,7 @@
 // a response row is answers + version + submitted_at only (ADR 0004, ADR 0011). participantGuard in
 // app.ts strips Set-Cookie and disables caching on these paths.
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
-import { type Survey as Model, validateAnswers } from "@plainfeedback/core";
+import { type Survey as Model, surveyStatus, validateAnswers } from "@plainfeedback/core";
 import { desc, eq } from "drizzle-orm";
 import type { Context, MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -50,16 +50,15 @@ const latestOf = async (db: Db, publicId: string) => {
   return row;
 };
 
-// Closed (manual close or scheduled end) wins over not-yet-open.
 const statusOf = (
   s: typeof surveys.$inferSelect,
   v: typeof surveyVersions.$inferSelect,
   now = new Date(),
-) => {
-  if (s.closedAt || (v.closesAt && v.closesAt <= now)) return "closed" as const;
-  if (v.opensAt && v.opensAt > now) return "not_yet_open" as const;
-  return "open" as const;
-};
+) =>
+  surveyStatus({ published: true, closedAt: s.closedAt, ...v }, now) as
+    | "open"
+    | "closed"
+    | "not_yet_open";
 
 const error = <S extends 403 | 404 | 409 | 410 | 413 | 415 | 429>(
   c: Context,

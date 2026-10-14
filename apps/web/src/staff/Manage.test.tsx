@@ -82,7 +82,7 @@ describe("dashboard", () => {
     const table = await screen.findByRole("table", { name: "Surveys in Lab" });
     const rows = within(table).getAllByRole("row");
     expect(within(rows[1] as HTMLElement).getByText("draft")).toBeTruthy();
-    expect(within(rows[2] as HTMLElement).getByText("published")).toBeTruthy();
+    expect(within(rows[2] as HTMLElement).getByText("open")).toBeTruthy();
     expect(within(rows[2] as HTMLElement).getByText("17")).toBeTruthy();
     expect(screen.getByText("creator")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Admin" })).toBeNull();
@@ -96,6 +96,7 @@ describe("dashboard", () => {
     expect(surveyStatus(s({ opensAt: "2026-10-01T00:00:00Z" }), now)).toBe("open");
     expect(surveyStatus(s({ closesAt: "2026-10-05T00:00:00Z" }), now)).toBe("closed");
     expect(surveyStatus(s({ closed: true }), now)).toBe("closed");
+    expect(surveyStatus(s({}), now)).toBe("open");
   });
 });
 
@@ -222,6 +223,9 @@ describe("group page", () => {
     routes[`PUT ${M}/o1`] = () => [409, { error: "a group needs at least one owner" }];
     open(`/app/g/${G}`);
     const table = await screen.findByRole("table", { name: "Members of Lab" });
+    const region = screen.getByRole("region", { name: "Members of Lab" });
+    expect(region.getAttribute("tabindex")).toBe("0");
+    expect(region.contains(table)).toBe(true);
     expect(
       within(table)
         .getAllByRole("columnheader")
