@@ -15,6 +15,7 @@ import {
 } from "./authz";
 import type { Db } from "./db";
 import { body, err, errors, json } from "./groups";
+import { qrPng, qrSvg } from "./qr";
 import { events, surveys, surveyVersions } from "./schema";
 
 export const DEFAULT_PRIVACY_STATEMENT =
@@ -90,6 +91,13 @@ const Survey = SurveySummary.extend({
 }).openapi("Survey");
 const SavedSurvey = Survey.extend({ compile: CompileResult }).openapi("SavedSurvey");
 
+const SurveyLink = z
+  .object({
+    url: z.string().openapi({ description: "Participant page: PUBLIC_BASE_URL/s/{publicId}" }),
+    published: z.boolean().openapi({ description: "False until a version is published" }),
+  })
+  .openapi("SurveyLink");
+
 const Markdown = z.string().max(MAX_MARKDOWN);
 // Markdown bodies are accepted raw (text/markdown) or as JSON. required: false so a text/markdown
 // request is not run through the JSON validator; handlers read the markdown with markdownOf.
@@ -140,7 +148,7 @@ const notArchived: MiddlewareHandler<AuthzEnv> = async (c, next) => {
 const quote = (etag: string) => `"${etag}"`;
 const unquote = (h: string) => h.replace(/^W\//, "").replace(/^"(.*)"$/, "$1");
 
-export const surveyRoutes = (db: Db) => {
+export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
   const r = new OpenAPIHono<AuthzEnv>();
   const groupMember = requireGroupRole(db, "viewer");
   const groupCreator = requireGroupRole(db, "creator");
@@ -536,6 +544,92 @@ export const surveyRoutes = (db: Db) => {
       const [row] = await versionsOf(e, s, n);
       if (!row) throw notFound();
       return c.json(toVersion(row.v), 200);
+    },
+  );
+
+  // The link and QR work before publishing (the page just answers 404 until then); `published` says which.
+  const linkOf = async (e: string, s: string) => {
+    const [row] = await db
+      .select({ publicId: surveys.publicId, id: surveys.id, event: events.slug })
+      .from(surveys)
+      .innerJoin(events, eq(events.id, surveys.eventId))
+      .where(surveyWhere(e, s));
+    if (!row) throw notFound();
+    const [v] = await db
+      .select({ n: surveyVersions.version })
+      .from(surveyVersions)
+      .where(eq(surveyVersions.surveyId, row.id))
+      .limit(1);
+    return { url: `${publicBaseUrl}/s/${row.publicId}`, published: !!v, event: row.event };
+  };
+
+  r.openapi(
+    createRoute({
+      method: "get",
+      path: "/events/{e}/surveys/{s}/link",
+      tags: ["surveys"],
+      summary: "Public participant URL and whether the survey is published (member)",
+      middleware: [member],
+      request: { params: SurveyParams },
+      responses: { 200: json(SurveyLink), ...errors },
+    }),
+    async (c) => {
+      const { e, s } = c.req.valid("param");
+      const { url, published } = await linkOf(e, s);
+      return c.json({ url, published }, 200);
+    },
+  );
+
+  const qrResponse = (type: string, what: string) => ({
+    200: {
+      description: what,
+      content: { [type]: { schema: z.string().openapi({ format: "binary" }) } },
+    },
+    ...errors,
+  });
+  const qrHeaders = (type: string, event: string, s: string, ext: string) => ({
+    "Content-Type": type,
+    "Content-Disposition": `attachment; filename="${event}-${s}-qr.${ext}"`,
+    "Cache-Control": "private, max-age=3600",
+  });
+
+  r.openapi(
+    createRoute({
+      method: "get",
+      path: "/events/{e}/surveys/{s}/link/qr.svg",
+      tags: ["surveys"],
+      summary: "QR code of the participant URL as SVG (member)",
+      middleware: [member],
+      request: { params: SurveyParams },
+      responses: qrResponse("image/svg+xml", "SVG image"),
+    }),
+    async (c) => {
+      const { e, s } = c.req.valid("param");
+      const { url, event } = await linkOf(e, s);
+      return c.body(qrSvg(url), 200, qrHeaders("image/svg+xml", event, s, "svg")) as never;
+    },
+  );
+
+  r.openapi(
+    createRoute({
+      method: "get",
+      path: "/events/{e}/surveys/{s}/link/qr.png",
+      tags: ["surveys"],
+      summary: "QR code of the participant URL as PNG (member)",
+      description:
+        "`size` is the maximum width in pixels (default 512); modules are whole pixels, so the image may be a little smaller.",
+      middleware: [member],
+      request: {
+        params: SurveyParams,
+        query: z.object({ size: z.coerce.number().int().min(64).max(2048).default(512) }),
+      },
+      responses: qrResponse("image/png", "PNG image"),
+    }),
+    async (c) => {
+      const { e, s } = c.req.valid("param");
+      const { url, event } = await linkOf(e, s);
+      const png = qrPng(url, c.req.valid("query").size);
+      return c.body(png, 200, qrHeaders("image/png", event, s, "png")) as never;
     },
   );
 

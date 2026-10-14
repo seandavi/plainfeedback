@@ -82,6 +82,18 @@ curl -sS $BASE/api/v1/events/$EVENT/surveys/feedback/versions -b "pf_session=$PF
 curl -sS $BASE/api/v1/events/$EVENT/surveys/feedback/versions/1 -b "pf_session=$PF_SESSION"
 ```
 
+## Share link and QR code
+
+Viewer role or higher. Works before publishing too (`published` is false and the page answers 404 until a version exists).
+
+```sh
+curl -sS $BASE/api/v1/events/$EVENT/surveys/feedback/link -b "pf_session=$PF_SESSION"   # {"url":"$PUBLIC_BASE_URL/s/<publicId>","published":true}
+curl -sS -OJ $BASE/api/v1/events/$EVENT/surveys/feedback/link/qr.svg -b "pf_session=$PF_SESSION"
+curl -sS -OJ "$BASE/api/v1/events/$EVENT/surveys/feedback/link/qr.png?size=1024" -b "pf_session=$PF_SESSION"
+```
+
+The URL base is the server's `PUBLIC_BASE_URL`. QR codes are generated in the server (error correction M, 4-module quiet zone, no external service) and download as `<event>-<survey>-qr.svg|png`; `size` (64-2048, default 512) is the maximum PNG width in pixels. Responses are `Cache-Control: private`.
+
 ## Exporting responses
 
 ```sh

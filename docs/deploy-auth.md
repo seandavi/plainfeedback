@@ -22,6 +22,7 @@ The production client already exists. Its id and secret are in GCP Secret Manage
 | `OIDC_CLIENT_ID` | yes | from Secret Manager |
 | `OIDC_CLIENT_SECRET` | yes | from Secret Manager |
 | `OIDC_REDIRECT_URI` | yes | `https://<your-host>/api/v1/auth/callback`; its origin is also the CSRF origin |
+| `PUBLIC_BASE_URL` | yes | Public origin, e.g. `https://feedback.example.org`; survey links and QR codes are `${PUBLIC_BASE_URL}/s/{publicId}` |
 | `OIDC_ISSUER` | no | default `https://accounts.google.com`; any OIDC issuer with discovery |
 | `OIDC_PROVIDER` | no | display name, default `Google` (`GET /api/v1/auth/provider`) |
 | `ALLOWED_EMAIL_DOMAINS` | no | comma-separated, exact domain match; empty = any verified email |
