@@ -247,6 +247,15 @@ describe("CSV", () => {
     expect(csvCell(undefined)).toBe("");
   });
 
+  it("guards formulas after leading whitespace and in fullwidth form (#63)", () => {
+    expect(csvCell(" =HYPERLINK(1)")).toBe("' =HYPERLINK(1)");
+    expect(csvCell("\n=1+1")).toBe(`"'\n=1+1"`);
+    expect(csvCell("＝cmd|' /C calc'!A0")).toBe("'＝cmd|' /C calc'!A0");
+    expect(csvCell("　＋1")).toBe("'　＋1");
+    expect(csvCell("\tplain")).toBe("'\tplain");
+    expect(csvCell(" plain")).toBe(" plain");
+  });
+
   it("guards only text cells: negative numbers stay numeric, '-' free text is quoted", () => {
     const model = {
       pages: [

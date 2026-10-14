@@ -74,12 +74,15 @@ export const flatten = (model: Survey, answers: Answers): Record<string, string 
   return out;
 };
 
-// RFC 4180 quoting plus formula-injection guard: string cells starting with = + - @ (or tab/CR) get
-// a leading single quote so spreadsheets show text instead of evaluating it. Numbers are untouched.
+// RFC 4180 quoting plus formula-injection guard: string cells starting with = + - @ (or their
+// fullwidth forms), possibly after whitespace since some importers trim first, or with tab/CR, get a
+// leading single quote so spreadsheets show text. Numbers are untouched. This alters legitimate text
+// like "-- none"; JSONL is the lossless format for analysis (#63).
+const FORMULA = /^(\s*[=+\-@＝＋－＠]|[\t\r])/;
 export const csvCell = (v: string | number | undefined): string => {
   if (v === undefined) return "";
   let s = String(v);
-  if (typeof v === "string" && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  if (typeof v === "string" && FORMULA.test(s)) s = `'${s}`;
   return /[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
 };
 
@@ -154,8 +157,9 @@ export const responseRoutes = (db: Db, log: (line: string) => void = () => {}) =
       description:
         "Ordered by `seq`. `since` is the `seq` of the last row received (exclusive; resume), or an " +
         "ISO time with offset (coarse filter: that whole hour and later). Any other `since` is 400. " +
-        "`submittedAt` is to the hour. CSV cells starting with = + - @ are prefixed with a single " +
-        "quote. If the stream fails midway the transfer is aborted, never ended cleanly.",
+        "`submittedAt` is to the hour. CSV is for spreadsheets: text cells starting with = + - @ " +
+        "(also fullwidth, or after whitespace) get a leading single quote. JSONL is lossless; use it " +
+        "for analysis. If the stream fails midway the transfer is aborted, never ended cleanly.",
       middleware: [viewer],
       request: { params: Params, query: Query },
       responses: {
