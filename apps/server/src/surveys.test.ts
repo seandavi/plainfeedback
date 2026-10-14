@@ -2,7 +2,7 @@ import { compile } from "@plainfeedback/core";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { authorize } from "./authz";
-import { events, groups, surveys, surveyVersions } from "./schema";
+import { events, groups, responses, surveys, surveyVersions } from "./schema";
 import { DEFAULT_PRIVACY_STATEMENT } from "./surveys";
 import { useWorld, WHO } from "./testworld";
 
@@ -270,6 +270,25 @@ describe("drafts", () => {
     const res = await call(w, "PUT", `${ev(w)}/surveys/pre`, w.who.creator, { waveLabel: "x" });
     expect(res.status).toBe(400);
     expect((await call(w, "PUT", `${ev(w)}/surveys/Bad`, w.who.creator, MD)).status).toBe(400);
+  });
+
+  it("lists the open window and response count for members", async () => {
+    const w = await world();
+    const db = getDb();
+    const [v] = await db
+      .select()
+      .from(surveyVersions)
+      .where(eq(surveyVersions.surveyId, w.survey.id));
+    await db
+      .insert(responses)
+      .values([1, 2].map(() => ({ surveyVersionId: v?.id as string, answers: {} })));
+    const list = await read(call(w, "GET", `${ev(w)}/surveys`, w.who.viewer));
+    expect(list[0]).toMatchObject({
+      slug: "post",
+      responseCount: 2,
+      opensAt: null,
+      closesAt: null,
+    });
   });
 
   it("closes and reopens a survey", async () => {

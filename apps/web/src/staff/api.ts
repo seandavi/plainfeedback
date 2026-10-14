@@ -20,6 +20,24 @@ export type SurveySummary = {
   closed: boolean;
   updatedAt: string;
   latestVersion: number | null;
+  // Present in the list endpoint only.
+  opensAt?: string | null;
+  closesAt?: string | null;
+  responseCount?: number;
+};
+export type User = { id: string; email: string; isAdmin: boolean; createdAt: string };
+export type Member = { userId: string; email: string; role: Role };
+export type TokenRole = "viewer" | "creator";
+export type ApiToken = {
+  id: string;
+  userId: string;
+  email: string;
+  name: string;
+  role: TokenRole;
+  expiresAt: string;
+  revokedAt: string | null;
+  lastUsedAt: string | null;
+  createdAt: string;
 };
 export type Survey = SurveySummary & {
   publicId: string;
@@ -96,6 +114,27 @@ export const api = {
   me: () => get<Me>("/me"),
   logout: () => call<void>("POST", "/auth/logout"),
   groups: () => get<Group[]>("/groups"),
+  users: () => get<User[]>("/users"),
+  setAdmin: (id: string, isAdmin: boolean) =>
+    call<User>("PATCH", `/users/${enc(id)}`, { isAdmin }).then((r) => r.data),
+  createGroup: (name: string) => call<Group>("POST", "/groups", { name }).then((r) => r.data),
+  patchGroup: (g: string, patch: { name?: string; archived?: boolean }) =>
+    call<Group>("PATCH", `/groups/${enc(g)}`, patch).then((r) => r.data),
+  members: (g: string) => get<Member[]>(`/groups/${enc(g)}/members`),
+  /** `user` is a user id or the email of someone who has signed in once. */
+  setMember: (g: string, user: string, role: Role) =>
+    call<Member>("PUT", `/groups/${enc(g)}/members/${enc(user)}`, { role }).then((r) => r.data),
+  removeMember: (g: string, user: string) =>
+    call<void>("DELETE", `/groups/${enc(g)}/members/${enc(user)}`),
+  tokens: (g: string) => get<ApiToken[]>(`/groups/${enc(g)}/tokens`),
+  createToken: (g: string, name: string, role: TokenRole, expiresInDays: number) =>
+    call<ApiToken & { token: string }>("POST", `/groups/${enc(g)}/tokens`, {
+      name,
+      role,
+      expiresInDays,
+    }).then((r) => r.data),
+  revokeToken: (g: string, id: string) =>
+    call<void>("DELETE", `/groups/${enc(g)}/tokens/${enc(id)}`),
   group: (g: string) => get<Group>(`/groups/${enc(g)}`),
   events: (g: string) => get<Event[]>(`/groups/${enc(g)}/events`),
   event: (g: string, slug: string) => get<Event>(`/groups/${enc(g)}/events/${enc(slug)}`),

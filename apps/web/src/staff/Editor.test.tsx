@@ -219,6 +219,7 @@ describe("StaffApp", () => {
       200,
       [{ id: "g1", name: "CFDE", archived: false, role: "viewer" }],
     ];
+    routes["GET /api/v1/groups/g1/events"] = () => [200, []];
     history.replaceState(null, "", "/app");
     render(<StaffApp />);
     expect((await screen.findByRole("link", { name: "CFDE" })).getAttribute("href")).toBe(
