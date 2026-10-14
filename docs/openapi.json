@@ -3412,7 +3412,7 @@
           "responses"
         ],
         "summary": "Export responses as JSONL or CSV, streamed (viewer)",
-        "description": "Ordered by `seq`. `since` is the `seq` of the last row received (exclusive; resume), or an ISO time with offset (coarse filter: that whole hour and later). Any other `since` is 400. `submittedAt` is to the hour. CSV is for spreadsheets: text cells starting with = + - @ (also fullwidth, or after whitespace) get a leading single quote. JSONL is lossless; use it for analysis. If the stream fails midway the transfer is aborted, never ended cleanly.",
+        "description": "Ordered by `seq`. `since` is a `seq` (exclusive; resume cursor) or an ISO time with offset (coarse filter: that whole hour and later). Any other `since` is 400. `seq` is assigned at insert, so a row can become visible after a higher one: resume with an overlap (`since` = last seq - 1000) and dedupe on `responseId`. `submittedAt` is to the hour. CSV is for spreadsheets: text cells starting with = + - @ (also fullwidth, or after whitespace) get a leading single quote. JSONL is lossless; use it for analysis. If the stream fails midway the transfer is aborted, never ended cleanly.",
         "parameters": [
           {
             "schema": {

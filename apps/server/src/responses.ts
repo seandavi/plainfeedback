@@ -5,6 +5,11 @@
 // `since` is either the `seq` of the last row you received (digits only, exclusive: the resume
 // cursor) or an ISO time with offset, a coarse filter that includes that whole hour (times are
 // stored to the hour, #37). Anything else is 400 before streaming starts (#58).
+//
+// ponytail (#59): `seq` is assigned at insert, not commit, so a slow insert can become visible after
+// a higher seq. Clients resume with an overlap and dedupe on responseId (docs/api.md). An exact
+// cursor needs serialised inserts or a commit-order horizon; xmin-based filters are not exact
+// (xid order != seq order) and a lock would make participant submits wait on exports.
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import type { Question, Survey } from "@plainfeedback/core";
 import { and, asc, eq, inArray, lt, sql } from "drizzle-orm";
@@ -155,8 +160,10 @@ export const responseRoutes = (db: Db, log: (line: string) => void = () => {}) =
       tags: ["responses"],
       summary: "Export responses as JSONL or CSV, streamed (viewer)",
       description:
-        "Ordered by `seq`. `since` is the `seq` of the last row received (exclusive; resume), or an " +
-        "ISO time with offset (coarse filter: that whole hour and later). Any other `since` is 400. " +
+        "Ordered by `seq`. `since` is a `seq` (exclusive; resume cursor) or an ISO time with offset " +
+        "(coarse filter: that whole hour and later). Any other `since` is 400. `seq` is assigned at " +
+        "insert, so a row can become visible after a higher one: resume with an overlap (`since` = " +
+        "last seq - 1000) and dedupe on `responseId`. " +
         "`submittedAt` is to the hour. CSV is for spreadsheets: text cells starting with = + - @ " +
         "(also fullwidth, or after whitespace) get a leading single quote. JSONL is lossless; use it " +
         "for analysis. If the stream fails midway the transfer is aborted, never ended cleanly.",
