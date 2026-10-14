@@ -18,3 +18,11 @@ up *args:
 
 down:
     docker compose down
+
+# apply pending DB migrations (needs DATABASE_URL); not run automatically on app start
+migrate:
+    pnpm -C apps/server migrate
+
+# generate a migration after editing apps/server/src/schema
+migration-generate name:
+    pnpm -C apps/server exec drizzle-kit generate --name {{name}}
