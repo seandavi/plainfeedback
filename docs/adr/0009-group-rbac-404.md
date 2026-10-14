@@ -16,4 +16,4 @@ Issue #4 adds groups and roles (design.md: global admin; per-group owner, creato
 ## Consequences
 - Users can tell "no access" (404) from "role too low" (403) only for groups they already belong to.
 - Body validation runs after authorization, so a non-member never learns anything from a 400.
-- Archiving only sets `archived_at` for now. What archived groups block is decided with events (#6).
+- Archiving only sets `archived_at`. Since #6, event and survey writes in an archived group return 409 (after the 404/403 checks); reads still work, and an owner can un-archive.

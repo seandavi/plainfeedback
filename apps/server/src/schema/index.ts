@@ -72,7 +72,8 @@ export const events = pgTable(
       .notNull()
       .references(() => groups.id),
     slug: text("slug").notNull(),
-    name: text("name").notNull(),
+    title: text("title").notNull(),
+    description: text("description").notNull().default(""),
     createdAt: createdAt(),
   },
   (t) => [unique().on(t.groupId, t.slug)],
@@ -89,6 +90,7 @@ export const surveys = pgTable(
     waveLabel: text("wave_label"), // e.g. pre, post, followup
     draftMarkdown: text("draft_markdown").notNull().default(""),
     draftEtag: text("draft_etag").notNull().default(""),
+    closedAt: ts("closed_at"), // set = not accepting responses (applies to every version)
     createdAt: createdAt(),
     updatedAt: ts("updated_at").notNull().defaultNow(),
   },
