@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   index,
   integer,
@@ -55,7 +56,7 @@ export const memberships = pgTable(
     id: id(),
     groupId: uuid("group_id")
       .notNull()
-      .references(() => groups.id),
+      .references(() => groups.id, { onDelete: "cascade" }),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id),
@@ -71,7 +72,7 @@ export const events = pgTable(
     id: id(),
     groupId: uuid("group_id")
       .notNull()
-      .references(() => groups.id),
+      .references(() => groups.id, { onDelete: "cascade" }),
     slug: text("slug").notNull(),
     title: text("title").notNull(),
     description: text("description").notNull().default(""),
@@ -86,7 +87,7 @@ export const surveys = pgTable(
     id: id(),
     eventId: uuid("event_id")
       .notNull()
-      .references(() => events.id),
+      .references(() => events.id, { onDelete: "cascade" }),
     slug: text("slug").notNull(),
     // Unguessable id in the participant URL /s/{publicId}; slugs are neither global nor secret.
     publicId: text("public_id").notNull().unique().$defaultFn(newPublicId),
@@ -100,14 +101,15 @@ export const surveys = pgTable(
   (t) => [unique().on(t.eventId, t.slug)],
 );
 
-// Immutable: a trigger (see migrations) rejects UPDATE and DELETE.
+// Immutable: a trigger (see migrations) rejects UPDATE, TRUNCATE and DELETE, except a DELETE
+// cascading from its survey (the survey row is already gone; ADR 0012).
 export const surveyVersions = pgTable(
   "survey_versions",
   {
     id: id(),
     surveyId: uuid("survey_id")
       .notNull()
-      .references(() => surveys.id),
+      .references(() => surveys.id, { onDelete: "cascade" }),
     version: integer("version").notNull(),
     markdown: text("markdown").notNull(),
     model: jsonb("model").notNull(),
@@ -126,11 +128,15 @@ export const responses = pgTable(
     id: id(),
     surveyVersionId: uuid("survey_version_id")
       .notNull()
-      .references(() => surveyVersions.id),
+      .references(() => surveyVersions.id, { onDelete: "cascade" }),
     answers: jsonb("answers").notNull(),
-    submittedAt: ts("submitted_at").notNull().defaultNow(),
+    // Truncated to the hour (#37): a precise time joins with proxy logs and sign-in sheets. A CHECK
+    // (see migrations) rejects anything finer, so the app cannot store it even by mistake.
+    submittedAt: ts("submitted_at").notNull().default(sql`date_trunc('hour', now(), 'UTC')`),
+    // Export order and cursor. Global, so gaps hint at other surveys' volume; see threat-model.md.
+    seq: bigint("seq", { mode: "number" }).notNull().generatedAlwaysAsIdentity(),
   },
-  (t) => [index().on(t.surveyVersionId)],
+  (t) => [index().on(t.surveyVersionId), unique().on(t.seq)],
 );
 
 // Per-user API tokens (#11, ADR 0010): only the SHA-256 of the token is stored. role is creator or
@@ -144,7 +150,7 @@ export const apiTokens = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     groupId: uuid("group_id")
       .notNull()
-      .references(() => groups.id),
+      .references(() => groups.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     role: roleEnum("role").notNull(),
     tokenHash: text("token_hash").notNull().unique(),

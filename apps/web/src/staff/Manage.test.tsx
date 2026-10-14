@@ -358,3 +358,77 @@ describe("group page", () => {
     await waitFor(() => expect(called("DELETE", `/api/v1/groups/${G}/tokens/t1`)).toHaveLength(1));
   });
 });
+
+describe("deletion (#36)", () => {
+  const ev = { id: "ev1", slug: "fall", title: "Fall", description: "" };
+  const eventRoutes = (role: string) => {
+    routes = {
+      ...base(false),
+      [`GET /api/v1/groups/${G}`]: () => [200, group(role)],
+      [`GET /api/v1/groups/${G}/events`]: () => [200, [ev]],
+      [`GET /api/v1/groups/${G}/events/fall`]: () => [200, ev],
+      "GET /api/v1/events/ev1/surveys": () => [
+        200,
+        [
+          { slug: "pre", closed: false, latestVersion: null, responseCount: 0 },
+          { slug: "post", closed: false, latestVersion: 2, responseCount: 17 },
+        ],
+      ],
+      "DELETE /api/v1/events/ev1/surveys/pre": () => [204, undefined],
+      [`DELETE /api/v1/groups/${G}/events/fall`]: () => [204, undefined],
+      "DELETE /api/v1/events/ev1/surveys/post/responses?before=2026-01-01T00%3A00%3A00.000Z":
+        () => [200, { deleted: 3 }],
+    };
+  };
+  const confirm = async (button: string, title: string, action = "Delete") => {
+    fireEvent.click(await screen.findByRole("button", { name: button }));
+    const dialog = await screen.findByRole("dialog", { name: title });
+    fireEvent.click(within(dialog).getByRole("button", { name: action }));
+  };
+
+  it("a creator may delete only unpublished surveys, and sees no response or event deletion", async () => {
+    eventRoutes("creator");
+    open(`/app/g/${G}/e/fall`);
+    await confirm("Delete pre", "Delete survey");
+    await waitFor(() => expect(called("DELETE", "/api/v1/events/ev1/surveys/pre")).toHaveLength(1));
+    expect(screen.queryByRole("button", { name: "Delete post" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Delete responses" })).toBeNull();
+  });
+
+  it("an owner deletes responses before a date after confirming", async () => {
+    eventRoutes("owner");
+    open(`/app/g/${G}/e/fall`);
+    expect(await screen.findByRole("button", { name: "Delete post" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Submitted before/), {
+      target: { value: "2026-01-01" },
+    });
+    await confirm("Delete responses", "Delete responses");
+    expect(await screen.findByText("Deleted 3 responses.")).toBeTruthy();
+  });
+
+  it("an owner deletes an event from the group page", async () => {
+    eventRoutes("owner");
+    open(`/app/g/${G}`);
+    await confirm("Delete Fall", "Delete event");
+    await waitFor(() =>
+      expect(called("DELETE", `/api/v1/groups/${G}/events/fall`)).toHaveLength(1),
+    );
+  });
+
+  it("an admin can delete a group only once it is archived", async () => {
+    routes = {
+      ...base(true),
+      "GET /api/v1/users": () => [200, []],
+      "GET /api/v1/groups": () => [
+        200,
+        [group(null), group(null, { id: "g2", name: "Old", archived: true })],
+      ],
+      "DELETE /api/v1/groups/g2": () => [204, undefined],
+    };
+    open("/app/admin");
+    await screen.findByRole("table", { name: /All groups/ });
+    expect(screen.queryByRole("button", { name: "Delete Lab" })).toBeNull();
+    await confirm("Delete Old", "Delete group");
+    await waitFor(() => expect(called("DELETE", "/api/v1/groups/g2")).toHaveLength(1));
+  });
+});

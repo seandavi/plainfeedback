@@ -59,12 +59,14 @@ describe("schema", () => {
     expect(r.rows.map((x) => x.column_name)).toEqual([
       "answers",
       "id",
+      "seq",
       "submitted_at",
       "survey_version_id",
     ]);
     expect(Object.keys(getTableColumns(s.responses)).sort()).toEqual([
       "answers",
       "id",
+      "seq",
       "submittedAt",
       "surveyVersionId",
     ]);
@@ -80,6 +82,57 @@ describe("schema", () => {
     );
     await rejects(db.execute(sql`delete from survey_versions where id = ${id}`), "23001");
     await rejects(db.execute(sql`truncate survey_versions cascade`), "23001");
+  });
+
+  it("deleting a survey cascades to versions and responses; ad-hoc deletes stay blocked", async () => {
+    const db = getDb();
+    const { g, sv, v } = await seed();
+    await db.insert(s.responses).values({ surveyVersionId: v.id, answers: {} });
+    await db.delete(s.surveys).where(sql`${s.surveys.id} = ${sv.id}`);
+    const left = await db.execute(
+      sql`select (select count(*)::int from survey_versions where survey_id = ${sv.id}) as v,
+                 (select count(*)::int from responses where survey_version_id = ${v.id}) as r`,
+    );
+    expect(left.rows[0]).toEqual({ v: 0, r: 0 });
+    // A fresh version under a live survey still cannot be deleted directly afterwards.
+    const ev2 = one(
+      await db.insert(s.events).values({ groupId: g.id, slug: "e2", title: "E" }).returning(),
+    );
+    const sv2 = one(await db.insert(s.surveys).values({ eventId: ev2.id, slug: "s" }).returning());
+    const v2 = one(
+      await db
+        .insert(s.surveyVersions)
+        .values({ surveyId: sv2.id, version: 1, markdown: "# x", model: {}, privacyStatement: "p" })
+        .returning(),
+    );
+    await rejects(db.execute(sql`delete from survey_versions where id = ${v2.id}`), "23001");
+    // Group delete cascades through events and surveys too.
+    await db.delete(s.groups).where(sql`${s.groups.id} = ${g.id}`);
+    const n = await db.execute(sql`select count(*)::int as n from surveys where id = ${sv2.id}`);
+    expect(n.rows[0]?.n).toBe(0);
+  });
+
+  it("stores submission time to the hour and numbers responses in insert order", async () => {
+    const db = getDb();
+    const { v } = await seed();
+    const [a, b] = await db
+      .insert(s.responses)
+      .values([
+        { surveyVersionId: v.id, answers: {} },
+        { surveyVersionId: v.id, answers: {} },
+      ])
+      .returning();
+    expect((a?.submittedAt.getTime() ?? 1) % 3_600_000).toBe(0);
+    expect(Date.now() - (a?.submittedAt.getTime() ?? 0)).toBeLessThan(3_700_000);
+    expect((b?.seq ?? 0) > (a?.seq ?? 0)).toBe(true);
+    await rejects(
+      db.insert(s.responses).values({
+        surveyVersionId: v.id,
+        answers: {},
+        submittedAt: new Date("2026-01-01T10:30:00Z"),
+      }),
+      "23514",
+    );
   });
 
   it("enforces uniqueness", async () => {

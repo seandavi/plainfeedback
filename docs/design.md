@@ -37,7 +37,7 @@ De-identified event-feedback surveys for the Common Fund Data Ecosystem (CFDE) m
 - `surveys` (belongs to an event; slug; wave label such as pre, post, followup; current draft markdown and ETag; `closed_at`)
 - `survey_versions` (immutable; markdown, compiled JSON model, privacy statement, open/close dates)
 - `tokens` (deferred; event, hash of the code only)
-- `responses` (survey_version, optional token hash, answers JSONB, submitted_at)
+- `responses` (survey_version, optional token hash, answers JSONB, submitted_at to the hour, seq for export order)
 - `api_tokens` (user, group, role, hash, expiry)
 
 ## Survey JSON model
@@ -84,7 +84,9 @@ Goal: avoid collecting participant identifiers. This is not a guarantee of anony
 
 - No cookies. Page state lives in memory; `sessionStorage` use must be stated in the privacy statement.
 - No IP or user-agent logging, including in reverse-proxy logs for participant endpoints.
-- Free text can contain identifying details; viewers see a warning, and small groups can be re-identified from demographic fields (suppress small cells in aggregates).
+- Free text can contain identifying details; viewers see a warning, and small groups can be re-identified from demographic fields. Any aggregate view must suppress cells with fewer than 5 responses (configurable), including cells recoverable from totals ([#46](https://github.com/seandavi/plainfeedback/issues/46)).
+- Submission time is stored to the hour only ([#37](https://github.com/seandavi/plainfeedback/issues/37)).
+- Deletion is real (no soft delete) and cascades; backups keep data until they rotate. Retention is the owner's and operator's job; nothing deletes on a schedule ([#36](https://github.com/seandavi/plainfeedback/issues/36), [#47](https://github.com/seandavi/plainfeedback/issues/47), [ADR 0012](adr/0012-deletion-and-coarse-time.md)).
 - Chat and intake only see survey drafts and source documents, never responses. Respondent free text is untrusted input.
 - Open: participant withdrawal by code; model provider disclosure for phase 2.
 
@@ -97,6 +99,7 @@ POST   /groups                                  admin
 GET    /groups                                  admin: all; others: their groups
 GET    /groups/{g}                              viewer
 PATCH  /groups/{g}                              owner: rename, archive
+DELETE /groups/{g}                              admin: only once archived; cascades
 GET    /groups/{g}/members                      viewer
 PUT    /groups/{g}/members/{user}               owner: {user} is an id or the email of an existing user
 DELETE /groups/{g}/members/{user}               owner (never the last owner)
@@ -105,17 +108,21 @@ PATCH  /users/{id}                              admin: grant/revoke admin (never
 GET    /groups/{g}/events                       viewer
 GET    /groups/{g}/events/{e}                   viewer ({e} is the event slug here)
 PUT    /groups/{g}/events/{e}                   creator: upsert by slug {title, description}; returns the event id
+DELETE /groups/{g}/events/{e}                   owner: cascades to surveys and responses
 GET    /events/{e}/surveys                      viewer ({e} is the event id)
 GET    /events/{e}/surveys/{s}                  viewer: draft markdown, ETag, latest version summary
 PUT    /events/{e}/surveys/{s}                  creator: upsert draft (text/markdown or JSON); If-Match to update
 PATCH  /events/{e}/surveys/{s}                  creator: {closed} stops or resumes accepting responses
+DELETE /events/{e}/surveys/{s}                  owner; creator if never published. Cascades
 POST   /events/{e}/surveys/{s}/validate         viewer: dry run of supplied or stored markdown, no writes
 POST   /events/{e}/surveys/{s}/publish          creator: freeze the draft as a new version
 GET    /events/{e}/surveys/{s}/versions         viewer
 GET    /events/{e}/surveys/{s}/versions/{n}     viewer
 GET    /events/{e}/surveys/{s}/link             viewer: public URL + published flag
 GET    /events/{e}/surveys/{s}/link/qr.svg|png  viewer: QR code of that URL (png: ?size=)
-GET    /events/{e}/responses?format=jsonl|csv|parquet&since=   viewer
+GET    /events/{e}/surveys/{s}/responses?format=jsonl|csv&since=<seq|ISO>   viewer
+DELETE /events/{e}/surveys/{s}/responses?before=  owner: returns the count
+DELETE /events/{e}/surveys/{s}/responses/{id}     owner
 
 GET    /s/{publicId}                            participant page (no cookies)
 GET    /api/v1/public/surveys/{publicId}        latest published version: model, privacy statement, status

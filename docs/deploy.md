@@ -172,17 +172,12 @@ find /backups -name 'plainfeedback-*.dump.age' -mtime +30 -delete   # backup ret
 
 ## Retention and deletion
 
-The app does not delete responses yet ([#36](https://github.com/seandavi/plainfeedback/issues/36)). Until it does, the operator deletes by SQL when the retention period ends. For one event (id from `GET /api/v1/groups/{g}/events/{slug}`):
+Deletion is real: there is no soft delete or undo, and the data stays in backups only until they rotate (see above). Nothing deletes on a schedule (automation is [#47](https://github.com/seandavi/plainfeedback/issues/47)), so keeping the retention period in the privacy statement is the group owner's and the operator's job. Export first if the summaries need recomputing. All of these are in the staff UI with a confirmation, and in the API (`/api/docs`):
 
-```sql
-begin;
-delete from responses r
-  using survey_versions v, surveys s
-  where r.survey_version_id = v.id and v.survey_id = s.id and s.event_id = '<event-id>';
-commit;
-```
-
-Export first if the summaries need recomputing. Expired staff sessions are only removed when presented; `delete from sessions where expires_at < now();` cleans them up.
+- Owner: `DELETE /api/v1/events/{e}/surveys/{s}/responses?before=<ISO time>` deletes a survey's responses (all of them without `before`) and returns the count; `DELETE .../responses/{responseId}` deletes one (ids are in the export).
+- Owner: `DELETE /api/v1/events/{e}/surveys/{s}` deletes a survey with its versions and responses; a creator may delete a survey that was never published. `DELETE /api/v1/groups/{g}/events/{slug}` deletes an event with everything in it.
+- Admin: `DELETE /api/v1/groups/{g}` deletes a group with everything in it, and only once it is archived.
+- In an archived group, un-archive first; other deletes answer 409 there. Expired staff sessions are only removed when presented; `delete from sessions where expires_at < now();` cleans them up.
 
 ## Before real data
 

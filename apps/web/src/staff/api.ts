@@ -160,7 +160,22 @@ export const api = {
     get<VersionSummary[]>(`${survey(eventId, slug)}/versions`),
   version: (eventId: string, slug: string, n: number) =>
     get<Version>(`${survey(eventId, slug)}/versions/${n}`),
+  // Deletion (#36) is permanent; the UI always confirms first.
+  deleteGroup: (g: string) => call<void>("DELETE", `/groups/${enc(g)}`),
+  deleteEvent: (g: string, slug: string) =>
+    call<void>("DELETE", `/groups/${enc(g)}/events/${enc(slug)}`),
+  deleteSurvey: (eventId: string, slug: string) => call<void>("DELETE", survey(eventId, slug)),
+  /** All responses of a survey, or only those submitted before `before` (ISO). */
+  deleteResponses: (eventId: string, slug: string, before?: string) =>
+    call<{ deleted: number }>(
+      "DELETE",
+      `${survey(eventId, slug)}/responses${before ? `?before=${enc(before)}` : ""}`,
+    ).then((r) => r.data),
+  deleteResponse: (eventId: string, slug: string, id: string) =>
+    call<void>("DELETE", `${survey(eventId, slug)}/responses/${enc(id)}`),
 };
 
+export const isOwner = (me: Me, group: Group) =>
+  !group.archived && (me.isAdmin || group.role === "owner");
 export const canEdit = (me: Me, group: Group) =>
   !group.archived && (me.isAdmin || group.role === "creator" || group.role === "owner");
