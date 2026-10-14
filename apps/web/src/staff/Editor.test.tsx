@@ -124,6 +124,18 @@ describe("Editor", () => {
     );
   });
 
+  it("resets the preview's answers and messages on save (#78)", async () => {
+    routes["PUT /api/v1/events/ev/surveys/fb"] = () => [200, survey({ etag: '"e2"' })];
+    const box = await setup();
+    fireEvent.change(preview().getByLabelText("Any comments?"), { target: { value: "hi" } });
+    type(box, `${MD}\n`);
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await screen.findByText("Draft saved.");
+    await waitFor(() =>
+      expect((preview().getByLabelText("Any comments?") as HTMLTextAreaElement).value).toBe(""),
+    );
+  });
+
   it("on 412 offers overwrite (re-fetching the ETag) or reload", async () => {
     routes["PUT /api/v1/events/ev/surveys/fb"] = (c) =>
       c.headers["if-match"] === '"e9"' ? [200, survey({ etag: '"e10"' })] : [412, { error: "x" }];

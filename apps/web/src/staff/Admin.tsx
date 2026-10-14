@@ -63,13 +63,16 @@ function Users({ me }: { me: Me }) {
                       ? The last admin cannot be revoked.
                     </ConfirmButton>
                   ) : (
-                    <button
-                      type="button"
-                      aria-label={`Grant admin ${u.email}`}
-                      onClick={() => run(() => api.patchUser(u.id, { isAdmin: true }))}
+                    <ConfirmButton
+                      label="Grant admin"
+                      name={u.email}
+                      title="Grant admin"
+                      danger={false}
+                      onConfirm={() => run(() => api.patchUser(u.id, { isAdmin: true }))}
                     >
-                      Grant admin
-                    </button>
+                      Make {u.email} an admin? Admins can manage every group, its members and its
+                      data, and other admins.
+                    </ConfirmButton>
                   )}{" "}
                   {u.disabled ? (
                     <button

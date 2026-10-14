@@ -2,10 +2,12 @@
 // Routes: /app, /app/g/{groupId}, /app/g/{groupId}/e/{eventSlug}, .../s/{surveySlug}[/responses].
 // Later staff screens (#19: admin, members) add a route to `route` and reuse useLoad/ErrorNote.
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import grammar from "../../../../docs/grammar.md?raw";
+import cfdeExample from "../../../../packages/core/src/fixtures/cfde-fall-2026.md?raw";
 import { AdminPage } from "./Admin";
-import { ApiError, api, canEdit, isOwner, type Me, type Wave } from "./api";
+import { ApiError, api, canEdit, type Event, isOwner, type Me, type Wave } from "./api";
 import { Dashboard, surveyStatus } from "./Dashboard";
-import { Editor } from "./Editor";
+import { Dialog, Editor } from "./Editor";
 import { ConfirmButton, DeleteResponses, Members, Tokens, useAction } from "./Manage";
 import { Responses } from "./Responses";
 import { Link, navigate, usePageTitle, usePath } from "./router";
@@ -135,12 +137,25 @@ function route(path: string, me: Me): ReactNode {
     return m === undefined ? undefined : decodeURIComponent(m);
   });
   if (/^\/app\/admin\/?$/.test(path)) return <AdminPage me={me} />;
+  if (/^\/app\/guide\/?$/.test(path)) return <Guide />;
   if (g && e && rs) return <ResponsesPage key={path} me={me} g={g} e={e} s={rs} />;
   if (g && e && s) return <EditorPage key={path} me={me} g={g} e={e} s={s} />;
   if (g && e) return <EventPage key={path} me={me} g={g} e={e} />;
   if (g) return <GroupPage key={path} me={me} g={g} />;
   if (/^\/app\/?$/.test(path)) return <Dashboard />;
   return <p role="alert">Page not found.</p>;
+}
+
+/** docs/grammar.md as plain text, so authors need not leave the app (#78). ponytail: markdown
+ * source rather than rendered; the survey renderer has no tables or code blocks. */
+function Guide() {
+  usePageTitle("Survey markdown guide");
+  return (
+    <>
+      <h1>Survey markdown guide</h1>
+      <pre className="guide">{grammar.replace(/^# .*\n+/, "")}</pre>
+    </>
+  );
 }
 
 const Crumbs = ({ items }: { items: [string, string?][] }) => (
@@ -282,26 +297,115 @@ function GroupPage({ me, g }: { me: Me; g: string }) {
 
 const starter = (title: string) =>
   `# ${title}\n\nThank you for taking part. This survey takes about two minutes.\n\n::: {.text #comments multiline}\nAny comments?\n:::\n`;
+// Templates (#74): a template is just markdown to start from; its question ids are kept on purpose
+// so answers stay comparable across events (docs/grammar.md, "The id").
+const TEMPLATES: Record<string, { label: string; markdown: (title: string) => string }> & {
+  blank: { label: string; markdown: (title: string) => string };
+} = {
+  blank: { label: "Blank (one comment question)", markdown: starter },
+  cfde: {
+    label: "CFDE event feedback (example)",
+    markdown: (title) => cfdeExample.replace(/^# .*/, `# ${title}`),
+  },
+};
+
+/** Creates a new draft; never overwrites (no If-Match means create only). */
+async function createDraft(eventId: string, slug: string, markdown: string, wave?: Wave | null) {
+  try {
+    await api.saveDraft(eventId, slug, markdown, undefined, wave);
+  } catch (x) {
+    if (x instanceof ApiError && x.status === 428)
+      throw new Error(`A survey with the short name "${slug}" already exists there.`);
+    throw x;
+  }
+}
+
+/** Duplicate (#74): copies a survey's draft markdown into a new survey in this or another event of
+ * the same group. Creator or higher; the server checks both events. */
+function Duplicate({
+  g,
+  event,
+  events,
+  slug,
+}: {
+  g: string;
+  event: Event;
+  events: Event[];
+  slug: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<unknown>();
+  const submit = async (ev: FormEvent<HTMLFormElement>) => {
+    ev.preventDefault();
+    const f = new FormData(ev.currentTarget);
+    const to = events.find((x) => x.id === f.get("event")) ?? event;
+    const newSlug = String(f.get("slug"));
+    setError(undefined);
+    try {
+      const src = await api.survey(event.id, slug);
+      await createDraft(to.id, newSlug, src.markdown);
+      navigate(paths.survey(g, to.slug, newSlug));
+    } catch (x) {
+      setError(x);
+    }
+  };
+  return (
+    <>
+      <button type="button" aria-label={`Duplicate ${slug}`} onClick={() => setOpen(true)}>
+        Duplicate
+      </button>
+      {open && (
+        <Dialog title={`Duplicate ${slug}`} onClose={() => setOpen(false)}>
+          <form className="publish" onSubmit={submit}>
+            <p>
+              Copies the current draft, with the same question ids so answers can be compared.
+              Responses are not copied.
+            </p>
+            <label>
+              Into event
+              <select name="event" defaultValue={event.id}>
+                {events.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Short name of the copy
+              <input name="slug" required pattern={SLUG} maxLength={64} defaultValue={slug} />
+            </label>
+            {error !== undefined && <ErrorNote error={error} />}
+            <div className="actions">
+              <button type="submit">Duplicate</button>
+              <button type="button" onClick={() => setOpen(false)}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+    </>
+  );
+}
 
 function EventPage({ me, g, e }: { me: Me; g: string; e: string }) {
   const data = useLoad(async () => {
-    const [group, event] = await Promise.all([api.group(g), api.event(g, e)]);
-    return { group, event, surveys: await api.surveys(event.id) };
+    const [group, event, events] = await Promise.all([
+      api.group(g),
+      api.event(g, e),
+      api.events(g),
+    ]);
+    return { group, event, events, surveys: await api.surveys(event.id) };
   }, `${g}/${e}`);
   const act = useAction(data.reload);
   usePageTitle(data.data?.event.title);
   if (data.error) return <ErrorNote error={data.error} />;
   if (!data.data) return <Loading />;
-  const { group, event, surveys } = data.data;
+  const { group, event, events, surveys } = data.data;
   const create = async (slug: string, title: string, f: FormData) => {
-    try {
-      // no If-Match: create only
-      await api.saveDraft(event.id, slug, starter(title), undefined, waveOf(f.get("waveLabel")));
-    } catch (x) {
-      if (x instanceof ApiError && x.status === 428)
-        throw new Error(`A survey with the short name "${slug}" already exists.`);
-      throw x;
-    }
+    const t = TEMPLATES[String(f.get("template"))] ?? TEMPLATES.blank;
+    await createDraft(event.id, slug, t.markdown(title), waveOf(f.get("waveLabel")));
     navigate(paths.survey(g, e, slug));
   };
   return (
@@ -340,6 +444,9 @@ function EventPage({ me, g, e }: { me: Me; g: string; e: string }) {
               ) : (
                 x.waveLabel && <span className="meta">{x.waveLabel}</span>
               )}{" "}
+              {canEdit(me, group) && (
+                <Duplicate g={g} event={event} events={events} slug={x.slug} />
+              )}{" "}
               {(isOwner(me, group) || (canEdit(me, group) && !x.latestVersion)) && (
                 <ConfirmButton
                   label="Delete"
@@ -363,6 +470,19 @@ function EventPage({ me, g, e }: { me: Me; g: string; e: string }) {
             <select name="waveLabel">
               <WaveOptions />
             </select>
+          </label>
+          <label>
+            Start from{" "}
+            <select name="template" defaultValue="blank">
+              {Object.entries(TEMPLATES).map(([k, t]) => (
+                <option key={k} value={k}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <span className="meta">
+              To reuse another survey, use Duplicate next to it (it keeps the question ids).
+            </span>
           </label>
         </CreateForm>
       )}

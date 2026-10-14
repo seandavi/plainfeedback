@@ -12,7 +12,7 @@ import { useLeaveGuard, usePageTitle } from "./router";
 import { ErrorNote } from "./StaffApp";
 
 const COMPILE_DELAY_MS = 300;
-export const GRAMMAR_URL = "https://github.com/seandavi/plainfeedback/blob/main/docs/grammar.md";
+export const GRAMMAR_URL = "/app/guide"; // docs/grammar.md, served in the app (#78)
 
 // Examples from docs/grammar.md; ID is replaced with an id not yet used in the survey.
 export const SNIPPETS = {
@@ -64,6 +64,7 @@ export function Editor({
   const [status, setStatus] = useState("");
   const [error, setError] = useState<unknown>();
   const [dialog, setDialog] = useState<"conflict" | "publish">();
+  const [round, setRound] = useState(0); // bumped on save/publish: resets the preview's answers
   const code = useRef<CodeEditorHandle>(null);
   const dirty = !readOnly && survey !== undefined && text !== saved;
   useLeaveGuard(dirty);
@@ -118,6 +119,7 @@ export function Editor({
         setSaved(markdown);
         setDialog(undefined);
         setStatus("Draft saved.");
+        setRound((n) => n + 1);
       } catch (x) {
         if (x instanceof ApiError && x.kind === "stale") return setDialog("conflict");
         throw x;
@@ -158,11 +160,12 @@ export function Editor({
       <div className="toolbar">
         {!readOnly && (
           <>
-            <button type="button" onClick={saveNow} disabled={busy || !dirty}>
+            <button type="button" className="primary" onClick={saveNow} disabled={busy || !dirty}>
               Save draft
             </button>
             <button
               type="button"
+              className="primary"
               onClick={() => setDialog("publish")}
               disabled={busy || dirty}
               title={dirty ? "Save the draft before publishing" : undefined}
@@ -200,7 +203,7 @@ export function Editor({
             </select>
           </>
         )}
-        <a href={GRAMMAR_URL} target="_blank" rel="noopener noreferrer">
+        <a href={GRAMMAR_URL} target="_blank" rel="noopener">
           Survey markdown guide
         </a>
       </div>
@@ -251,18 +254,18 @@ export function Editor({
             <p className="banner">The preview shows the last version without problems.</p>
           )}
           {good ? (
-            <>
+            <div className={errors.length > 0 ? "stale" : undefined}>
               <h3 className="preview-title">{good.title}</h3>
               {good.intro && <Markdown text={good.intro} />}
               <SurveyForm
-                key={good.pages
+                key={`${round}/${good.pages
                   .flatMap((p) => p.questions)
                   .map((q) => `${q.id}:${q.type}`)
-                  .join()}
+                  .join()}`}
                 model={good}
                 mode="preview"
               />
-            </>
+            </div>
           ) : (
             <p>Nothing to preview until the survey has no problems.</p>
           )}
@@ -332,6 +335,7 @@ export function Editor({
           onClose={() => setDialog(undefined)}
           onPublished={async (v, created) => {
             setDialog(undefined);
+            setRound((n) => n + 1);
             setStatus(
               created
                 ? `Published version ${v.version}.`
