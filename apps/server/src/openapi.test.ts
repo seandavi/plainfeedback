@@ -61,3 +61,9 @@ test("docs page loads only same-origin assets, all of which are served", async (
   expect(init).not.toMatch(/https?:\/\/|\/\/[a-z]/);
   expect(init).toContain("validatorUrl: null");
 });
+
+test("docs page has no inline script, so it works under script-src self", async () => {
+  const html = await (await specApp().request("/api/docs")).text();
+  for (const m of html.matchAll(/<script([^>]*)>/g)) expect(m[1]).toContain("src=");
+  expect(html).not.toMatch(/\son[a-z]+=/);
+});
