@@ -108,15 +108,16 @@ describe("schema", () => {
         .values({ surveyId: sv.id, version: 1, markdown: "", model: {}, privacyStatement: "" }),
       "23505",
     );
-    await db
-      .insert(s.apiTokens)
-      .values({ userId: u.id, groupId: g.id, role: "viewer", tokenHash: "h" });
-    await rejects(
-      db
-        .insert(s.apiTokens)
-        .values({ userId: u.id, groupId: g.id, role: "viewer", tokenHash: "h" }),
-      "23505",
-    );
+    const tok = {
+      userId: u.id,
+      groupId: g.id,
+      name: "ci",
+      role: "viewer" as const,
+      tokenHash: "h",
+      expiresAt: new Date(),
+    };
+    await db.insert(s.apiTokens).values(tok);
+    await rejects(db.insert(s.apiTokens).values(tok), "23505");
   });
 
   it("rejects invalid roles", async () => {

@@ -28,7 +28,7 @@
       "bearerToken": {
         "type": "http",
         "scheme": "bearer",
-        "description": "API token (`pf_...`), issued via #11 (not yet available)."
+        "description": "Per-user API token (`pf_...`) for one group, from POST /api/v1/groups/{g}/tokens. Not accepted on token, member, group-create, user or logout routes."
       }
     },
     "schemas": {
@@ -330,6 +330,89 @@
             ]
           }
         ]
+      },
+      "CreatedApiToken": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiToken"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "token": {
+                "type": "string",
+                "description": "The secret. Shown only in this response."
+              }
+            },
+            "required": [
+              "token"
+            ]
+          }
+        ]
+      },
+      "TokenRole": {
+        "type": "string",
+        "enum": [
+          "viewer",
+          "creator"
+        ]
+      },
+      "ApiToken": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "groupId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/TokenRole"
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "revokedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastUsedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Coarse: updated at most hourly"
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "groupId",
+          "userId",
+          "email",
+          "name",
+          "role",
+          "expiresAt",
+          "revokedAt",
+          "lastUsedAt",
+          "createdAt"
+        ]
       }
     },
     "parameters": {}
@@ -341,6 +424,11 @@
           "groups"
         ],
         "summary": "Create a group (admin)",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -766,6 +854,11 @@
         ],
         "summary": "Add a member or change their role (owner)",
         "description": "`user` is a user id or the email of a user who has already signed in. The last owner cannot be demoted.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -882,6 +975,11 @@
           "groups"
         ],
         "summary": "Remove a member (owner)",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -974,6 +1072,11 @@
           "users"
         ],
         "summary": "List users (admin)",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -1047,6 +1150,11 @@
           "users"
         ],
         "summary": "Grant or revoke admin (admin). The last admin cannot be revoked.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -2582,6 +2690,373 @@
                     "questions",
                     "csvColumns"
                   ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in but not allowed (role too low, or admin only)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not visible to you",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict, e.g. removing the last owner or admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/{g}/tokens": {
+      "post": {
+        "tags": [
+          "tokens"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Create an API token for yourself in this group (session only)",
+        "description": "role is creator or viewer, at most your own role. The token works only in this group, with min(token role, your current role), until it expires or is revoked or you leave the group.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "g",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "role": {
+                    "$ref": "#/components/schemas/TokenRole"
+                  },
+                  "expiresInDays": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 365,
+                    "default": 90
+                  }
+                },
+                "required": [
+                  "name",
+                  "role"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedApiToken"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in but not allowed (role too low, or admin only)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not visible to you",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict, e.g. removing the last owner or admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "tokens"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List tokens: all of the group's for owners, your own for others (session only)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "g",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApiToken"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in but not allowed (role too low, or admin only)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not visible to you",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict, e.g. removing the last owner or admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/{g}/tokens/{id}": {
+      "delete": {
+        "tags": [
+          "tokens"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Revoke a token: owners any in the group, others their own (session only)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "g",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Revoked"
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in but not allowed (role too low, or admin only)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not visible to you",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict, e.g. removing the last owner or admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/tokens": {
+      "get": {
+        "tags": [
+          "tokens"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List your own tokens in all groups (session only)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApiToken"
+                  }
                 }
               }
             }

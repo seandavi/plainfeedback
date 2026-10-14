@@ -3,8 +3,16 @@
 // later routes should follow this pattern: createRoute + shared `errors` + route-level middleware.
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { and, asc, eq, isNotNull } from "drizzle-orm";
-import { requireAdmin, requireUser, type User as UserRow } from "./auth";
-import { type Access, type AuthzEnv, fail, notFound, ROLES, requireGroupRole } from "./authz";
+import { requireAdmin, requireUser, sessionOnly, type User as UserRow } from "./auth";
+import {
+  type Access,
+  type AuthzEnv,
+  fail,
+  minRole,
+  notFound,
+  ROLES,
+  requireGroupRole,
+} from "./authz";
 import type { Db } from "./db";
 import { groups, memberships, users } from "./schema";
 
@@ -21,6 +29,8 @@ export const errors = {
   404: err("Not found, or not visible to you"),
   409: err("Conflict, e.g. removing the last owner or admin"),
 } as const;
+// Routes that refuse API tokens (ADR 0010) advertise only the session cookie in the spec.
+export const sessionCookieOnly = [{ sessionCookie: [] }];
 export const json = <T extends z.ZodType>(schema: T, description = "OK") => ({
   description,
   content: { "application/json": { schema } },
@@ -71,6 +81,7 @@ export const groupRoutes = (db: Db) => {
       tags: ["groups"],
       summary: "Create a group (admin)",
       middleware: [requireAdmin],
+      security: sessionCookieOnly,
       request: { body: body(z.strictObject({ name: Name })) },
       responses: { 201: json(Group, "Created"), ...errors },
     }),
@@ -98,10 +109,14 @@ export const groupRoutes = (db: Db) => {
           memberships,
           and(eq(memberships.groupId, groups.id), eq(memberships.userId, u.id)),
         )
-        .where(u.isAdmin ? undefined : isNotNull(memberships.role))
+        .where(
+          u.isAdmin
+            ? undefined
+            : and(isNotNull(memberships.role), u.token && eq(groups.id, u.token.groupId)),
+        )
         .orderBy(asc(groups.name), asc(groups.id));
       return c.json(
-        rows.map((x) => toGroup(x.g, x.role)),
+        rows.map((x) => toGroup(x.g, u.token && x.role ? minRole(x.role, u.token.role) : x.role)),
         200,
       );
     },
@@ -182,7 +197,8 @@ export const groupRoutes = (db: Db) => {
       summary: "Add a member or change their role (owner)",
       description:
         "`user` is a user id or the email of a user who has already signed in. The last owner cannot be demoted.",
-      middleware: [owner],
+      middleware: [sessionOnly, owner],
+      security: sessionCookieOnly,
       request: { params: MemberParams, body: body(z.strictObject({ role: Role })) },
       responses: { 200: json(Member), ...errors },
     }),
@@ -211,7 +227,8 @@ export const groupRoutes = (db: Db) => {
       path: "/groups/{g}/members/{user}",
       tags: ["groups"],
       summary: "Remove a member (owner)",
-      middleware: [owner],
+      middleware: [sessionOnly, owner],
+      security: sessionCookieOnly,
       request: { params: MemberParams },
       responses: { 204: { description: "Removed" }, ...errors },
     }),
@@ -241,6 +258,7 @@ export const groupRoutes = (db: Db) => {
       tags: ["users"],
       summary: "List users (admin)",
       middleware: [requireAdmin],
+      security: sessionCookieOnly,
       responses: { 200: json(z.array(User)), ...errors },
     }),
     async (c) => {
@@ -256,6 +274,7 @@ export const groupRoutes = (db: Db) => {
       tags: ["users"],
       summary: "Grant or revoke admin (admin). The last admin cannot be revoked.",
       middleware: [requireAdmin],
+      security: sessionCookieOnly,
       request: {
         params: z.object({ id: z.uuid().openapi({ param: { name: "id", in: "path" } }) }),
         body: body(z.strictObject({ isAdmin: z.boolean() })),

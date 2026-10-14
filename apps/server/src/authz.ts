@@ -11,6 +11,9 @@ import { events, groups, memberships, surveys } from "./schema";
 export const ROLES = ["viewer", "creator", "owner"] as const;
 export type Role = (typeof ROLES)[number];
 
+export const minRole = (a: Role, b: Role) => (ROLES.indexOf(a) < ROLES.indexOf(b) ? a : b);
+export const atLeast = (a: Role | null, min: Role) => !!a && ROLES.indexOf(a) >= ROLES.indexOf(min);
+
 // Every resource resolves to its group in resolveGroup, so every check goes through one function.
 export type Resource = { groupId: string } | { eventId: string } | { surveyId: string };
 
@@ -44,11 +47,13 @@ const resolveGroup = async (db: Db, r: Resource, userId: string) => {
 // Throws HTTPException (404/403) or returns the caller's access to the resource's group.
 export const authorize = async (db: Db, user: User, r: Resource, min: Role): Promise<Access> => {
   const row = await resolveGroup(db, r, user.id);
-  if (!row || (!row.role && !user.isAdmin)) throw notFound();
-  if (!user.isAdmin && ROLES.indexOf(row.role as Role) < ROLES.indexOf(min)) {
+  const t = user.token; // API token: other groups do not exist; role capped at the token's
+  if (!row || (!row.role && !user.isAdmin) || (t && row.groupId !== t.groupId)) throw notFound();
+  const role = t ? minRole(row.role as Role, t.role) : row.role;
+  if (!user.isAdmin && !atLeast(role, min)) {
     throw fail(403, "forbidden");
   }
-  return { groupId: row.groupId, role: row.role, archived: row.archivedAt !== null };
+  return { groupId: row.groupId, role, archived: row.archivedAt !== null };
 };
 
 // Route middleware: 401, then 404, then 403; sets c.var.access. `pick` names the resource.

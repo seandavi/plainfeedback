@@ -10,14 +10,28 @@ The reference is generated, not hand-written:
 | Scheme | How | Notes |
 | --- | --- | --- |
 | `sessionCookie` | Staff sign in through OIDC (`/api/v1/auth/login`); the `pf_session` cookie (Path=`/api/v1`) is then sent automatically. | Unsafe methods (POST/PUT/PATCH/DELETE) must carry an `Origin` header equal to the app origin (CSRF check). |
-| `bearerToken` | `Authorization: Bearer pf_...` | API tokens arrive with #11; the scheme is declared now. Bearer requests never use the cookie and need no `Origin`. |
+| `bearerToken` | `Authorization: Bearer pf_...` | Per-user API token for one group (see below). Bearer requests never use the cookie and need no `Origin`. |
 
 Participant endpoints (`/s/*`, `/api/v1/public/*`) are anonymous and never set cookies.
 Errors are `{"error": "..."}` with 400/401/403/404/409 (and 412/428 for draft concurrency). A group you are not a member of answers 404, not 403 (ADR 0009).
 
+## API tokens (automation)
+
+Create one while signed in (session only; the secret is shown once):
+
+```sh
+curl -sS -X POST $BASE/api/v1/groups/$GROUP/tokens -H "Origin: $BASE" -b "pf_session=$PF_SESSION" \
+  -H "Content-Type: application/json" -d '{"name":"ci","role":"creator","expiresInDays":90}' | jq -r .token
+```
+
+- Scoped to one group; `role` is `creator` or `viewer`, at most your own. The effective role is min(token role, your current role), so it never exceeds what you can do; it stops working when you leave the group, it expires (default 90 days, max 365) or it is revoked. Other groups answer 404.
+- Then send `-H "Authorization: Bearer $PF_TOKEN"` instead of the cookie and `Origin` in the steps below.
+- List with `GET /api/v1/groups/{g}/tokens` (owners see all of the group's tokens, others their own) or `GET /api/v1/me/tokens`; revoke with `DELETE /api/v1/groups/{g}/tokens/{id}`.
+- Tokens cannot manage tokens, members, groups or users, and cannot log out (403). See ADR 0010.
+
 ## End to end with curl
 
-Until tokens exist, use the session cookie from a browser login:
+Using the session cookie from a browser login (or a bearer token, above):
 
 ```sh
 BASE=https://feedback.example.org   # PF_SESSION = value of the pf_session cookie
@@ -80,6 +94,5 @@ Viewer role or higher. `format=jsonl` (default) or `csv`; `version=<n>` limits t
 ## Coming
 
 - Participant link and QR code (#9): not yet merged, so not in the spec.
-- API tokens (#11): will make `bearerToken` usable.
 
 Update this section as those land (their routes appear in `/openapi.json` automatically).

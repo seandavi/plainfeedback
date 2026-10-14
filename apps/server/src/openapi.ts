@@ -31,7 +31,8 @@ export const mountDocs = (app: OpenAPIHono<any>) => {
   app.openAPIRegistry.registerComponent("securitySchemes", "bearerToken", {
     type: "http",
     scheme: "bearer",
-    description: "API token (`pf_...`), issued via #11 (not yet available).",
+    description:
+      "Per-user API token (`pf_...`) for one group, from POST /api/v1/groups/{g}/tokens. Not accepted on token, member, group-create, user or logout routes.",
   });
   app.doc31("/openapi.json", {
     openapi: "3.1.0",
