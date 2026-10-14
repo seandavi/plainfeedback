@@ -144,8 +144,8 @@ Events and surveys (#6):
 Participant API (#7, [ADR 0011](adr/0011-participant-page.md)):
 - `publicId` is a random 12-character id on `surveys` (returned by the staff survey GET), not the slugs.
 - GET returns `status: open | closed | not_yet_open`; closed (`closed_at`, or `closes_at` past) wins. 404 until published.
-- POST is JSON only (415 otherwise), at most 64 KB (413). Errors: 404 unknown, 429 rate limited, 410 closed, **403 not yet open**, 409 `versionId` is not the latest (client reloads), 422 `{errors: {questionId: message}}` from `validateAnswers`. Stores answers, version and `submitted_at` only.
-- Rate limits (ADR 0013): in-memory token buckets per survey (burst 1000, then 10/s) and per survey and client (30 per 10 min, keyed by HMAC of the IP with a daily-rotated in-memory key; never stored or logged). Bot checks: honeypot `hp` and a signed load-time `ticket` with a 3 s minimum; failures get 201 and are not stored. Single process only.
+- POST is JSON only (415 otherwise), at most 64 KB (413). Errors: 404 unknown, 429 rate limited, 410 closed, **403 not yet open**, 409 `versionId` is not the latest, or the ticket is invalid, older than 24 h or already used (client fetches the survey again for a fresh ticket, keeps the answers), 422 `{errors: {questionId: message}}` from `validateAnswers`. Stores answers, version and `submitted_at` only.
+- Rate limits (ADR 0013): in-memory token buckets per survey (burst 1000, then 10/s) and per survey and client (300 per 10 min, keyed by HMAC of the IP with a daily-rotated in-memory key; never stored or logged); 429 carries `Retry-After`. Bot checks: honeypot `hp` and a signed load-time `ticket` with a 3 s minimum; failures get 201 and are not stored. Each ticket stores one response and expires after 24 h (ADR 0014). Single process only.
 
 ## Auth
 

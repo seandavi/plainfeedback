@@ -62,7 +62,7 @@
           },
           "ticket": {
             "type": "string",
-            "description": "Signed load time; send it back with the answers"
+            "description": "Signed load time; send it back with the answers. Single use, valid 24 h"
           }
         },
         "required": [
@@ -650,7 +650,7 @@
         ],
         "security": [],
         "summary": "Submit answers (no identifier is stored)",
-        "description": "403: not open yet. 409: versionId is not the latest version, or the ticket is invalid (reload). 410: closed. 413: body over 65536 bytes. 429: too many responses to this survey right now, from everyone or from one network. Submissions with a non-empty `hp`, or sent less than 3s after the ticket was issued, get 201 and are not stored.",
+        "description": "403: not open yet. 409: versionId is not the latest version, or the ticket is invalid, older than 24 h or already used (each ticket stores one response; fetch the survey again for a new one). 410: closed. 413: body over 65536 bytes. 429: too many responses to this survey right now, from everyone or from one network. Submissions with a non-empty `hp`, or sent less than 3s after the ticket was issued, get 201 and are not stored.",
         "parameters": [
           {
             "schema": {
@@ -774,7 +774,7 @@
             }
           },
           "429": {
-            "description": "Rate limited",
+            "description": "Rate limited; see the Retry-After header (seconds)",
             "content": {
               "application/json": {
                 "schema": {

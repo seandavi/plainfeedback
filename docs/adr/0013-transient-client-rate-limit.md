@@ -1,6 +1,6 @@
 # 0013. Per-client submission limit on a transient, keyed hash of the IP
 
-- Status: accepted
+- Status: accepted; amended by [ADR 0014](0014-single-use-tickets-and-crowd-sized-limit.md) (single-use tickets, per-client default 300, `Retry-After`)
 - Date: 2026-10-14
 
 ## Context
