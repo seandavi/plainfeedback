@@ -1,22 +1,18 @@
 // Dashboard (#19): my groups with my role; per group its events and surveys with status and counts.
+import { surveyStatus as coreStatus } from "@plainfeedback/core";
 import { api, type Group, type SurveySummary } from "./api";
 import { Link } from "./router";
 import { ErrorNote, paths, useLoad } from "./StaffApp";
 
-/** draft / published (no open window) / open (inside the window) / not yet open / closed. */
-export function surveyStatus(s: SurveySummary, now = new Date()) {
-  if (s.latestVersion === null) return "draft";
-  if (s.closed) return "closed";
-  const { opensAt, closesAt } = s;
-  if (opensAt && new Date(opensAt) > now) return "not yet open";
-  if (closesAt && new Date(closesAt) <= now) return "closed";
-  return opensAt || closesAt ? "open" : "published";
-}
+const LABEL = { draft: "draft", not_yet_open: "not yet open", open: "open", closed: "closed" };
+export const surveyStatus = (s: SurveySummary, now = new Date()) =>
+  LABEL[coreStatus({ published: s.latestVersion !== null, closedAt: s.closed, ...s }, now)];
 
 type Row = { slug: string; event: string; eventTitle: string; survey: SurveySummary };
 
 async function load(groups: Group[]) {
-  // ponytail: one call per event; admins who are not members get the group link only.
+  // ponytail: one request per event (N+1); fine up to a few dozen events per group, then add a
+  // server-side per-group survey listing. Admins who are not members get the group link only.
   return Promise.all(
     groups.map(async (g): Promise<[Group, Row[]]> => {
       if (!g.role) return [g, []];
@@ -62,7 +58,12 @@ export function Dashboard() {
             ) : rows.length === 0 ? (
               <p>No surveys yet.</p>
             ) : (
-              <div className="table-wrap">
+              <section
+                className="table-wrap"
+                // biome-ignore lint/a11y/noNoninteractiveTabindex: scrollable region must be keyboard-focusable
+                tabIndex={0}
+                aria-label={`Surveys in ${g.name}`}
+              >
                 <table>
                   <caption className="sr-only">Surveys in {g.name}</caption>
                   <thead>
@@ -90,7 +91,7 @@ export function Dashboard() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </section>
             )}
           </section>
         ))

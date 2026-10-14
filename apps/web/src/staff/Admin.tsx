@@ -24,7 +24,12 @@ function Users({ me }: { me: Me }) {
   return (
     <section aria-labelledby="users-h">
       <h2 id="users-h">Users</h2>
-      <div className="table-wrap">
+      <section
+        className="table-wrap"
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: scrollable region must be keyboard-focusable
+        tabIndex={0}
+        aria-label={"Users who have signed in"}
+      >
         <table>
           <caption className="sr-only">Users who have signed in</caption>
           <thead>
@@ -68,7 +73,7 @@ function Users({ me }: { me: Me }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </section>
       {error !== undefined && <ErrorNote error={error} />}
     </section>
   );
@@ -119,7 +124,12 @@ function Groups() {
   return (
     <section aria-labelledby="groups-h">
       <h2 id="groups-h">Groups</h2>
-      <div className="table-wrap">
+      <section
+        className="table-wrap"
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: scrollable region must be keyboard-focusable
+        tabIndex={0}
+        aria-label={"All groups, including archived ones"}
+      >
         <table>
           <caption className="sr-only">All groups, including archived ones</caption>
           <thead>
@@ -184,7 +194,7 @@ function Groups() {
             ))}
           </tbody>
         </table>
-      </div>
+      </section>
       {error !== undefined && <ErrorNote error={error} />}
       <form className="create" onSubmit={create} onChange={() => setError(undefined)}>
         <fieldset>

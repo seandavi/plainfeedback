@@ -121,7 +121,12 @@ export function Members({ me, group, g }: { me: Me; group: Group; g: string }) {
   return (
     <section aria-labelledby="members-h">
       <h2 id="members-h">Members</h2>
-      <div className="table-wrap">
+      <section
+        className="table-wrap"
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: scrollable region must be keyboard-focusable
+        tabIndex={0}
+        aria-label={`Members of ${group.name}`}
+      >
         <table>
           <caption className="sr-only">Members of {group.name}</caption>
           <thead>
@@ -163,7 +168,7 @@ export function Members({ me, group, g }: { me: Me; group: Group; g: string }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </section>
       {error !== undefined && <ErrorNote error={error} />}
       {manage && (
         <form className="create" onSubmit={add}>
@@ -262,7 +267,12 @@ export function Tokens({ me, group, g }: { me: Me; group: Group; g: string }) {
       {tokens.data.length === 0 ? (
         <p>No tokens yet.</p>
       ) : (
-        <div className="table-wrap">
+        <section
+          className="table-wrap"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: scrollable region must be keyboard-focusable
+          tabIndex={0}
+          aria-label={`API tokens of ${group.name}`}
+        >
           <table>
             <caption className="sr-only">API tokens of {group.name}</caption>
             <thead>
@@ -304,7 +314,7 @@ export function Tokens({ me, group, g }: { me: Me; group: Group; g: string }) {
               ))}
             </tbody>
           </table>
-        </div>
+        </section>
       )}
       {error !== undefined && <ErrorNote error={error} />}
       {options.length > 0 && (

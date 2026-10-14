@@ -370,6 +370,7 @@ dialog::backdrop {
   padding: 0.4rem 0.6rem;
   border-bottom: 1px solid var(--line);
   vertical-align: middle;
+  overflow-wrap: anywhere; /* long emails */
 }
 .staff thead th {
   white-space: nowrap;
