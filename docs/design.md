@@ -103,10 +103,10 @@ DELETE /groups/{g}/members/{user}               owner (never the last owner)
 GET    /users                                   admin
 PATCH  /users/{id}                              admin: grant/revoke admin (never the last admin)
 GET    /groups/{g}/events                       viewer
-GET    /groups/{g}/events/{slug}                viewer
-PUT    /groups/{g}/events/{slug}                creator: upsert by slug {title, description}; returns the event id
+GET    /groups/{g}/events/{e}                   viewer ({e} is the event slug here)
+PUT    /groups/{g}/events/{e}                   creator: upsert by slug {title, description}; returns the event id
 GET    /events/{e}/surveys                      viewer ({e} is the event id)
-GET    /events/{e}/surveys/{s}                  viewer: draft markdown, ETag, latest version number
+GET    /events/{e}/surveys/{s}                  viewer: draft markdown, ETag, latest version summary
 PUT    /events/{e}/surveys/{s}                  creator: upsert draft (text/markdown or JSON); If-Match to update
 PATCH  /events/{e}/surveys/{s}                  creator: {closed} stops or resumes accepting responses
 POST   /events/{e}/surveys/{s}/validate         viewer: dry run of supplied or stored markdown, no writes
@@ -126,7 +126,7 @@ Outside your groups everything is 404; a role too low within your group is 403 (
 Idempotent upserts by slug allow a GitOps flow. Publishing is always an explicit human action.
 
 Events and surveys (#6):
-- Slugs are lowercase letters, digits and single hyphens (max 64). Event slugs are unique per group, so `/groups/{g}/events/{slug}` takes a slug and `/events/{e}` takes the event id. Survey slugs are unique per event.
+- Slugs are lowercase letters, digits and single hyphens (max 64). Event slugs are unique per group, so `/groups/{g}/events/{e}` takes a slug and `/events/{e}` takes the event id. Survey slugs are unique per event.
 - Action paths are `/validate` and `/publish`, not `:validate` / `:publish` (Hono routing treats `:` as a parameter).
 - Drafts: creating needs no `If-Match`; changing an existing draft needs `If-Match` with the current ETag (or `*`): 428 without it, 412 on mismatch. ETags are opaque and change on every write. Invalid drafts are saved; the response carries the compile result (`{model}` or `{errors:[{line,column,message}]}`).
 - Publish compiles the stored draft (422 with line-numbered errors if invalid) and inserts the next immutable version. `privacyStatement`, `opensAt`, `closesAt` left out of the body are inherited from the latest version; the privacy statement defaults to a template. If draft and settings equal the latest version, publish returns it (200) instead of creating a new one.

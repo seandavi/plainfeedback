@@ -82,7 +82,11 @@ const SurveySummary = z
     latestVersion: z.number().nullable(),
   })
   .openapi("SurveySummary");
-const Survey = SurveySummary.extend({ markdown: z.string(), etag: z.string() }).openapi("Survey");
+const Survey = SurveySummary.extend({
+  markdown: z.string(),
+  etag: z.string(),
+  latest: VersionSummary.nullable(),
+}).openapi("Survey");
 const SavedSurvey = Survey.extend({ compile: CompileResult }).openapi("SavedSurvey");
 
 const Markdown = z.string().max(MAX_MARKDOWN);
@@ -148,18 +152,21 @@ export const surveyRoutes = (db: Db) => {
   const surveyWhere = (eventId: string, slug: string) =>
     and(eq(surveys.eventId, eventId), eq(surveys.slug, slug));
   const loadSurvey = async (eventId: string, slug: string) => {
-    const [row] = await db
-      .select({ s: surveys, latestVersion })
-      .from(surveys)
-      .where(surveyWhere(eventId, slug));
-    if (!row) throw notFound();
-    const { s } = row;
+    const [s] = await db.select().from(surveys).where(surveyWhere(eventId, slug));
+    if (!s) throw notFound();
+    const [latest] = await db
+      .select()
+      .from(surveyVersions)
+      .where(eq(surveyVersions.surveyId, s.id))
+      .orderBy(desc(surveyVersions.version))
+      .limit(1);
     return {
       slug: s.slug,
       waveLabel: s.waveLabel,
       closed: s.closedAt !== null,
       updatedAt: s.updatedAt.toISOString(),
-      latestVersion: row.latestVersion,
+      latestVersion: latest?.version ?? null,
+      latest: latest ? toSummary(latest) : null,
       markdown: s.draftMarkdown,
       etag: quote(s.draftEtag),
     };

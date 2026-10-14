@@ -70,6 +70,7 @@ export const useWorld = () => {
       creator: await mkUser(),
       owner: await mkUser(),
       admin: await mkUser(true),
+      stranger: await mkUser(), // signed in, member of no group
     };
     const target = await mkUser();
     await join(other.id, who.nonMember, "owner");

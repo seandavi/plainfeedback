@@ -122,6 +122,15 @@ describe("permission matrix: endpoint x role", () => {
     });
   }
 
+  // nonMember above owns another group; a signed-in user with no memberships at all is also 404.
+  for (const c of cases) {
+    it(`${c.method} ${c.path(placeholder)} as a user in no group -> 404`, async () => {
+      const w = await world();
+      const res = await call(w, c.method, c.path(w), w.who.stranger, c.body, undefined, c.headers);
+      expect(res.status).toBe(404);
+    });
+  }
+
   it("does not leak existence: non-member, missing and garbage event ids give identical 404s", async () => {
     const w = await world();
     const bodies = [];
@@ -221,6 +230,7 @@ describe("drafts", () => {
       markdown: MD,
       etag,
       latestVersion: null,
+      latest: null,
     });
 
     expect((await call(w, "PUT", path, as, MD2)).status).toBe(428);
@@ -349,6 +359,7 @@ describe("publish and versions", () => {
     expect((await call(w, "GET", `${base}/versions/x`, w.who.viewer)).status).toBe(400);
     const got = await read(call(w, "GET", base, w.who.viewer));
     expect(got.latestVersion).toBe(3);
+    expect(got.latest).toEqual(list[0]);
   });
 
   it("refuses to publish an invalid draft with 422 and line numbers", async () => {
