@@ -589,17 +589,20 @@ function ConflictDialog({
   const [note, setNote] = useState("");
   const pre = useRef<HTMLPreElement>(null);
   const copy = () =>
-    navigator.clipboard.writeText(mine).then(
-      () => setNote("Your version is on the clipboard."),
-      () => {
-        // Clipboard blocked: select the text so Ctrl+C works.
-        const r = document.createRange();
-        if (pre.current) r.selectNodeContents(pre.current);
-        getSelection()?.removeAllRanges();
-        getSelection()?.addRange(r);
-        setNote("Copying was blocked. Your version is selected below; press Ctrl+C or Cmd+C.");
-      },
-    );
+    // Promise.resolve: no Clipboard API at all (plain http) also takes the fallback.
+    Promise.resolve()
+      .then(() => navigator.clipboard.writeText(mine))
+      .then(
+        () => setNote("Your version is on the clipboard."),
+        () => {
+          // Clipboard blocked: select the text so Ctrl+C works.
+          const r = document.createRange();
+          if (pre.current) r.selectNodeContents(pre.current);
+          getSelection()?.removeAllRanges();
+          getSelection()?.addRange(r);
+          setNote("Copying was blocked. Your version is selected below; press Ctrl+C or Cmd+C.");
+        },
+      );
   // ponytail: lines missing from the other version are marked; a real diff if people need it.
   const side = (label: string, text: string, other: string, ref?: typeof pre) => {
     const others = new Set(other.split("\n"));
