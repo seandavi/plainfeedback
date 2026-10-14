@@ -1,5 +1,7 @@
-import { Hono, type MiddlewareHandler } from "hono";
+import { OpenAPIHono } from "@hono/zod-openapi";
+import type { MiddlewareHandler } from "hono";
 import { type AuthEnv, type AuthOptions, authRoutes, requireUser, sessionAuth } from "./auth";
+import { groupRoutes } from "./groups";
 
 // Participant routes must stay identifier-free: no cookies, no caching, minimal logs.
 export const isParticipantPath = (p: string) =>
@@ -29,7 +31,13 @@ export type AppDeps = {
 };
 
 export const createApp = ({ ping, log = console.log, auth }: AppDeps) => {
-  const app = new Hono<AuthEnv>();
+  // OpenAPIHono so routes declared with createRoute land in one registry for the spec (#18).
+  const app = new OpenAPIHono<AuthEnv>({
+    defaultHook: (result, c) => {
+      if (!result.success)
+        return c.json({ error: "invalid request", issues: result.error.issues }, 400);
+    },
+  });
   app.use(accessLog(log));
   app.use(participantGuard);
   app.get("/healthz", async (c) => {
@@ -49,6 +57,7 @@ export const createApp = ({ ping, log = console.log, auth }: AppDeps) => {
       const { id, email, isAdmin } = c.get("user") as NonNullable<AuthEnv["Variables"]["user"]>;
       return c.json({ id, email, isAdmin });
     });
+    app.route("/api/v1", groupRoutes(auth.db));
   }
   return app;
 };
