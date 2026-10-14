@@ -363,6 +363,7 @@ function PublishDialog({
     if (latest) api.version(eventId, slug, latest.version).then(setPrev, setError);
   }, [eventId, slug, latest]);
 
+  const changes = error instanceof ApiError ? error.changes : undefined;
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
@@ -374,6 +375,7 @@ function PublishDialog({
         ...(privacy && { privacyStatement: privacy }),
         opensAt: fromLocalInput(String(f.get("opensAt"))),
         closesAt: fromLocalInput(String(f.get("closesAt"))),
+        ...(changes && { force: true }), // the author has seen the changes below (#52)
       });
       onPublished(v, !latest || v.version > latest.version);
     } catch (x) {
@@ -430,12 +432,21 @@ function PublishDialog({
                 ))}
               </ul>
             </div>
+          ) : changes ? (
+            <div role="alert" className="form-message">
+              <p>{(error as ApiError).message}</p>
+              <ul>
+                {changes.map((x) => (
+                  <li key={x}>{x}</li>
+                ))}
+              </ul>
+            </div>
           ) : (
             error !== undefined && <ErrorNote error={error} />
           )}
           <div className="actions">
             <button type="submit" disabled={busy}>
-              {busy ? "Publishing…" : "Publish"}
+              {busy ? "Publishing…" : changes ? "Publish anyway" : "Publish"}
             </button>
             <button type="button" onClick={onClose}>
               Cancel
