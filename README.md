@@ -13,6 +13,22 @@ consortium that wants to move off one-off Google Forms and Qualtrics.
 records in [`docs/adr/`](docs/adr/), and the platform comparison in
 [`research/platform-survey.md`](research/platform-survey.md).
 
+## Quickstart
+
+Needs Docker, plus Node 22 + pnpm and [`just`](https://just.systems) for development.
+
+```sh
+just up                      # build and start app + Postgres (docker compose)
+curl localhost:3000/healthz  # {"status":"ok"}
+just down
+
+cp .env.example .env         # local dev: just up db, then
+pnpm install && just dev     # server on :3000, web on :5173
+just lint typecheck test
+```
+
+The compose default DB password is for local dev only; set `POSTGRES_PASSWORD` for anything else.
+
 ## Contributing
 
 Issues and PRs welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md). Agents:

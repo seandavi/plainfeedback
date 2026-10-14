@@ -1,0 +1,30 @@
+services:
+  app:
+    build: .
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      # POSTGRES_PASSWORD default is for local dev only; set a real one via .env or the environment.
+      DATABASE_URL: postgresql://plainfeedback:${POSTGRES_PASSWORD:-plainfeedback-dev-only}@db:5432/plainfeedback
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: plainfeedback
+      POSTGRES_DB: plainfeedback
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-plainfeedback-dev-only}
+    ports:
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plainfeedback -d plainfeedback"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+volumes:
+  pgdata:

@@ -1,0 +1,5 @@
+{
+  "files": { "includes": ["**", "!**/dist", "!**/node_modules", "!.claude"] },
+  "formatter": { "indentStyle": "space", "lineWidth": 100 },
+  "linter": { "enabled": true }
+}
