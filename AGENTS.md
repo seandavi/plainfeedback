@@ -3,13 +3,14 @@
 Read `docs/design.md` and `docs/adr/` first. ADRs are inputs, not constraints: if new facts change a decision, write a new ADR that supersedes it.
 
 ## Workflow
-- Work tracks GitHub issues. One worktree/branch per issue; open a PR with `Closes #N`; merge on green CI. Never `git stash` (shared refs).
+- Work tracks GitHub issues. One worktree/branch per issue; open a PR with `Closes #N`; the maintainer has delegated merging: squash-merge when CI is green. Never `git stash` (shared refs).
 - Architecture changes: add `docs/adr/NNNN-title.md` (copy `0000-template.md`), link it from the PR.
 - Deep modules with clear seams: small interfaces, hidden complexity. Prefer boring and minimal.
 
 ## Stack and tooling
-- Python via `uv`; FastAPI; Postgres; `ruff` (loose) and a type checker; `just` as task runner (not make); Docker Compose for deployment.
-- Secrets: GCP Secret Manager (project `cdsci-infra`) in production, `.env` locally. Never commit or print secrets. Use a single `postgresql://` URI env var.
+- TypeScript, pnpm workspaces (`packages/core`, `apps/server`, `apps/web`), Node LTS; Hono, Drizzle, Postgres, Vite + React, zod, vitest, Biome; `just` as task runner (not make); Docker Compose for deployment. See ADR 0007.
+- Keep logic that must behave identically on client and server in `packages/core` (no I/O).
+- Secrets: GCP Secret Manager (project `cdsci-infra`) in production, `.env` locally. Never commit or print secrets. Single `DATABASE_URL` (postgresql://).
 
 ## Invariants (tests must cover these)
 - Participant endpoints set no cookies and log no IP/user-agent.

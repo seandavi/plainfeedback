@@ -15,9 +15,9 @@ De-identified event-feedback surveys for the Common Fund Data Ecosystem (CFDE) m
 | Topic | Decision |
 |---|---|
 | Build vs adopt | Build a thin app. No platform met self-host, group-owner RBAC, token-linked waves and a Python stack (see research). REDCap and LimeSurvey remain fallbacks. |
-| Stack | FastAPI, Postgres, uv, justfile. Shared Postgres on onclappc02. |
+| Stack | TypeScript end to end, pnpm monorepo: shared `core`, Hono + Drizzle + Postgres server, Vite + React web ([ADR 0007](adr/0007-typescript-everywhere.md)). |
 | Authoring | Markdown is the source of truth. It compiles to a JSON survey model; the JSON is what is stored, rendered, validated and exported. |
-| Renderer | Small custom renderer for a limited question set. SurveyJS Form Library (MIT) is the fallback. Survey Creator (paid) is not used. |
+| Renderer | Small custom React renderer in the web app, driven by the compiled JSON model. SurveyJS is not used. |
 | Auth | Pluggable OIDC. Google is the default for development; the client id and secret are in GCP Secret Manager (`cdsci-infra`: `cancerdatasci-oauth-client-id`, `cancerdatasci-oauth-client-secret`). |
 | Participants | v1: shared anonymous link and QR code, no tokens, no email ([ADR 0004](adr/0004-anonymous-link-only-v1.md)). |
 | Deployment | Docker Compose ([ADR 0006](adr/0006-docker-compose.md)). |
@@ -118,7 +118,7 @@ A provider interface wrapping OIDC (Authlib): issuer, client id, client secret, 
 ## Conditionals and pages (phase 3 design)
 
 - Safe expression grammar, never `eval`: `lang == 'Other' and years > 2`, same-survey answers only. In markdown: `show-if="..."` on the fenced div.
-- Evaluated in the browser; the server stays lenient (types and choice membership, drops answers to hidden questions). A conformance test file allows a Python evaluator later.
+- One shared TypeScript evaluator (`packages/core`) runs in the browser and on the server, so the server can enforce required-if-visible and drop answers to hidden questions.
 - Pages are separated by `---` or level-2 headings; submit once at the end, no drafts.
 - No cross-wave conditions.
 
