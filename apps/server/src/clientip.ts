@@ -37,6 +37,7 @@ export const limiterAddress = (raw: string | undefined): string | undefined => {
     .join(":")}::/64`;
 };
 
+let warned = false;
 export const clientAddress =
   (trust: TrustProxy) =>
   (c: Context): string | undefined => {
@@ -53,5 +54,12 @@ export const clientAddress =
     const ip = limiterAddress(peer);
     if (!ip || !peer) return undefined;
     const isLocal = isIPv4(ip) ? local.check(ip, "ipv4") : local.check(peer, "ipv6");
+    if (isLocal && !warned) {
+      warned = true; // once per process; no address in the message
+      console.warn(
+        "participant request from a private or loopback peer and TRUST_PROXY is unset: the " +
+          "per-client submission limit is off. Set TRUST_PROXY if a proxy sits in front (docs/deploy.md).",
+      );
+    }
     return isLocal ? undefined : ip;
   };

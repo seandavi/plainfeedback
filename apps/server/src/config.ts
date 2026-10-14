@@ -35,8 +35,8 @@ const schema = z.object({
   TRUST_PROXY: z.enum(["", "x-forwarded-for", "cf-connecting-ip"]).default(""),
   RATE_LIMIT_SURVEY_BURST: z.coerce.number().int().positive().default(1000),
   RATE_LIMIT_SURVEY_PER_SECOND: z.coerce.number().positive().default(10),
-  // Generous: a conference shares one Wi-Fi address.
-  RATE_LIMIT_CLIENT_MAX: z.coerce.number().int().positive().default(30),
+  // Generous: a conference shares one Wi-Fi address (#55). Size it for the largest crowd on one network.
+  RATE_LIMIT_CLIENT_MAX: z.coerce.number().int().positive().default(300),
   RATE_LIMIT_CLIENT_WINDOW_MINUTES: z.coerce.number().positive().default(10),
 });
 
