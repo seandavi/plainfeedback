@@ -3,6 +3,7 @@ import type { MiddlewareHandler } from "hono";
 import { type AuthEnv, type AuthOptions, authRoutes, requireUser, sessionAuth } from "./auth";
 import { groupRoutes } from "./groups";
 import { mountDocs } from "./openapi";
+import { responseRoutes } from "./responses";
 import { surveyRoutes } from "./surveys";
 
 // Participant routes must stay identifier-free: no cookies, no caching, minimal logs.
@@ -62,6 +63,7 @@ export const createApp = ({ ping, log = console.log, auth }: AppDeps) => {
     });
     app.route("/api/v1", groupRoutes(auth.db));
     app.route("/api/v1", surveyRoutes(auth.db));
+    app.route("/api/v1", responseRoutes(auth.db));
   }
   return app;
 };
