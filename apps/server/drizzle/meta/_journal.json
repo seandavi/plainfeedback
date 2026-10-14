@@ -43,6 +43,13 @@
       "when": 1792013878406,
       "tag": "0005_api_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792014429844,
+      "tag": "0006_survey_public_id",
+      "breakpoints": true
     }
   ]
 }

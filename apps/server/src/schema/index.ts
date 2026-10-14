@@ -11,6 +11,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import { newPublicId } from "../publicid";
 
 const id = () => uuid("id").primaryKey().default(sql`gen_random_uuid()`);
 const ts = (name: string) => timestamp(name, { withTimezone: true });
@@ -87,6 +88,8 @@ export const surveys = pgTable(
       .notNull()
       .references(() => events.id),
     slug: text("slug").notNull(),
+    // Unguessable id in the participant URL /s/{publicId}; slugs are neither global nor secret.
+    publicId: text("public_id").notNull().unique().$defaultFn(newPublicId),
     waveLabel: text("wave_label"), // e.g. pre, post, followup
     draftMarkdown: text("draft_markdown").notNull().default(""),
     draftEtag: text("draft_etag").notNull().default(""),

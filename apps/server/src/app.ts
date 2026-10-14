@@ -1,8 +1,10 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import type { MiddlewareHandler } from "hono";
 import { type AuthEnv, type AuthOptions, authRoutes, requireUser, sessionAuth } from "./auth";
+import type { Db } from "./db";
 import { groupRoutes } from "./groups";
 import { mountDocs } from "./openapi";
+import { publicRoutes } from "./public";
 import { responseRoutes } from "./responses";
 import { surveyRoutes } from "./surveys";
 import { tokenRoutes } from "./tokens";
@@ -18,6 +20,11 @@ export const participantGuard: MiddlewareHandler = async (c, next) => {
   // ponytail: throws (500, no leak) if a handler returns an immutable Response, e.g. a raw fetch().
   c.res.headers.delete("Set-Cookie");
   c.res.headers.set("Cache-Control", "no-store");
+  // Enforces "no third-party requests" on the participant page in the browser.
+  c.res.headers.set(
+    "Content-Security-Policy",
+    "default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+  );
 };
 
 // Logs method, path (no query) and status only. Never headers, IP or user-agent.
@@ -32,9 +39,10 @@ export type AppDeps = {
   ping: () => Promise<void>;
   log?: (line: string) => void;
   auth?: AuthOptions; // staff auth is mounted only when configured
+  db?: Db; // participant API; defaults to auth.db
 };
 
-export const createApp = ({ ping, log = console.log, auth }: AppDeps) => {
+export const createApp = ({ ping, log = console.log, auth, db = auth?.db }: AppDeps) => {
   // OpenAPIHono so routes declared with createRoute land in one registry for the spec (#18).
   const app = new OpenAPIHono<AuthEnv>({
     defaultHook: (result, c) => {
@@ -53,6 +61,7 @@ export const createApp = ({ ping, log = console.log, auth }: AppDeps) => {
     }
   });
   mountDocs(app);
+  if (db) app.route("/api/v1/public", publicRoutes(db));
   if (auth) {
     const session = sessionAuth(auth);
     // Participant paths never read the session, even though /api/v1/public/* receives the cookie.
