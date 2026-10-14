@@ -31,6 +31,16 @@ export const users = pgTable(
   (t) => [unique().on(t.oidcIssuer, t.oidcSubject)],
 );
 
+// Staff sessions. Only the SHA-256 of the cookie value is stored.
+export const sessions = pgTable("sessions", {
+  idHash: text("id_hash").primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: ts("expires_at").notNull(),
+  createdAt: createdAt(),
+});
+
 export const groups = pgTable("groups", {
   id: id(),
   name: text("name").notNull(),

@@ -1,32 +1,10 @@
-import { randomUUID } from "node:crypto";
 import { getTableColumns, sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createDb, type Db } from "../db";
+import { describe, expect, it } from "vitest";
 import { runMigrations } from "../migrate";
+import { useTestDb } from "../testdb";
 import * as s from "./index";
 
-// Needs a real Postgres: set DATABASE_URL (`just up db`, DB_PORT=... if 5432 is taken).
-const adminUrl = process.env.DATABASE_URL;
-if (!adminUrl) throw new Error("DATABASE_URL is required for DB tests");
-const testDb = `pf_test_${randomUUID().replaceAll("-", "")}`;
-const url = new URL(adminUrl);
-url.pathname = `/${testDb}`;
-
-let admin: Db;
-let db: Db;
-
-beforeAll(async () => {
-  admin = createDb(adminUrl);
-  await admin.execute(sql.raw(`create database ${testDb}`));
-  db = createDb(url.toString());
-  await runMigrations(db);
-});
-afterAll(async () => {
-  await db?.$client.end();
-  await admin.execute(sql.raw(`drop database if exists ${testDb}`));
-  await admin.$client.end();
-});
-
+const getDb = useTestDb();
 const one = <T>(rows: T[]) => rows[0] as T;
 
 // Postgres errors surface as the cause of drizzle's wrapper error.
@@ -40,6 +18,7 @@ const rejects = async (p: Promise<unknown>, code: string) => {
 };
 
 const seed = async () => {
+  const db = getDb();
   const g = one(await db.insert(s.groups).values({ name: "g" }).returning());
   const ev = one(
     await db.insert(s.events).values({ groupId: g.id, slug: "e", name: "E" }).returning(),
@@ -56,6 +35,7 @@ const seed = async () => {
 
 describe("schema", () => {
   it("migrations apply cleanly and are idempotent", async () => {
+    const db = getDb();
     await runMigrations(db);
     const r = await db.execute(
       sql`select count(*)::int as n from information_schema.tables where table_schema = 'public'`,
@@ -64,6 +44,7 @@ describe("schema", () => {
   });
 
   it("has no participant tokens table", async () => {
+    const db = getDb();
     const r = await db.execute(
       sql`select 1 from information_schema.tables where table_name = 'tokens'`,
     );
@@ -71,6 +52,7 @@ describe("schema", () => {
   });
 
   it("responses has no identifier columns", async () => {
+    const db = getDb();
     const r = await db.execute(
       sql`select column_name from information_schema.columns where table_name = 'responses' order by column_name`,
     );
@@ -89,6 +71,7 @@ describe("schema", () => {
   });
 
   it("survey_versions are immutable", async () => {
+    const db = getDb();
     const { v } = await seed();
     const id = sql`${v.id}`;
     await rejects(
@@ -100,6 +83,7 @@ describe("schema", () => {
   });
 
   it("enforces uniqueness", async () => {
+    const db = getDb();
     const { g, ev, sv } = await seed();
     const u = one(
       await db
@@ -136,6 +120,7 @@ describe("schema", () => {
   });
 
   it("rejects invalid roles", async () => {
+    const db = getDb();
     const { g } = await seed();
     const u = one(
       await db

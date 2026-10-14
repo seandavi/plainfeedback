@@ -6,6 +6,16 @@ services:
     environment:
       # POSTGRES_PASSWORD default is for local dev only; set a real one via .env or the environment.
       DATABASE_URL: postgresql://plainfeedback:${POSTGRES_PASSWORD:-plainfeedback-dev-only}@db:5432/plainfeedback
+      # Staff auth (docs/deploy-auth.md). Passed through from the deploy shell; unset = auth disabled.
+      OIDC_PROVIDER:
+      OIDC_ISSUER:
+      OIDC_CLIENT_ID:
+      OIDC_CLIENT_SECRET:
+      OIDC_REDIRECT_URI:
+      ALLOWED_EMAIL_DOMAINS:
+      ADMIN_EMAILS:
+      COOKIE_SECURE:
+      SESSION_TTL_HOURS:
     depends_on:
       db:
         condition: service_healthy
