@@ -1,13 +1,17 @@
 // Staff authentication (ADR 0005): OIDC authorization code + PKCE + state + nonce via openid-client,
 // server-side sessions in Postgres. Web-standard APIs only (WebCrypto, fetch) so this stays portable.
-import { and, eq, gt, lte } from "drizzle-orm";
+import { and, eq, gt, isNull, lte } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import * as oidc from "openid-client";
 import type { Db } from "./db";
-import { sessions, users } from "./schema";
+import { apiTokens, memberships, sessions, users } from "./schema";
 
-export type User = typeof users.$inferSelect;
+// `token` is set when the request authenticated with an API token (#11, ADR 0010): the user then
+// acts only in token.groupId, at most at token.role (capped by the current membership in authorize),
+// and never as admin.
+export type TokenScope = { id: string; groupId: string; role: "creator" | "viewer" };
+export type User = typeof users.$inferSelect & { token?: TokenScope };
 export type AuthEnv = { Variables: { user?: User } };
 
 export type AuthOptions = {
@@ -48,6 +52,43 @@ const b64u = (b: Uint8Array) =>
 export const hashSessionId = async (id: string) =>
   b64u(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(id))));
 
+// API tokens: `pf_` + 32 random bytes, base64url. Only the SHA-256 is stored, and looked up by it.
+export const newApiToken = () => `pf_${b64u(crypto.getRandomValues(new Uint8Array(32)))}`;
+export const hashApiToken = hashSessionId;
+const BEARER = /^bearer (pf_[A-Za-z0-9_-]{43})$/i;
+const HOUR = 3600_000;
+
+// Valid = not revoked, not expired, and the user still exists and is a member of the token's group.
+const bearerUser = async (db: Db, header: string): Promise<User | undefined> => {
+  const token = BEARER.exec(header)?.[1];
+  if (!token) return undefined;
+  const now = new Date();
+  const [row] = await db
+    .select({ t: apiTokens, user: users })
+    .from(apiTokens)
+    .innerJoin(users, eq(users.id, apiTokens.userId))
+    .innerJoin(
+      memberships,
+      and(eq(memberships.groupId, apiTokens.groupId), eq(memberships.userId, apiTokens.userId)),
+    )
+    .where(
+      and(
+        eq(apiTokens.tokenHash, await hashApiToken(token)),
+        isNull(apiTokens.revokedAt),
+        gt(apiTokens.expiresAt, now),
+      ),
+    );
+  if (!row || row.t.role === "owner") return undefined;
+  if (!row.t.lastUsedAt || now.getTime() - row.t.lastUsedAt.getTime() > HOUR) {
+    await db.update(apiTokens).set({ lastUsedAt: now }).where(eq(apiTokens.id, row.t.id));
+  }
+  return {
+    ...row.user,
+    isAdmin: false,
+    token: { id: row.t.id, groupId: row.t.groupId, role: row.t.role },
+  };
+};
+
 const UNSAFE = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 // Resolves the staff user from the session cookie. createApp never runs it on participant paths.
@@ -55,9 +96,15 @@ const UNSAFE = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 export const sessionAuth =
   ({ db, redirectUri }: AuthOptions): MiddlewareHandler<AuthEnv> =>
   async (c, next) => {
-    // Seam for API bearer tokens (#11): requests with Authorization never use the cookie,
-    // so they need no CSRF check; until #11 they are simply unauthenticated.
-    if (c.req.header("authorization")) return next();
+    // API tokens (#11): requests with Authorization never use the cookie, so they need no CSRF
+    // check. A bad or dead token is 401 rather than a silent fall-through to anonymous.
+    const authorization = c.req.header("authorization");
+    if (authorization) {
+      const user = await bearerUser(db, authorization);
+      if (!user) return c.json({ error: "invalid or expired API token" }, 401);
+      c.set("user", user);
+      return next();
+    }
     const sid = getCookie(c, SESSION_COOKIE);
     if (!sid) return next();
     const idHash = await hashSessionId(sid);
@@ -83,6 +130,14 @@ export const sessionAuth =
 export const requireUser: MiddlewareHandler<AuthEnv> = async (c, next) =>
   c.get("user") ? next() : c.json({ error: "unauthenticated" }, 401);
 
+// For routes an API token must never reach: token management and membership changes.
+export const sessionOnly: MiddlewareHandler<AuthEnv> = async (c, next) => {
+  const u = c.get("user");
+  if (!u) return c.json({ error: "unauthenticated" }, 401);
+  return u.token ? c.json({ error: "not allowed with an API token" }, 403) : next();
+};
+
+// Token users are never admins (isAdmin is forced false), so admin routes are 403 for them.
 export const requireAdmin: MiddlewareHandler<AuthEnv> = async (c, next) => {
   const u = c.get("user");
   if (!u) return c.json({ error: "unauthenticated" }, 401);
@@ -184,8 +239,12 @@ export const authRoutes = (opts: AuthOptions) => {
     return c.redirect("/app"); // fixed target: no return-to parameter, no open redirect
   });
 
-  // POST so it goes through the CSRF check in sessionAuth.
+  // POST so it goes through the CSRF check in sessionAuth. Bearer requests skip that check, so
+  // they must never touch the cookie session here.
   r.post("/logout", async (c) => {
+    if (c.req.header("authorization")) {
+      return c.json({ error: "not allowed with an API token" }, 403);
+    }
     const sid = getCookie(c, SESSION_COOKIE);
     if (sid) await db.delete(sessions).where(eq(sessions.idHash, await hashSessionId(sid)));
     deleteCookie(c, SESSION_COOKIE, {

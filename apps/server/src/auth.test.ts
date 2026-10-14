@@ -232,7 +232,7 @@ describe("staff auth", () => {
     expect(res.status).toBe(200);
   });
 
-  it("ignores the cookie when an Authorization header is present (bearer seam, #11)", async () => {
+  it("ignores the cookie when an Authorization header is present (API tokens, #11)", async () => {
     const s = setup(ok());
     const id = await sid(s);
     const res = await s.app.request("/api/v1/me", {

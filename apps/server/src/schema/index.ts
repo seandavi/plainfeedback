@@ -130,17 +130,25 @@ export const responses = pgTable(
   (t) => [index().on(t.surveyVersionId)],
 );
 
-export const apiTokens = pgTable("api_tokens", {
-  id: id(),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id),
-  groupId: uuid("group_id")
-    .notNull()
-    .references(() => groups.id),
-  role: roleEnum("role").notNull(),
-  tokenHash: text("token_hash").notNull().unique(),
-  expiresAt: ts("expires_at"),
-  revokedAt: ts("revoked_at"),
-  createdAt: createdAt(),
-});
+// Per-user API tokens (#11, ADR 0010): only the SHA-256 of the token is stored. role is creator or
+// viewer (enforced by the API); effective role = min(role, the user's current role in the group).
+export const apiTokens = pgTable(
+  "api_tokens",
+  {
+    id: id(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => groups.id),
+    name: text("name").notNull(),
+    role: roleEnum("role").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: ts("expires_at").notNull(),
+    revokedAt: ts("revoked_at"),
+    lastUsedAt: ts("last_used_at"), // coarse: updated at most once an hour
+    createdAt: createdAt(),
+  },
+  (t) => [index().on(t.groupId), index().on(t.userId)],
+);

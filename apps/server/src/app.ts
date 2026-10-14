@@ -5,6 +5,7 @@ import { groupRoutes } from "./groups";
 import { mountDocs } from "./openapi";
 import { responseRoutes } from "./responses";
 import { surveyRoutes } from "./surveys";
+import { tokenRoutes } from "./tokens";
 
 // Participant routes must stay identifier-free: no cookies, no caching, minimal logs.
 export const isParticipantPath = (p: string) =>
@@ -64,6 +65,7 @@ export const createApp = ({ ping, log = console.log, auth }: AppDeps) => {
     app.route("/api/v1", groupRoutes(auth.db));
     app.route("/api/v1", surveyRoutes(auth.db));
     app.route("/api/v1", responseRoutes(auth.db));
+    app.route("/api/v1", tokenRoutes(auth.db));
   }
   return app;
 };

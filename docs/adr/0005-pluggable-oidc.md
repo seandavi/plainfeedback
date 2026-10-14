@@ -15,7 +15,7 @@ Sessions are server-side: a random 256-bit id in a cookie, only its SHA-256 stor
 - Participant routes remain cookie-free.
 
 ### CSRF
-A cookie-authenticated unsafe request (POST/PUT/PATCH/DELETE) must carry an `Origin` header equal to the origin of `OIDC_REDIRECT_URI`. Requests without `Origin` are rejected; SameSite=Lax is the second layer. Requests that carry an `Authorization` header never use the cookie. That is the seam for API bearer tokens (#11), which need no CSRF check.
+A cookie-authenticated unsafe request (POST/PUT/PATCH/DELETE) must carry an `Origin` header equal to the origin of `OIDC_REDIRECT_URI`. Requests without `Origin` are rejected; SameSite=Lax is the second layer. Requests that carry an `Authorization` header never use the cookie. That is the seam for API bearer tokens, which need no CSRF check; see [ADR 0010](0010-api-tokens.md).
 
 ## Consequences
 Other providers (ORCID, institutional) can be added by configuration. The OAuth client must have this app's redirect URI, `https://<host>/api/v1/auth/callback`, registered. If the participant API ever moves out of `/api/v1/public`, the cookie path still holds; if staff routes move outside `/api/v1`, revisit the cookie path.
