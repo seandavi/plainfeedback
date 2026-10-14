@@ -13,6 +13,20 @@ consortium that wants to move off one-off Google Forms and Qualtrics.
 records in [`docs/adr/`](docs/adr/), and the platform comparison in
 [`research/platform-survey.md`](research/platform-survey.md).
 
+## Dev quickstart
+
+Requires [uv](https://docs.astral.sh/uv/) and [just](https://github.com/casey/just).
+
+```sh
+cp .env.example .env   # local settings, no secrets
+uv sync
+just dev               # http://localhost:8000/healthz
+just test              # pytest
+just lint              # ruff
+just typecheck         # pyright
+just up                # app + Postgres via Docker Compose (just down to stop)
+```
+
 ## Contributing
 
 Issues and PRs welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md). Agents:

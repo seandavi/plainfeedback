@@ -20,6 +20,7 @@ De-identified event-feedback surveys for the Common Fund Data Ecosystem (CFDE) m
 | Renderer | Small custom renderer for a limited question set. SurveyJS Form Library (MIT) is the fallback. Survey Creator (paid) is not used. |
 | Auth | Pluggable OIDC. Google is the default for development; the client id and secret are in GCP Secret Manager (`cdsci-infra`: `cancerdatasci-oauth-client-id`, `cancerdatasci-oauth-client-secret`). |
 | Participants | v1: shared anonymous link and QR code, no tokens, no email ([ADR 0004](adr/0004-anonymous-link-only-v1.md)). |
+| Frontend | Server-rendered Jinja2 plus small vanilla JS, no node build ([ADR 0007](adr/0007-server-rendered-frontend.md)). |
 | Deployment | Docker Compose ([ADR 0006](adr/0006-docker-compose.md)). |
 | Chat layer | Edits the markdown, never the JSON. Phase 2. |
 | Conditionals, pages | Phase 3. The JSON model has the slots from phase 1. |

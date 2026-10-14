@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: plainfeedback
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-plainfeedback}
+      POSTGRES_DB: plainfeedback
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plainfeedback"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  app:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://plainfeedback:${POSTGRES_PASSWORD:-plainfeedback}@db:5432/plainfeedback
+    ports: ["8000:8000"]
+    depends_on:
+      db: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/healthz')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+volumes:
+  pgdata:
