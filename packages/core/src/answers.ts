@@ -7,13 +7,14 @@ export type Answers = Record<string, unknown>;
 export type AnswerErrors = Record<string, string>;
 
 export function validateAnswers(model: Survey, answers: Answers): AnswerErrors {
-  const errors: AnswerErrors = {};
+  // Null prototype: a respondent-sent "__proto__" key must land as a normal error entry.
+  const errors: AnswerErrors = Object.create(null);
   const questions = model.pages.flatMap((p) => p.questions);
   const ids = new Set(questions.map((q) => q.id));
   for (const key of Object.keys(answers))
     if (!ids.has(key)) errors[key] = "This is not a question in this survey.";
   for (const q of questions) {
-    const value = answers[q.id];
+    const value = Object.hasOwn(answers, q.id) ? answers[q.id] : undefined;
     const message = isEmpty(value)
       ? q.required
         ? "This question is required."
@@ -65,7 +66,12 @@ function check(q: Question, v: unknown): string | undefined {
         if (!Number.isInteger(r) || (r as number) < min || (r as number) > max)
           return `Ratings must be whole numbers from ${min} to ${max}.`;
       }
-      if (q.required && q.statements.some((_, i) => typeof (v as Answers)[i + 1] !== "number"))
+      if (
+        q.required &&
+        q.statements.some(
+          (_, i) => typeof Object.getOwnPropertyDescriptor(v, i + 1)?.value !== "number",
+        )
+      )
         return "Please rate every statement.";
       return;
     }

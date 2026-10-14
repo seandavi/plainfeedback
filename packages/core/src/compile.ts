@@ -223,7 +223,8 @@ function finish(
       checkDuplicates(b, err, "option");
       const otherAttr = attrs.get("other");
       const other = otherAttr === true ? "Other" : otherAttr;
-      if (other !== undefined && items.includes(other))
+      if (other === "") e("'other' needs a label, like other=\"Other\", or write just 'other'.");
+      else if (other !== undefined && items.includes(other))
         e(`The 'other' label "${other}" is also a listed option. Remove one of them.`);
       q = { ...common, type, options: items, ...(other !== undefined ? { other } : {}) };
       break;

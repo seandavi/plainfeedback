@@ -89,6 +89,13 @@ describe("validateAnswers", () => {
     expect(check({ ...valid, years: Number.NaN }).years).toMatch(/Enter a number/);
   });
 
+  test("prototype keys are treated as data", () => {
+    const sent = JSON.parse('{"__proto__": "x", "aff": "Center", "must": {"1": 0, "2": 2}}');
+    expect(Object.keys(check(sent))).toEqual(["__proto__"]);
+    const { model: m } = compile("# T\n::: {.text #constructor}\nQ\n:::\n") as { model: Survey };
+    expect(validateAnswers(m, {})).toEqual({});
+  });
+
   test("rejects answers to questions that don't exist", () => {
     expect(check({ ...valid, nope: "x" })).toEqual({
       nope: "This is not a question in this survey.",

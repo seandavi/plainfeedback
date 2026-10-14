@@ -127,6 +127,7 @@ describe("errors carry line numbers", () => {
       5,
       /already used on line 2/,
     ],
+    ["empty other", '# T\n::: {.choice #a other=""}\nQ\n- x\n- y\n:::\n', 2, /needs a label/],
     ["missing options", "# T\n::: {.choice #a}\nQ\n- only\n:::\n", 2, /at least two options/],
     [
       "duplicate option",
