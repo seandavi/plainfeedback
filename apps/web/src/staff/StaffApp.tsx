@@ -1,5 +1,5 @@
 // Staff app under /app: sign-in state, header, and the groups -> events -> surveys -> editor pages.
-// Routes: /app, /app/g/{groupId}, /app/g/{groupId}/e/{eventSlug}, .../s/{surveySlug}.
+// Routes: /app, /app/g/{groupId}, /app/g/{groupId}/e/{eventSlug}, .../s/{surveySlug}[/responses].
 // Later staff screens (#19: admin, members) add a route to `route` and reuse useLoad/ErrorNote.
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { AdminPage } from "./Admin";
@@ -7,7 +7,8 @@ import { ApiError, api, canEdit, isOwner, type Me } from "./api";
 import { Dashboard, surveyStatus } from "./Dashboard";
 import { Editor } from "./Editor";
 import { ConfirmButton, DeleteResponses, Members, Tokens, useAction } from "./Manage";
-import { Link, navigate, usePath } from "./router";
+import { Responses } from "./Responses";
+import { Link, navigate, usePageTitle, usePath } from "./router";
 
 export const LOGIN_URL = "/api/v1/auth/login";
 const enc = encodeURIComponent;
@@ -17,6 +18,8 @@ export const paths = {
   group: (g: string) => `/app/g/${enc(g)}`,
   event: (g: string, e: string) => `/app/g/${enc(g)}/e/${enc(e)}`,
   survey: (g: string, e: string, s: string) => `/app/g/${enc(g)}/e/${enc(e)}/s/${enc(s)}`,
+  responses: (g: string, e: string, s: string) =>
+    `/app/g/${enc(g)}/e/${enc(e)}/s/${enc(s)}/responses`,
 };
 const SLUG = "[a-z0-9]+(?:-[a-z0-9]+)*"; // same rule as the server's slug schema
 
@@ -62,6 +65,19 @@ export function ErrorNote({ error }: { error: unknown }) {
 
 const Loading = () => <p aria-busy="true">Loading…</p>;
 
+const SignIn = () => {
+  usePageTitle("Sign in");
+  return (
+    <section className="signin">
+      <h1>Staff sign-in</h1>
+      <p>Sign in to create and edit surveys for your groups.</p>
+      <a className="button" href={LOGIN_URL}>
+        Sign in
+      </a>
+    </section>
+  );
+};
+
 export function StaffApp() {
   const path = usePath();
   const me = useLoad(api.me, "me");
@@ -75,16 +91,7 @@ export function StaffApp() {
 
   let body: ReactNode;
   const err = me.error instanceof ApiError ? me.error : undefined;
-  if (signedOut || err?.kind === "unauthenticated")
-    body = (
-      <section className="signin">
-        <h1>Staff sign-in</h1>
-        <p>Sign in to create and edit surveys for your groups.</p>
-        <a className="button" href={LOGIN_URL}>
-          Sign in
-        </a>
-      </section>
-    );
+  if (signedOut || err?.kind === "unauthenticated") body = <SignIn />;
   else if (err?.kind === "notFound")
     body = <p role="alert">Staff sign-in is not configured on this server.</p>;
   else if (me.error) body = <ErrorNote error={me.error} />;
@@ -93,6 +100,9 @@ export function StaffApp() {
 
   return (
     <div className="staff">
+      <a className="skip" href="#main">
+        Skip to content
+      </a>
       <header className="topbar">
         <Link href={paths.groups} className="brand">
           plainfeedback
@@ -107,21 +117,25 @@ export function StaffApp() {
           </span>
         )}
       </header>
-      <main id="main">{body}</main>
+      <main id="main" tabIndex={-1}>
+        {body}
+      </main>
     </div>
   );
 }
 
 function route(path: string, me: Me): ReactNode {
-  const [g, e, s] = [
+  const [g, e, s, rs] = [
     /^\/app\/g\/([^/]+)/,
     /^\/app\/g\/[^/]+\/e\/([^/]+)/,
     /^\/app\/g\/[^/]+\/e\/[^/]+\/s\/([^/]+)\/?$/,
+    /^\/app\/g\/[^/]+\/e\/[^/]+\/s\/([^/]+)\/responses\/?$/,
   ].map((re) => {
     const m = re.exec(path)?.[1];
     return m === undefined ? undefined : decodeURIComponent(m);
   });
   if (/^\/app\/admin\/?$/.test(path)) return <AdminPage me={me} />;
+  if (g && e && rs) return <ResponsesPage key={path} me={me} g={g} e={e} s={rs} />;
   if (g && e && s) return <EditorPage key={path} me={me} g={g} e={e} s={s} />;
   if (g && e) return <EventPage key={path} me={me} g={g} e={e} />;
   if (g) return <GroupPage key={path} me={me} g={g} />;
@@ -186,6 +200,7 @@ function CreateForm({
 function GroupPage({ me, g }: { me: Me; g: string }) {
   const data = useLoad(() => Promise.all([api.group(g), api.events(g)]), g);
   const act = useAction(data.reload);
+  usePageTitle(data.data?.[0].name);
   if (data.error) return <ErrorNote error={data.error} />;
   if (!data.data) return <Loading />;
   const [group, events] = data.data;
@@ -241,6 +256,7 @@ function EventPage({ me, g, e }: { me: Me; g: string; e: string }) {
     return { group, event, surveys: await api.surveys(event.id) };
   }, `${g}/${e}`);
   const act = useAction(data.reload);
+  usePageTitle(data.data?.event.title);
   if (data.error) return <ErrorNote error={data.error} />;
   if (!data.data) return <Loading />;
   const { group, event, surveys } = data.data;
@@ -270,6 +286,11 @@ function EventPage({ me, g, e }: { me: Me; g: string; e: string }) {
                 {x.latestVersion ? `published v${x.latestVersion}, ${surveyStatus(x)}` : "draft"}
                 {x.waveLabel && `, ${x.waveLabel}`}
               </span>{" "}
+              {x.latestVersion !== null && (
+                <Link href={paths.responses(g, e, x.slug)}>
+                  {x.responseCount === 1 ? "1 response" : `${x.responseCount ?? 0} responses`}
+                </Link>
+              )}{" "}
               {(isOwner(me, group) || (canEdit(me, group) && !x.latestVersion)) && (
                 <ConfirmButton
                   label="Delete"
@@ -316,7 +337,34 @@ function EditorPage({ me, g, e, s }: { me: Me; g: string; e: string; s: string }
           [s],
         ]}
       />
+      <p>
+        <Link href={paths.responses(g, e, s)}>Responses and downloads</Link>
+      </p>
       <Editor eventId={event.id} slug={s} readOnly={!canEdit(me, group)} />
+    </>
+  );
+}
+
+function ResponsesPage({ me, g, e, s }: { me: Me; g: string; e: string; s: string }) {
+  const data = useLoad(async () => {
+    const [group, event] = await Promise.all([api.group(g), api.event(g, e)]);
+    return { group, event };
+  }, `${g}/${e}`);
+  if (data.error) return <ErrorNote error={data.error} />;
+  if (!data.data) return <Loading />;
+  const { group, event } = data.data;
+  return (
+    <>
+      <Crumbs
+        items={[
+          ["Groups", paths.groups],
+          [group.name, paths.group(g)],
+          [event.title, paths.event(g, e)],
+          [s, paths.survey(g, e, s)],
+          ["Responses"],
+        ]}
+      />
+      <Responses me={me} group={group} eventId={event.id} slug={s} />
     </>
   );
 }

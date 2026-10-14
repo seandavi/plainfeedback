@@ -1,7 +1,7 @@
 // Participant page /s/{publicId} (issue #7). Talks only to same-origin /api/v1/public, sends no
 // credentials and keeps state in memory: no cookies, no storage, no third-party requests.
 import { type AnswerErrors, type Answers, MIN_SUBMIT_MS, type Survey } from "@plainfeedback/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Markdown } from "./markdown";
 import { SurveyForm } from "./SurveyForm";
 
@@ -26,6 +26,7 @@ export function ParticipantPage({ publicId }: { publicId: string }) {
   const url = `/api/v1/public/surveys/${encodeURIComponent(publicId)}`;
   const [state, setState] = useState<State>({ kind: "loading" });
   const [notice, setNotice] = useState<string>();
+  const thanks = useRef<HTMLHeadingElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -42,6 +43,12 @@ export function ParticipantPage({ publicId }: { publicId: string }) {
   useEffect(() => {
     load();
   }, [load]);
+  // The whole page is replaced on submit: move focus to the new heading so it is announced (#68).
+  useEffect(() => {
+    if (state.kind !== "done") return;
+    document.title = `Thank you – ${state.title}`;
+    thanks.current?.focus();
+  }, [state]);
 
   if (state.kind === "loading") return <main aria-busy="true">Loading…</main>;
   if (state.kind === "missing")
@@ -61,8 +68,10 @@ export function ParticipantPage({ publicId }: { publicId: string }) {
   if (state.kind === "done")
     return (
       <main>
-        <h1>{state.title}</h1>
-        <p role="status">Thank you. Your answers have been recorded.</p>
+        <h1 ref={thanks} tabIndex={-1}>
+          Thank you
+        </h1>
+        <p>Your answers to {state.title} have been recorded. You can close this tab now.</p>
       </main>
     );
 

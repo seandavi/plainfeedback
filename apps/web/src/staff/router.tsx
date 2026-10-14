@@ -5,6 +5,7 @@ import { type AnchorHTMLAttributes, type MouseEvent, useEffect, useState } from 
 const EVENT = "pf:navigate";
 let guard: (() => boolean) | undefined;
 let current = typeof location === "undefined" ? "/" : location.pathname;
+let moved = false; // an in-app navigation happened; the next page title moves focus to its <h1>
 
 /** Returns false (and stays) if a page with unsaved work says no. */
 export function navigate(to: string, { replace = false } = {}) {
@@ -12,6 +13,7 @@ export function navigate(to: string, { replace = false } = {}) {
   if (guard && !guard()) return false;
   history[replace ? "replaceState" : "pushState"](null, "", to);
   current = to;
+  moved = true;
   window.dispatchEvent(new Event(EVENT));
   return true;
 }
@@ -21,9 +23,11 @@ export function usePath() {
   useEffect(() => {
     const onNav = () => setPath(location.pathname);
     const onPop = () => {
+      if (location.pathname === current) return; // only the #hash changed, e.g. the skip link
       // Back/forward already changed the URL; undo it if the page refuses to leave.
-      if (guard && location.pathname !== current && !guard()) history.pushState(null, "", current);
+      if (guard && !guard()) return history.pushState(null, "", current);
       current = location.pathname;
+      moved = true;
       onNav();
     };
     window.addEventListener(EVENT, onNav);
@@ -34,6 +38,20 @@ export function usePath() {
     };
   }, []);
   return path;
+}
+
+/** Sets the tab title once a page knows it (undefined while loading). After an in-app navigation
+ * also focuses the page's <h1>, so screen readers announce the new page (WCAG 2.4.2, #68). */
+export function usePageTitle(title: string | undefined) {
+  useEffect(() => {
+    if (title === undefined) return;
+    document.title = `${title} – plainfeedback`;
+    const h1 = moved && document.querySelector<HTMLElement>("main h1");
+    if (!h1) return;
+    moved = false;
+    h1.tabIndex = -1;
+    h1.focus();
+  }, [title]);
 }
 
 const MESSAGE = "You have unsaved changes. Leave this page and lose them?";

@@ -1,7 +1,7 @@
 // Dashboard (#19): my groups with my role; per group its events and surveys with status and counts.
 import { surveyStatus as coreStatus } from "@plainfeedback/core";
 import { api, type Group, type SurveySummary } from "./api";
-import { Link } from "./router";
+import { Link, usePageTitle } from "./router";
 import { ErrorNote, paths, useLoad } from "./StaffApp";
 
 const LABEL = { draft: "draft", not_yet_open: "not yet open", open: "open", closed: "closed" };
@@ -34,6 +34,7 @@ async function load(groups: Group[]) {
 
 export function Dashboard() {
   const data = useLoad(async () => load(await api.groups()), "dashboard");
+  usePageTitle("Your groups");
   return (
     <>
       <h1>Your groups</h1>
@@ -86,7 +87,18 @@ export function Dashboard() {
                           </Link>
                         </th>
                         <td>{surveyStatus(r.survey)}</td>
-                        <td>{r.survey.responseCount ?? 0}</td>
+                        <td>
+                          {r.survey.latestVersion === null ? (
+                            0
+                          ) : (
+                            <Link
+                              href={paths.responses(g.id, r.slug, r.survey.slug)}
+                              aria-label={`${r.survey.responseCount ?? 0} responses to ${r.survey.slug}`}
+                            >
+                              {r.survey.responseCount ?? 0}
+                            </Link>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
