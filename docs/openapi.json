@@ -226,6 +226,41 @@
           "createdAt"
         ]
       },
+      "SurveyListItem": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SurveySummary"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "opensAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Of the latest published version"
+              },
+              "closesAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Of the latest published version"
+              },
+              "responseCount": {
+                "type": "number",
+                "description": "Submitted responses, all versions"
+              }
+            },
+            "required": [
+              "opensAt",
+              "closesAt",
+              "responseCount"
+            ]
+          }
+        ]
+      },
       "SurveySummary": {
         "type": "object",
         "properties": {
@@ -1849,7 +1884,7 @@
         "tags": [
           "surveys"
         ],
-        "summary": "List an event's surveys (member)",
+        "summary": "List an event's surveys with status and response counts (member)",
         "parameters": [
           {
             "schema": {
@@ -1868,7 +1903,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/SurveySummary"
+                    "$ref": "#/components/schemas/SurveyListItem"
                   }
                 }
               }

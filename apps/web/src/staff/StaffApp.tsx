@@ -2,14 +2,18 @@
 // Routes: /app, /app/g/{groupId}, /app/g/{groupId}/e/{eventSlug}, .../s/{surveySlug}.
 // Later staff screens (#19: admin, members) add a route to `route` and reuse useLoad/ErrorNote.
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { AdminPage } from "./Admin";
 import { ApiError, api, canEdit, type Me } from "./api";
+import { Dashboard } from "./Dashboard";
 import { Editor } from "./Editor";
+import { Members, Tokens } from "./Manage";
 import { Link, navigate, usePath } from "./router";
 
 export const LOGIN_URL = "/api/v1/auth/login";
 const enc = encodeURIComponent;
 export const paths = {
   groups: "/app",
+  admin: "/app/admin",
   group: (g: string) => `/app/g/${enc(g)}`,
   event: (g: string, e: string) => `/app/g/${enc(g)}/e/${enc(e)}`,
   survey: (g: string, e: string, s: string) => `/app/g/${enc(g)}/e/${enc(e)}/s/${enc(s)}`,
@@ -46,8 +50,8 @@ export function ErrorNote({ error }: { error: unknown }) {
         ? "Not found, or you do not have access."
         : e?.kind === "forbidden"
           ? "Your role does not allow this."
-          : e
-            ? e.message
+          : error instanceof Error
+            ? error.message
             : "Something went wrong.";
   return (
     <p role="alert" className="form-message">
@@ -95,6 +99,7 @@ export function StaffApp() {
         </Link>
         {me.data && !signedOut && (
           <span className="who">
+            {me.data.isAdmin && <Link href={paths.admin}>Admin</Link>}
             <span>{me.data.email}</span>
             <button type="button" onClick={logout}>
               Sign out
@@ -116,39 +121,12 @@ function route(path: string, me: Me): ReactNode {
     const m = re.exec(path)?.[1];
     return m === undefined ? undefined : decodeURIComponent(m);
   });
+  if (/^\/app\/admin\/?$/.test(path)) return <AdminPage me={me} />;
   if (g && e && s) return <EditorPage key={path} me={me} g={g} e={e} s={s} />;
   if (g && e) return <EventPage key={path} me={me} g={g} e={e} />;
   if (g) return <GroupPage key={path} me={me} g={g} />;
-  if (/^\/app\/?$/.test(path)) return <GroupsPage />;
+  if (/^\/app\/?$/.test(path)) return <Dashboard />;
   return <p role="alert">Page not found.</p>;
-}
-
-function GroupsPage() {
-  const groups = useLoad(api.groups, "groups");
-  return (
-    <>
-      <h1>Your groups</h1>
-      {groups.error ? (
-        <ErrorNote error={groups.error} />
-      ) : !groups.data ? (
-        <Loading />
-      ) : groups.data.length === 0 ? (
-        <p>You are not in any group yet. Ask a group owner or an admin to add you.</p>
-      ) : (
-        <ul className="list">
-          {groups.data.map((x) => (
-            <li key={x.id}>
-              <Link href={paths.group(x.id)}>{x.name}</Link>{" "}
-              <span className="meta">
-                {x.role ?? "admin"}
-                {x.archived && ", archived"}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </>
-  );
 }
 
 const Crumbs = ({ items }: { items: [string, string?][] }) => (
@@ -235,6 +213,8 @@ function GroupPage({ me, g }: { me: Me; g: string }) {
         </ul>
       )}
       {canEdit(me, group) && <CreateForm legend="New event" onCreate={create} />}
+      <Members me={me} group={group} g={g} />
+      <Tokens me={me} group={group} g={g} />
     </>
   );
 }

@@ -83,6 +83,11 @@ const SurveySummary = z
     latestVersion: z.number().nullable(),
   })
   .openapi("SurveySummary");
+const SurveyListItem = SurveySummary.extend({
+  opensAt: z.string().nullable().openapi({ description: "Of the latest published version" }),
+  closesAt: z.string().nullable().openapi({ description: "Of the latest published version" }),
+  responseCount: z.number().openapi({ description: "Submitted responses, all versions" }),
+}).openapi("SurveyListItem");
 const Survey = SurveySummary.extend({
   publicId: z.string().openapi({ description: "Participant page: /s/{publicId}" }),
   markdown: z.string(),
@@ -158,6 +163,12 @@ export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
   // Column refs are unqualified inside sql``, so the correlated subquery is spelled out.
   const latestVersion = sql<number | null>`(
     select max(v.version) from survey_versions v where v.survey_id = "surveys"."id")`;
+  const latestOf = (col: string) => sql<Date | null>`(
+    select v.${sql.raw(col)} from survey_versions v where v.survey_id = "surveys"."id"
+    order by v.version desc limit 1)`;
+  const responseCount = sql<number>`(
+    select count(*)::int from responses r join survey_versions v on v.id = r.survey_version_id
+    where v.survey_id = "surveys"."id")`;
   const surveyWhere = (eventId: string, slug: string) =>
     and(eq(surveys.eventId, eventId), eq(surveys.slug, slug));
   const loadSurvey = async (eventId: string, slug: string) => {
@@ -264,24 +275,33 @@ export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
       method: "get",
       path: "/events/{e}/surveys",
       tags: ["surveys"],
-      summary: "List an event's surveys (member)",
+      summary: "List an event's surveys with status and response counts (member)",
       middleware: [member],
       request: { params: EventParams },
-      responses: { 200: json(z.array(SurveySummary)), ...errors },
+      responses: { 200: json(z.array(SurveyListItem)), ...errors },
     }),
     async (c) => {
       const rows = await db
-        .select({ s: surveys, latestVersion })
+        .select({
+          s: surveys,
+          latestVersion,
+          opensAt: latestOf("opens_at"),
+          closesAt: latestOf("closes_at"),
+          responseCount,
+        })
         .from(surveys)
         .where(eq(surveys.eventId, c.req.valid("param").e))
         .orderBy(asc(surveys.slug));
       return c.json(
-        rows.map(({ s, latestVersion }) => ({
+        rows.map(({ s, latestVersion, opensAt, closesAt, responseCount }) => ({
           slug: s.slug,
           waveLabel: s.waveLabel,
           closed: s.closedAt !== null,
           updatedAt: s.updatedAt.toISOString(),
           latestVersion,
+          opensAt: iso(opensAt && new Date(opensAt)),
+          closesAt: iso(closesAt && new Date(closesAt)),
+          responseCount,
         })),
         200,
       );
