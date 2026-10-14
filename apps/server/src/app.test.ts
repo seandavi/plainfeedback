@@ -97,6 +97,24 @@ test("unhandled errors are logged without their message (query params can hold a
   expect(lines).toContain(JSON.stringify({ error: "Error", code: "22P05" }));
 });
 
+test("every response forbids framing; staff and docs get a strict script-src (#39)", async () => {
+  const app = createApp({ ping: async () => {}, log: () => {} });
+  for (const path of ["/healthz", "/api/docs", "/s/abc"]) {
+    const res = await app.request(path);
+    const csp = res.headers.get("content-security-policy") ?? "";
+    expect(res.headers.get("x-frame-options"), path).toBe("DENY");
+    expect(csp, path).toContain("frame-ancestors 'none'");
+    expect(csp, path).toContain("default-src 'self'");
+    expect(csp, path).not.toMatch(/script-src[^;]*unsafe/);
+    expect(csp, path).not.toContain("unsafe-eval");
+  }
+  // style-src 'unsafe-inline' is staff-only (CodeMirror, Swagger UI); participants get none.
+  const staff = (await app.request("/api/docs")).headers.get("content-security-policy");
+  expect(staff).toContain("style-src 'self' 'unsafe-inline'");
+  const pub = (await app.request("/s/abc")).headers.get("content-security-policy");
+  expect(pub).not.toContain("unsafe-inline");
+});
+
 test("config requires a postgres DATABASE_URL", () => {
   expect(() => loadConfig({})).toThrow();
   const base = { DATABASE_URL: "postgresql://u:p@h/d", PUBLIC_BASE_URL: "https://pf.example.org/" };

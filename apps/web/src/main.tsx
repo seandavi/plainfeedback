@@ -1,3 +1,4 @@
+import "./zod-jitless"; // first: see the file
 import { APP_NAME } from "@plainfeedback/core";
 import { lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
