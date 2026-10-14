@@ -1395,6 +1395,7 @@
           "groups"
         ],
         "summary": "Remove a member (owner)",
+        "description": "Also revokes the member's API tokens for this group; re-adding them does not revive those tokens.",
         "security": [
           {
             "sessionCookie": []
