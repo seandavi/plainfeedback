@@ -33,8 +33,8 @@ De-identified event-feedback surveys for the Common Fund Data Ecosystem (CFDE) m
 ## Data model
 
 - `users` (`is_admin`), `groups`, `memberships(group, user, role: owner|creator|viewer)`
-- `events` (belongs to a group, slug unique per group, title, description)
-- `surveys` (belongs to an event; slug; wave label such as pre, post, followup; current draft markdown and ETag; `closed_at`)
+- `events` (belongs to a group, slug unique per group, title, description, optional `starts_on` / `ends_on` calendar dates, CHECK end >= start)
+- `surveys` (belongs to an event; slug; nullable wave label, CHECK in `pre|post|followup|other`, with a partial unique index so an event has at most one pre, one post and one followup (`other` may repeat; null = not a wave, e.g. speaker feedback); current draft markdown and ETag; `closed_at`)
 - `survey_versions` (immutable; markdown, compiled JSON model, privacy statement, open/close dates)
 - `tokens` (deferred; event, hash of the code only)
 - `responses` (survey_version, optional token hash, answers JSONB, submitted_at to the hour, seq for export order)
@@ -107,12 +107,12 @@ GET    /users                                   admin
 PATCH  /users/{id}                              admin: grant/revoke admin (never the last admin)
 GET    /groups/{g}/events                       viewer
 GET    /groups/{g}/events/{e}                   viewer ({e} is the event slug here)
-PUT    /groups/{g}/events/{e}                   creator: upsert by slug {title, description}; returns the event id
+PUT    /groups/{g}/events/{e}                   creator: upsert by slug {title, description, startsOn?, endsOn?}; returns the event id
 DELETE /groups/{g}/events/{e}                   owner: cascades to surveys and responses
 GET    /events/{e}/surveys                      viewer ({e} is the event id)
 GET    /events/{e}/surveys/{s}                  viewer: draft markdown, ETag, latest version summary
 PUT    /events/{e}/surveys/{s}                  creator: upsert draft (text/markdown or JSON); If-Match to update
-PATCH  /events/{e}/surveys/{s}                  creator: {closed} stops or resumes accepting responses
+PATCH  /events/{e}/surveys/{s}                  creator: {closed?, waveLabel?} stops or resumes accepting responses, sets the wave
 DELETE /events/{e}/surveys/{s}                  owner; creator if never published. Cascades
 POST   /events/{e}/surveys/{s}/validate         viewer: dry run of supplied or stored markdown, no writes
 POST   /events/{e}/surveys/{s}/publish          creator: freeze the draft as a new version
@@ -144,8 +144,8 @@ Events and surveys (#6):
 Participant API (#7, [ADR 0011](adr/0011-participant-page.md)):
 - `publicId` is a random 12-character id on `surveys` (returned by the staff survey GET), not the slugs.
 - GET returns `status: open | closed | not_yet_open`; closed (`closed_at`, or `closes_at` past) wins. 404 until published.
-- POST is JSON only (415 otherwise), at most 64 KB (413). Errors: 404 unknown, 429 rate limited, 410 closed, **403 not yet open**, 409 `versionId` is not the latest (client reloads), 422 `{errors: {questionId: message}}` from `validateAnswers`. Stores answers, version and `submitted_at` only.
-- Rate limits (ADR 0013): in-memory token buckets per survey (burst 1000, then 10/s) and per survey and client (30 per 10 min, keyed by HMAC of the IP with a daily-rotated in-memory key; never stored or logged). Bot checks: honeypot `hp` and a signed load-time `ticket` with a 3 s minimum; failures get 201 and are not stored. Single process only.
+- POST is JSON only (415 otherwise), at most 64 KB (413). Errors: 404 unknown, 429 rate limited, 410 closed, **403 not yet open**, 409 `versionId` is not the latest, or the ticket is invalid, older than 24 h or already used (client fetches the survey again for a fresh ticket, keeps the answers), 422 `{errors: {questionId: message}}` from `validateAnswers`. Stores answers, version and `submitted_at` only.
+- Rate limits (ADR 0013): in-memory token buckets per survey (burst 1000, then 10/s) and per survey and client (300 per 10 min, keyed by HMAC of the IP with a daily-rotated in-memory key; never stored or logged); 429 carries `Retry-After`. Bot checks: honeypot `hp` and a signed load-time `ticket` with a 3 s minimum; failures get 201 and are not stored. Each ticket stores one response and expires after 24 h (ADR 0014). Single process only.
 
 ## Auth
 

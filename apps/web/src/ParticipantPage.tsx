@@ -27,15 +27,14 @@ export function ParticipantPage({ publicId }: { publicId: string }) {
   const [state, setState] = useState<State>({ kind: "loading" });
   const [notice, setNotice] = useState<string>();
 
-  const load = useCallback(async (): Promise<Loaded | undefined> => {
+  const load = useCallback(async () => {
     try {
       const res = await fetch(url, { credentials: "omit" });
-      if (res.status === 404) return void setState({ kind: "missing" });
-      if (!res.ok) return void setState({ kind: "failed" });
+      if (res.status === 404) return setState({ kind: "missing" });
+      if (!res.ok) return setState({ kind: "failed" });
       const survey = { ...(await res.json()), loadedAt: Date.now() } as Loaded;
       document.title = survey.title;
       setState({ kind: "ready", survey });
-      return survey;
     } catch {
       setState({ kind: "failed" });
     }
@@ -74,9 +73,8 @@ export function ParticipantPage({ publicId }: { publicId: string }) {
     // Our interval is never longer than the server's, so waiting it out here is enough.
     const wait = s.loadedAt + MIN_SUBMIT_MS + 100 - Date.now();
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-    let res: Response;
-    try {
-      res = await fetch(`${url}/responses`, {
+    const send = () =>
+      fetch(`${url}/responses`, {
         method: "POST",
         credentials: "omit",
         headers: { "content-type": "application/json" },
@@ -86,9 +84,16 @@ export function ParticipantPage({ publicId }: { publicId: string }) {
           ticket: s.ticket,
           ...(hp && { hp }),
         }),
+      }).catch(() => {
+        throw new Error("Could not reach the server. Your answers are still here; try again.");
       });
-    } catch {
-      throw new Error("Could not reach the server. Your answers are still here; try again.");
+    let res = await send();
+    // Busy network (#55): wait as told and resend, a few times; a 429 does not use up the ticket.
+    for (let i = 0; i < 3 && res.status === 429; i++) {
+      const after = Number(res.headers.get("retry-after"));
+      if (!(after > 0 && after <= 30)) break;
+      await new Promise((r) => setTimeout(r, after * 1000));
+      res = await send();
     }
     if (res.status === 201) {
       setState({ kind: "done", title: s.title });
@@ -96,13 +101,13 @@ export function ParticipantPage({ publicId }: { publicId: string }) {
     }
     if (res.status === 422) return ((await res.json()) as { errors: AnswerErrors }).errors;
     if (res.status === 409 || res.status === 410 || res.status === 403) {
-      const now = await load(); // newer version, or the survey closed: show what is live now
-      // 409 with the same version means our ticket expired (#77); the reload issued a fresh one.
+      // Newer version, a used or stale ticket (#60), or the survey closed: fetch what is live now,
+      // with a fresh ticket. The form keeps the answers.
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      await load();
       if (res.status === 409)
         setNotice(
-          now?.versionId === s.versionId
-            ? "This page had expired, so we refreshed it. Your answers are still here; please submit again."
-            : "This survey was just updated. Please check your answers and submit again.",
+          body.error ?? "This page was refreshed. Please check your answers and submit again.",
         );
       return;
     }
