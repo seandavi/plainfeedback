@@ -28,12 +28,15 @@ export const users = pgTable(
     isAdmin: boolean("is_admin").notNull().default(false),
     oidcIssuer: text("oidc_issuer").notNull(),
     oidcSubject: text("oidc_subject").notNull(),
+    // Set by an admin (#38): no login, sessions deleted, API tokens revoked.
+    disabledAt: ts("disabled_at"),
     createdAt: createdAt(),
   },
   (t) => [unique().on(t.oidcIssuer, t.oidcSubject)],
 );
 
-// Staff sessions. Only the SHA-256 of the cookie value is stored.
+// Staff sessions. Only the SHA-256 of the cookie value is stored. expires_at slides with use, capped
+// at created_at + the absolute lifetime (sessionAuth).
 export const sessions = pgTable("sessions", {
   idHash: text("id_hash").primaryKey(),
   userId: uuid("user_id")

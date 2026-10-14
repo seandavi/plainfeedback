@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { compile } from "@plainfeedback/core";
+import { compile, MIN_SUBMIT_MS } from "@plainfeedback/core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ParticipantPage } from "./ParticipantPage";
@@ -7,7 +7,13 @@ import { ParticipantPage } from "./ParticipantPage";
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
+// The page waits until MIN_SUBMIT_MS after load before sending (#34); jump the clock past that.
+const later = (ms = MIN_SUBMIT_MS + 1000) => {
+  const now = Date.now();
+  vi.spyOn(Date, "now").mockReturnValue(now + ms);
+};
 
 const MD = `# Fall feedback
 
@@ -26,6 +32,7 @@ const survey = (over: object = {}) => ({
   model: compile(MD).model,
   privacyStatement: "We keep **no** identifiers.",
   status: "open",
+  ticket: "t1",
   ...over,
 });
 const json = (status: number, body: unknown) =>
@@ -44,7 +51,10 @@ const serve = (...replies: Response[]) => {
   return calls;
 };
 const choose = () => fireEvent.click(screen.getByRole("radio", { name: "Staff" }));
-const submit = () => fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+const submit = (wait = true) => {
+  if (wait) later();
+  fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+};
 
 describe("ParticipantPage", () => {
   it("shows privacy statement, submits, thanks; only same-origin public API, no storage", async () => {
@@ -68,6 +78,7 @@ describe("ParticipantPage", () => {
     expect(JSON.parse(calls[1]?.init?.body as string)).toEqual({
       versionId: "v1",
       answers: { role: "Staff" },
+      ticket: "t1",
     });
     // Nothing that loads from elsewhere, and nothing stored on the device.
     expect(document.querySelectorAll("img, script, link, iframe")).toHaveLength(0);
@@ -121,5 +132,35 @@ describe("ParticipantPage", () => {
     expect(await screen.findByText("Choose one of the options.")).toBeTruthy();
     submit();
     expect(await screen.findByText("This survey is closed.")).toBeTruthy();
+  });
+
+  it("waits out the minimum time after load before sending (#34)", async () => {
+    const calls = serve(json(200, survey()), json(201, { ok: true }));
+    render(<ParticipantPage publicId="x" />);
+    await screen.findByRole("heading", { name: "Fall feedback" });
+    choose();
+    later(MIN_SUBMIT_MS - 1000); // a fast human: 1 s (+100 ms margin) still to go
+    submit(false);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(calls).toHaveLength(1);
+    expect(await screen.findByText(/Thank you/, {}, { timeout: 3000 })).toBeTruthy();
+    expect(calls).toHaveLength(2);
+  });
+
+  it("sends the honeypot only when filled, and shows the server's 429 message", async () => {
+    const calls = serve(
+      json(200, survey()),
+      json(429, { error: "A lot of answers have come from your network." }),
+    );
+    const { container } = render(<ParticipantPage publicId="x" />);
+    await screen.findByRole("heading", { name: "Fall feedback" });
+    const hp = container.querySelector<HTMLInputElement>(".hp input") as HTMLInputElement;
+    expect(hp.closest("[aria-hidden=true]")).toBeTruthy();
+    expect(hp.tabIndex).toBe(-1);
+    fireEvent.change(hp, { target: { value: "http://spam.example" } });
+    choose();
+    submit();
+    expect(await screen.findByText(/from your network/)).toBeTruthy();
+    expect(JSON.parse(calls[1]?.init?.body as string).hp).toBe("http://spam.example");
   });
 });

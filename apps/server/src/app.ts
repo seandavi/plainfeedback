@@ -5,7 +5,7 @@ import { type AuthEnv, type AuthOptions, authRoutes, requireUser, sessionAuth } 
 import type { Db } from "./db";
 import { groupRoutes } from "./groups";
 import { mountDocs } from "./openapi";
-import { publicRoutes } from "./public";
+import { type PublicOptions, publicRoutes } from "./public";
 import { responseRoutes } from "./responses";
 import { surveyRoutes } from "./surveys";
 import { tokenRoutes } from "./tokens";
@@ -55,6 +55,7 @@ export type AppDeps = {
   auth?: AuthOptions; // staff auth is mounted only when configured
   db?: Db; // participant API; defaults to auth.db
   publicBaseUrl?: string; // PUBLIC_BASE_URL; defaults to the origin of auth.redirectUri
+  participant?: PublicOptions; // rate limits and bot checks on submissions
 };
 
 export const createApp = ({
@@ -63,6 +64,7 @@ export const createApp = ({
   auth,
   db = auth?.db,
   publicBaseUrl,
+  participant,
 }: AppDeps) => {
   // OpenAPIHono so routes declared with createRoute land in one registry for the spec (#18).
   const app = new OpenAPIHono<AuthEnv>({
@@ -90,7 +92,7 @@ export const createApp = ({
     }
   });
   mountDocs(app);
-  if (db) app.route("/api/v1/public", publicRoutes(db));
+  if (db) app.route("/api/v1/public", publicRoutes(db, participant));
   if (auth) {
     const session = sessionAuth(auth);
     // Participant paths never read the session, even though /api/v1/public/* receives the cookie.

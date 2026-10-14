@@ -126,7 +126,7 @@ DELETE /events/{e}/surveys/{s}/responses/{id}     owner
 
 GET    /s/{publicId}                            participant page (no cookies)
 GET    /api/v1/public/surveys/{publicId}        latest published version: model, privacy statement, status
-POST   /api/v1/public/surveys/{publicId}/responses   submit {versionId, answers} (no identifier)
+POST   /api/v1/public/surveys/{publicId}/responses   submit {versionId, answers, ticket, hp?} (no identifier)
 ```
 
 Outside your groups everything is 404; a role too low within your group is 403 ([ADR 0009](adr/0009-group-rbac-404.md)). Members must have signed in once before they can be added; invitations come later.
@@ -145,7 +145,7 @@ Participant API (#7, [ADR 0011](adr/0011-participant-page.md)):
 - `publicId` is a random 12-character id on `surveys` (returned by the staff survey GET), not the slugs.
 - GET returns `status: open | closed | not_yet_open`; closed (`closed_at`, or `closes_at` past) wins. 404 until published.
 - POST is JSON only (415 otherwise), at most 64 KB (413). Errors: 404 unknown, 429 rate limited, 410 closed, **403 not yet open**, 409 `versionId` is not the latest (client reloads), 422 `{errors: {questionId: message}}` from `validateAnswers`. Stores answers, version and `submitted_at` only.
-- Rate limit: in-memory token bucket per survey (burst 200, then 5/s), no client identity. Single process only.
+- Rate limits (ADR 0013): in-memory token buckets per survey (burst 1000, then 10/s) and per survey and client (30 per 10 min, keyed by HMAC of the IP with a daily-rotated in-memory key; never stored or logged). Bot checks: honeypot `hp` and a signed load-time `ticket` with a 3 s minimum; failures get 201 and are not stored. Single process only.
 
 ## Auth
 

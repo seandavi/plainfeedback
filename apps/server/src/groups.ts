@@ -2,7 +2,7 @@
 // Routes are declared with @hono/zod-openapi so the OpenAPI spec (#18) comes from these schemas;
 // later routes should follow this pattern: createRoute + shared `errors` + route-level middleware.
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
-import { and, asc, eq, isNotNull } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
 import { requireAdmin, requireUser, sessionOnly, type User as UserRow } from "./auth";
 import {
   type Access,
@@ -15,7 +15,7 @@ import {
   UUID,
 } from "./authz";
 import type { Db } from "./db";
-import { groups, memberships, users } from "./schema";
+import { apiTokens, groups, memberships, sessions, users } from "./schema";
 
 const ErrorSchema = z.object({ error: z.string() }).openapi("Error");
 export const err = (description: string) => ({
@@ -49,7 +49,13 @@ const Group = z
   });
 const Member = z.object({ userId: z.uuid(), email: z.string(), role: Role }).openapi("Member");
 const User = z
-  .object({ id: z.uuid(), email: z.string(), isAdmin: z.boolean(), createdAt: z.string() })
+  .object({
+    id: z.uuid(),
+    email: z.string(),
+    isAdmin: z.boolean(),
+    disabled: z.boolean(),
+    createdAt: z.string(),
+  })
   .openapi("User");
 const Name = z.string().trim().min(1).max(200);
 
@@ -303,31 +309,52 @@ export const groupRoutes = (db: Db) => {
       method: "patch",
       path: "/users/{id}",
       tags: ["users"],
-      summary: "Grant or revoke admin (admin). The last admin cannot be revoked.",
+      summary: "Grant or revoke admin, disable or enable a user (admin)",
+      description:
+        "Disabling signs the user out everywhere (sessions deleted), revokes their API tokens and " +
+        "refuses their logins until enabled again; tokens stay revoked. The last active admin " +
+        "cannot be revoked or disabled (409).",
       middleware: [requireAdmin],
       security: sessionCookieOnly,
       request: {
         params: z.object({ id: z.uuid().openapi({ param: { name: "id", in: "path" } }) }),
-        body: body(z.strictObject({ isAdmin: z.boolean() })),
+        body: body(
+          z.strictObject({ isAdmin: z.boolean().optional(), disabled: z.boolean().optional() }),
+        ),
       },
       responses: { 200: json(User), ...errors },
     }),
     async (c) => {
       const { id } = c.req.valid("param");
-      const { isAdmin } = c.req.valid("json");
+      const { isAdmin, disabled } = c.req.valid("json");
       return db.transaction(async (tx) => {
-        // Lock admin rows so two concurrent revocations cannot both pass the count.
+        // Lock active admin rows so two concurrent revocations cannot both pass the count.
         const admins = await tx
           .select({ id: users.id })
           .from(users)
-          .where(eq(users.isAdmin, true))
+          .where(and(eq(users.isAdmin, true), isNull(users.disabledAt)))
           .for("update");
-        if (!isAdmin && admins.length === 1 && admins[0]?.id === id) {
-          throw fail(409, "at least one admin is required");
+        if ((isAdmin === false || disabled) && admins.length === 1 && admins[0]?.id === id) {
+          throw fail(409, "at least one active admin is required");
         }
-        const [u] = await tx.update(users).set({ isAdmin }).where(eq(users.id, id)).returning();
-        if (!u) throw notFound();
-        return c.json(toUser(u), 200);
+        const [old] = await tx.select().from(users).where(eq(users.id, id)).for("update");
+        if (!old) throw notFound();
+        const set = {
+          ...(isAdmin !== undefined && { isAdmin }),
+          ...(disabled !== undefined &&
+            disabled !== !!old.disabledAt && { disabledAt: disabled ? new Date() : null }),
+        };
+        const [u] = Object.keys(set).length
+          ? await tx.update(users).set(set).where(eq(users.id, id)).returning()
+          : [old];
+        if (disabled) {
+          await tx.delete(sessions).where(eq(sessions.userId, id));
+          await tx
+            .update(apiTokens)
+            .set({ revokedAt: new Date() })
+            .where(and(eq(apiTokens.userId, id), isNull(apiTokens.revokedAt)));
+        }
+        return c.json(toUser(u as typeof users.$inferSelect), 200);
       });
     },
   );
@@ -341,6 +368,7 @@ const toUser = (u: typeof users.$inferSelect) => ({
   id: u.id,
   email: u.email,
   isAdmin: u.isAdmin,
+  disabled: u.disabledAt !== null,
   createdAt: u.createdAt.toISOString(),
 });
 

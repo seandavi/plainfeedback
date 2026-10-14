@@ -23,7 +23,9 @@ import { events, surveys, surveyVersions } from "./schema";
 export const DEFAULT_PRIVACY_STATEMENT =
   "This survey does not ask for your name or email address. The survey page sets no cookies and " +
   "stores nothing in your browser, and your answers are saved without your IP address or browser " +
-  "details. The time you submit is recorded to the hour only. The service hosting this page and the networks in between may keep their own " +
+  "details. IP addresses are processed transiently in memory to limit abuse and are never stored " +
+  "or logged by the application. The time you submit is recorded to the hour only. The service " +
+  "hosting this page and the networks in between may keep their own " +
   "connection logs. Free-text answers can still identify you, so leave out names and other " +
   "details if you want to stay anonymous. The survey organisers and the administrators of this " +
   "service can read individual answers.";

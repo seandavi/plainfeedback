@@ -15,6 +15,7 @@ type Choice = { pick?: string; other: string }; // pick is an option, or OTHER
 type Multi = { picks: string[]; otherOn: boolean; other: string };
 type Ui = Record<string, unknown>;
 const OTHER = "\u0000other";
+const HONEYPOT = "pf_hp_x7";
 
 /** Turns form state into the answers object validateAnswers and the server expect. */
 export function toAnswers(model: Survey, ui: Ui): Answers {
@@ -39,7 +40,7 @@ export type SurveyFormProps = {
   model: Survey;
   mode?: "live" | "preview";
   /** Resolve with per-question errors (e.g. a server 422) to show them; throw to show a message. */
-  onSubmit?: (answers: Answers) => Promise<AnswerErrors | undefined>;
+  onSubmit?: (answers: Answers, honeypot: string) => Promise<AnswerErrors | undefined>;
 };
 
 export function SurveyForm({ model, mode = "live", onSubmit }: SurveyFormProps) {
@@ -79,7 +80,8 @@ export function SurveyForm({ model, mode = "live", onSubmit }: SurveyFormProps) 
     setBusy(true);
     setMessage(undefined);
     try {
-      const server = await onSubmit(answers);
+      const hp = form.current && new FormData(form.current).get(HONEYPOT);
+      const server = await onSubmit(answers, typeof hp === "string" ? hp : "");
       if (server && Object.keys(server).length) showErrors(server);
     } catch (x) {
       setMessage(x instanceof Error ? x.message : String(x));
@@ -103,6 +105,15 @@ export function SurveyForm({ model, mode = "live", onSubmit }: SurveyFormProps) 
           }}
         />
       ))}
+      {mode === "live" && (
+        // Bot deterrent (#34): hidden from people and assistive tech; bots that fill every field
+        // fill it, and the server drops their submission. Unusual name so autofill leaves it alone.
+        <div className="hp" aria-hidden="true">
+          <label>
+            Leave this empty <input name={HONEYPOT} tabIndex={-1} autoComplete="off" />
+          </label>
+        </div>
+      )}
       {message && (
         <p role="alert" className="form-message">
           {message}

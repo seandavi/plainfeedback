@@ -6,6 +6,9 @@ export const ID_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/;
 /** Longest accepted "Other" free-text answer on choice and multi questions. */
 export const OTHER_MAXLENGTH = 500;
 export const TEXT_DEFAULT_MAXLENGTH = 2000;
+/** Bot deterrent (#34): the server drops submissions sent sooner than this after the page loaded;
+ * the participant page waits out the remainder, so a fast human is never dropped. */
+export const MIN_SUBMIT_MS = 3000;
 export const LIKERT_MAX_POINTS = 11;
 
 const base = {

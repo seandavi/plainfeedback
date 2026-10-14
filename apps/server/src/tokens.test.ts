@@ -231,3 +231,61 @@ describe("API tokens", () => {
     expect((await call(w, "GET", "/me", w.who.creator)).status).toBe(200);
   });
 });
+
+// Off-boarding (#38): disabling ends sessions and tokens at once and blocks logins (auth.test.ts).
+describe("disabling a user", () => {
+  const patch = (w: World, as: U, id: string, body: unknown) =>
+    call(w, "PATCH", `/users/${id}`, as, body);
+
+  it("deletes sessions, revokes tokens, stays revoked after enabling; admin only", async () => {
+    const w = await world();
+    const { token } = await mint(w, w.who.creator);
+    expect((await bearer(w, token, "GET", "/groups")).status).toBe(200);
+    expect((await patch(w, w.who.owner, w.who.creator.id, { disabled: true })).status).toBe(403);
+    const res = await patch(w, w.who.admin, w.who.creator.id, { disabled: true });
+    expect(await res.json()).toMatchObject({ id: w.who.creator.id, disabled: true });
+    expect((await call(w, "GET", "/me", w.who.creator)).status).toBe(401);
+    expect((await bearer(w, token, "GET", "/groups")).status).toBe(401);
+    expect(
+      await getDb().select().from(sessions).where(eq(sessions.userId, w.who.creator.id)),
+    ).toHaveLength(0);
+    const tokens = await getDb()
+      .select()
+      .from(apiTokens)
+      .where(eq(apiTokens.userId, w.who.creator.id));
+    expect(tokens.every((t) => t.revokedAt)).toBe(true);
+    const list = (await (await call(w, "GET", "/users", w.who.admin)).json()) as {
+      id: string;
+      disabled: boolean;
+    }[];
+    expect(list.find((u) => u.id === w.who.creator.id)?.disabled).toBe(true);
+
+    const enabled = await patch(w, w.who.admin, w.who.creator.id, { disabled: false });
+    expect(await enabled.json()).toMatchObject({ disabled: false });
+    expect((await bearer(w, token, "GET", "/groups")).status, "tokens stay revoked").toBe(401);
+  });
+
+  it("refuses a disabled user's token and session even before cleanup", async () => {
+    const w = await world();
+    const { token } = await mint(w, w.who.creator);
+    await getDb()
+      .update(users)
+      .set({ disabledAt: new Date() })
+      .where(eq(users.id, w.who.creator.id));
+    expect((await bearer(w, token, "GET", "/groups")).status).toBe(401);
+    expect((await call(w, "GET", "/me", w.who.creator)).status).toBe(401);
+  });
+
+  it("never disables or demotes the last active admin", async () => {
+    const w = await world();
+    await getDb().update(users).set({ isAdmin: false });
+    await getDb().update(users).set({ isAdmin: true }).where(eq(users.id, w.who.admin.id));
+    expect((await patch(w, w.who.admin, w.who.admin.id, { disabled: true })).status).toBe(409);
+    expect((await patch(w, w.who.admin, w.target.id, { isAdmin: true })).status).toBe(200);
+    expect((await patch(w, w.who.admin, w.target.id, { disabled: true })).status).toBe(200);
+    // A disabled admin does not count: who.admin is still the only active one.
+    expect((await patch(w, w.who.admin, w.who.admin.id, { isAdmin: false })).status).toBe(409);
+    expect((await patch(w, w.who.admin, w.who.admin.id, { disabled: true })).status).toBe(409);
+    expect((await call(w, "GET", "/me", w.who.admin)).status).toBe(200);
+  });
+});

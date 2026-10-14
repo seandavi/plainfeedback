@@ -59,6 +59,10 @@
               "closed",
               "not_yet_open"
             ]
+          },
+          "ticket": {
+            "type": "string",
+            "description": "Signed load time; send it back with the answers"
           }
         },
         "required": [
@@ -66,7 +70,8 @@
           "title",
           "intro",
           "privacyStatement",
-          "status"
+          "status",
+          "ticket"
         ]
       },
       "Error": {
@@ -108,11 +113,22 @@
           "answers": {
             "type": "object",
             "additionalProperties": {}
+          },
+          "ticket": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "`ticket` from the GET, unchanged"
+          },
+          "hp": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "Must be empty or absent"
           }
         },
         "required": [
           "versionId",
-          "answers"
+          "answers",
+          "ticket"
         ]
       },
       "Group": {
@@ -185,6 +201,9 @@
           "isAdmin": {
             "type": "boolean"
           },
+          "disabled": {
+            "type": "boolean"
+          },
           "createdAt": {
             "type": "string"
           }
@@ -193,6 +212,7 @@
           "id",
           "email",
           "isAdmin",
+          "disabled",
           "createdAt"
         ]
       },
@@ -606,7 +626,7 @@
         ],
         "security": [],
         "summary": "Submit answers (no identifier is stored)",
-        "description": "403: not open yet. 409: versionId is not the latest version (reload). 410: closed. 413: body over 65536 bytes. 429: too many responses to this survey right now.",
+        "description": "403: not open yet. 409: versionId is not the latest version, or the ticket is invalid (reload). 410: closed. 413: body over 65536 bytes. 429: too many responses to this survey right now, from everyone or from one network. Submissions with a non-empty `hp`, or sent less than 3s after the ticket was issued, get 201 and are not stored.",
         "parameters": [
           {
             "schema": {
@@ -680,7 +700,7 @@
             }
           },
           "409": {
-            "description": "Not the latest version; reload the survey",
+            "description": "Not the latest version, or an invalid ticket; reload the survey",
             "content": {
               "application/json": {
                 "schema": {
@@ -1549,7 +1569,8 @@
         "tags": [
           "users"
         ],
-        "summary": "Grant or revoke admin (admin). The last admin cannot be revoked.",
+        "summary": "Grant or revoke admin, disable or enable a user (admin)",
+        "description": "Disabling signs the user out everywhere (sessions deleted), revokes their API tokens and refuses their logins until enabled again; tokens stay revoked. The last active admin cannot be revoked or disabled (409).",
         "security": [
           {
             "sessionCookie": []
@@ -1575,11 +1596,11 @@
                 "properties": {
                   "isAdmin": {
                     "type": "boolean"
+                  },
+                  "disabled": {
+                    "type": "boolean"
                   }
                 },
-                "required": [
-                  "isAdmin"
-                ],
                 "additionalProperties": false
               }
             }

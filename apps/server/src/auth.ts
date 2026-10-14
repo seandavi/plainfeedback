@@ -22,8 +22,12 @@ export type AuthOptions = {
   allowedDomains: string[]; // lowercase; empty = any
   adminEmails: string[]; // lowercase
   cookieSecure: boolean;
-  sessionTtlMs: number;
+  sessionTtlMs: number; // absolute lifetime
+  sessionIdleMs?: number; // ends after this long without a request; default 2 h
 };
+const DEFAULT_IDLE_MS = 2 * 3600_000;
+// Google issues both forms (https://developers.google.com/identity/openid-connect/openid-connect).
+const GOOGLE_ISSUERS = new Set(["https://accounts.google.com", "accounts.google.com"]);
 
 // Session cookie lives only under /api/v1 (staff API, incl. /api/v1/auth). Browsers never send it
 // to /s/*; /api/v1/public/* gets it but sessionAuth skips those paths and participantGuard strips Set-Cookie.
@@ -44,7 +48,7 @@ export const discover = (issuer: string, clientId: string, clientSecret: string)
   };
 };
 
-const b64u = (b: Uint8Array) =>
+export const b64u = (b: Uint8Array) =>
   btoa(String.fromCharCode(...b))
     .replaceAll("+", "-")
     .replaceAll("/", "_")
@@ -58,7 +62,8 @@ export const hashApiToken = hashSessionId;
 const BEARER = /^bearer (pf_[A-Za-z0-9_-]{43})$/i;
 const HOUR = 3600_000;
 
-// Valid = not revoked, not expired, and the user still exists and is a member of the token's group.
+// Valid = not revoked, not expired, and the user still exists, is not disabled and is a member of
+// the token's group.
 const bearerUser = async (db: Db, header: string): Promise<User | undefined> => {
   const token = BEARER.exec(header)?.[1];
   if (!token) return undefined;
@@ -76,6 +81,7 @@ const bearerUser = async (db: Db, header: string): Promise<User | undefined> => 
         eq(apiTokens.tokenHash, await hashApiToken(token)),
         isNull(apiTokens.revokedAt),
         gt(apiTokens.expiresAt, now),
+        isNull(users.disabledAt),
       ),
     );
   if (!row || row.t.role === "owner") return undefined;
@@ -93,8 +99,15 @@ const UNSAFE = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 // Resolves the staff user from the session cookie. createApp never runs it on participant paths.
 // CSRF: cookie-authenticated unsafe requests must carry Origin == the app's origin (plus SameSite=Lax).
+// Sessions (#38): expires_at slides to min(created_at + absolute lifetime, last use + idle timeout),
+// so one comparison enforces both. Rows of disabled users are deleted when they are disabled.
 export const sessionAuth =
-  ({ db, redirectUri }: AuthOptions): MiddlewareHandler<AuthEnv> =>
+  ({
+    db,
+    redirectUri,
+    sessionTtlMs,
+    sessionIdleMs = DEFAULT_IDLE_MS,
+  }: AuthOptions): MiddlewareHandler<AuthEnv> =>
   async (c, next) => {
     // API tokens (#11): requests with Authorization never use the cookie, so they need no CSRF
     // check. A bad or dead token is 401 rather than a silent fall-through to anonymous.
@@ -110,10 +123,12 @@ export const sessionAuth =
     const idHash = await hashSessionId(sid);
     const now = new Date();
     const [row] = await db
-      .select({ user: users })
+      .select({ user: users, s: sessions })
       .from(sessions)
       .innerJoin(users, eq(users.id, sessions.userId))
-      .where(and(eq(sessions.idHash, idHash), gt(sessions.expiresAt, now)));
+      .where(
+        and(eq(sessions.idHash, idHash), gt(sessions.expiresAt, now), isNull(users.disabledAt)),
+      );
     if (!row) {
       await db
         .delete(sessions)
@@ -122,6 +137,17 @@ export const sessionAuth =
     }
     if (UNSAFE.has(c.req.method) && c.req.header("origin") !== new URL(redirectUri).origin) {
       return c.json({ error: "cross-origin request rejected" }, 403);
+    }
+    const slid = Math.min(
+      row.s.createdAt.getTime() + sessionTtlMs,
+      now.getTime() + Math.min(sessionIdleMs, sessionTtlMs),
+    );
+    // ponytail: written at most once a minute, so idle time is accurate to a minute.
+    if (slid - row.s.expiresAt.getTime() > 60_000) {
+      await db
+        .update(sessions)
+        .set({ expiresAt: new Date(slid) })
+        .where(eq(sessions.idHash, idHash));
     }
     c.set("user", row.user);
     return next();
@@ -214,6 +240,23 @@ export const authRoutes = (opts: AuthOptions) => {
     if (opts.allowedDomains.length && !opts.allowedDomains.includes(domain)) {
       return c.json({ error: "email domain not allowed" }, 403);
     }
+    // #35: a consumer Google account can be registered on any address, e.g. alice@example.org,
+    // and outlives Alice leaving. Only `hd` says the Workspace for that domain controls the account.
+    // Other issuers have no standard equivalent; their email check is all there is (deploy-auth.md).
+    const hd = typeof claims.hd === "string" ? claims.hd.toLowerCase() : undefined;
+    if (
+      opts.allowedDomains.length &&
+      GOOGLE_ISSUERS.has(claims.iss) &&
+      !(hd && opts.allowedDomains.includes(hd))
+    ) {
+      return c.json({ error: "sign in with your organisation's Google Workspace account" }, 403);
+    }
+    // Before the upsert, so a stale ADMIN_EMAILS entry cannot promote a disabled account.
+    const [known] = await db
+      .select({ disabledAt: users.disabledAt })
+      .from(users)
+      .where(and(eq(users.oidcIssuer, claims.iss), eq(users.oidcSubject, claims.sub)));
+    if (known?.disabledAt) return c.json({ error: "this account is disabled" }, 403);
     const admin = opts.adminEmails.includes(email); // bootstrap: promote only, never demote
     const [user] = await db
       .insert(users)
@@ -223,11 +266,16 @@ export const authRoutes = (opts: AuthOptions) => {
         set: admin ? { email, isAdmin: true } : { email },
       })
       .returning();
+    if ((user as User).disabledAt) return c.json({ error: "this account is disabled" }, 403);
+    // ponytail: expired sessions are purged at each login, not on a timer; enough at staff scale.
+    await db.delete(sessions).where(lte(sessions.expiresAt, new Date()));
     const sid = b64u(crypto.getRandomValues(new Uint8Array(32)));
     await db.insert(sessions).values({
       idHash: await hashSessionId(sid),
       userId: (user as User).id,
-      expiresAt: new Date(Date.now() + opts.sessionTtlMs),
+      expiresAt: new Date(
+        Date.now() + Math.min(opts.sessionIdleMs ?? DEFAULT_IDLE_MS, opts.sessionTtlMs),
+      ),
     });
     setCookie(c, SESSION_COOKIE, sid, {
       path: SESSION_PATH,
