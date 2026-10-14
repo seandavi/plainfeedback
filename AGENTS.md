@@ -10,6 +10,7 @@ Read `docs/design.md` and `docs/adr/` first. ADRs are inputs, not constraints: i
 ## Stack and tooling
 - TypeScript, pnpm workspaces (`packages/core`, `apps/server`, `apps/web`), Node LTS; Hono, Drizzle, Postgres, Vite + React, zod, vitest, Biome; `just` as task runner (not make); Docker Compose for deployment. See ADR 0007.
 - Keep logic that must behave identically on client and server in `packages/core` (no I/O).
+- DB: schema in `apps/server/src/schema`; `just migration-generate <name>` then `just migrate` (explicit, not on app start). Tests need `DATABASE_URL` pointing at a real Postgres (`DB_PORT=... just up db` if 5432 is taken).
 - Secrets: GCP Secret Manager (project `cdsci-infra`) in production, `.env` locally. Never commit or print secrets. Single `DATABASE_URL` (postgresql://).
 
 ## Invariants (tests must cover these)

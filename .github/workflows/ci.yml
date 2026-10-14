@@ -7,6 +7,19 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: plainfeedback
+          POSTGRES_PASSWORD: plainfeedback-dev-only
+          POSTGRES_DB: plainfeedback
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U plainfeedback" --health-interval 5s
+          --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://plainfeedback:plainfeedback-dev-only@localhost:5432/plainfeedback
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
