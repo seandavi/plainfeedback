@@ -30,13 +30,15 @@ Survey submissions are limited twice, in memory, per process ([#34](https://gith
 | Variable | Default | Meaning |
 |---|---|---|
 | `RATE_LIMIT_SURVEY_BURST`, `RATE_LIMIT_SURVEY_PER_SECOND` | `1000`, `10` | Everyone answering one survey, together. |
-| `RATE_LIMIT_CLIENT_MAX`, `RATE_LIMIT_CLIENT_WINDOW_MINUTES` | `30`, `10` | One client address (IPv6: its /64) per survey. Attendees on one conference Wi-Fi share an address, so keep this generous; raise it for a large event on one network. |
+| `RATE_LIMIT_CLIENT_MAX`, `RATE_LIMIT_CLIENT_WINDOW_MINUTES` | `300`, `10` | One client address (IPv6: its /64) per survey. Attendees on one conference Wi-Fi share an address; see sizing below. |
 
-People who hit the client limit see "A lot of answers have come from your network in the last few minutes... please wait a few minutes", and their answers stay on the page.
+Both limits answer 429 with `Retry-After`. The participant page waits and resends by itself when the wait is 30 s or less; otherwise people see "A lot of answers have come from your network in the last few minutes... please wait a moment and submit again", and their answers stay on the page. Each page load also gets a ticket that stores one response and expires after 24 h ([ADR 0014](adr/0014-single-use-tickets-and-crowd-sized-limit.md)).
+
+**Sizing `RATE_LIMIT_CLIENT_MAX`.** Set it to at least the number of people who may answer from one network within 10 minutes: at a closing-slide QR code that is most of the room. The default 300 covers a room of about 300 on one Wi-Fi; for 500, set 500 or more. The limit refills steadily (300 per 10 min is one every 2 s), so a larger crowd is slowed, not shut out. A higher limit also lets one script add more responses ([threat model](threat-model.md), row 1); single-use tickets make it load the page for every response but do not stop it.
 
 Where the client address comes from, `TRUST_PROXY`:
 
-- unset: the TCP peer. Use this only when the app is reachable directly. If the peer is a loopback or private address (a proxy on the same host or network), the per-client limit is skipped, because every participant would share that address.
+- unset: the TCP peer. Use this only when the app is reachable directly. If the peer is a loopback or private address (a proxy on the same host or network), the per-client limit is skipped, because every participant would share that address; the app logs one warning (without the address) the first time this happens.
 - `x-forwarded-for`: the **rightmost** entry, which is the one your proxy added. Entries to its left are whatever the client sent. Make the proxy overwrite or append the header (nginx: `proxy_set_header X-Forwarded-For $remote_addr;`; Caddy and Traefik do it by default), and keep the app unreachable except through the proxy (compose binds it to `127.0.0.1`).
 - `cf-connecting-ip`: Cloudflare's header. Use it when Cloudflare is in front of your proxy (with Cloudflare plus a proxy, the rightmost `X-Forwarded-For` entry is a Cloudflare edge address). Only safe if the origin accepts traffic from Cloudflare alone; otherwise anyone can send the header.
 
@@ -100,7 +102,8 @@ feedback.example.org {
 log_format pf_noip '$time_iso8601 "$request_method $uri" $status $body_bytes_sent $request_time';
 
 # Optional per-IP limit for participant requests. The key lives only in shared memory, never in a log.
-limit_req_zone $binary_remote_addr zone=pf_submit:10m rate=30r/m;
+# Each response is a GET and a POST; size it like RATE_LIMIT_CLIENT_MAX (a conference shares one IP).
+limit_req_zone $binary_remote_addr zone=pf_submit:10m rate=120r/m;
 
 server {
     listen 80;
@@ -135,7 +138,7 @@ server {
     location /assets/ { access_log off; proxy_pass http://127.0.0.1:3000; }
     location /api/v1/public/ {
         access_log off;
-        limit_req zone=pf_submit burst=10 nodelay;
+        limit_req zone=pf_submit burst=600 nodelay;
         limit_req_status 429;
         limit_req_log_level info;   # rejected requests are logged to error_log with the IP; crit hides them
         proxy_pass http://127.0.0.1:3000;

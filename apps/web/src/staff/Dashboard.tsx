@@ -8,7 +8,13 @@ const LABEL = { draft: "draft", not_yet_open: "not yet open", open: "open", clos
 export const surveyStatus = (s: SurveySummary, now = new Date()) =>
   LABEL[coreStatus({ published: s.latestVersion !== null, closedAt: s.closed, ...s }, now)];
 
-type Row = { slug: string; event: string; eventTitle: string; survey: SurveySummary };
+type Row = {
+  slug: string;
+  event: string;
+  eventTitle: string;
+  startsOn: string | null;
+  survey: SurveySummary;
+};
 
 async function load(groups: Group[]) {
   // ponytail: one request per event (N+1); fine up to a few dozen events per group, then add a
@@ -23,6 +29,7 @@ async function load(groups: Group[]) {
             slug: e.slug,
             event: e.id,
             eventTitle: e.title,
+            startsOn: e.startsOn,
             survey,
           })),
         ),
@@ -80,6 +87,7 @@ export function Dashboard() {
                       <tr key={`${r.event}/${r.survey.slug}`}>
                         <td>
                           <Link href={paths.event(g.id, r.slug)}>{r.eventTitle}</Link>
+                          {r.startsOn && <span className="meta"> {r.startsOn}</span>}
                         </td>
                         <th scope="row">
                           <Link href={paths.survey(g.id, r.slug, r.survey.slug)}>
