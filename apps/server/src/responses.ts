@@ -360,7 +360,8 @@ export const responseRoutes = (db: Db, log: (line: string) => void = () => {}) =
           type: q.type,
           prompt: q.prompt,
           required: q.required,
-          freeText: q.type === "text",
+          // Can hold respondent-written text: a text answer, or Other text in `<id>_other` (#75).
+          freeText: q.type === "text" || ("other" in q && q.other !== undefined),
           ...(q.type === "choice" || q.type === "multi"
             ? { options: q.options, other: q.other ?? null }
             : {}),

@@ -343,6 +343,8 @@ describe("codebook", () => {
     expect(q("ratings").scale).toEqual({ min: 1, max: 5 });
     expect(q("ratings").anchors).toMatchObject({ low: "Bad", high: "Good" });
     expect(q("comment").freeText).toBe(true);
+    expect(q("affiliation").freeText).toBe(true); // Other text (#75)
+    expect(q("age").freeText).toBe(false);
     expect(q("tools").other).toBe("Else");
     // biome-ignore lint/suspicious/noExplicitAny: response JSON
     const names = cb.csvColumns.map((c: any) => c.name);

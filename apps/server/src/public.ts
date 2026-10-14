@@ -5,6 +5,7 @@ import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import {
   MIN_SUBMIT_MS,
   type Survey as Model,
+  normalizeAnswers,
   surveyStatus,
   validateAnswers,
 } from "@plainfeedback/core";
@@ -265,10 +266,11 @@ export const publicRoutes = (db: Db, opts: PublicOptions = {}) => {
       if (status === "closed") return error(c, 410, "this survey is closed");
       if (status === "not_yet_open") return error(c, 403, "this survey is not open yet");
       if (versionId !== row.v.id) return error(c, 409, "the survey has changed; reload it");
-      const errors = validateAnswers(row.v.model as Model, answers);
+      const clean = normalizeAnswers(answers);
+      const errors = validateAnswers(row.v.model as Model, clean);
       if (Object.keys(errors).length)
         return c.json({ error: "invalid answers", errors: { ...errors } }, 422);
-      await db.insert(responses).values({ surveyVersionId: row.v.id, answers });
+      await db.insert(responses).values({ surveyVersionId: row.v.id, answers: clean });
       return c.json({ ok: true as const }, 201);
     },
   );

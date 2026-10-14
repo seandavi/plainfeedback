@@ -257,7 +257,9 @@ rendering. Errors are `{ line, column?, message }` with 1-based lines.
 
 A response is an object keyed by question id. `validateAnswers(model, answers)`
 returns `{ [questionId]: message }`, empty when valid. The browser and server
-use the same function.
+use the same function. The server first applies `normalizeAnswers` (trim
+strings, drop unrated Likert statements and empty answers), then validates and
+stores the normalised object.
 
 | Type | Answer |
 |---|---|
