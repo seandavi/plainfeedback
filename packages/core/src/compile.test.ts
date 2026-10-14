@@ -234,6 +234,10 @@ describe("errors carry line numbers", () => {
     ]);
   });
 
+  test("a prompt line starting with a dash is still prompt text", () => {
+    expect(errorsOf("# T\n::: {.text #a}\nComments?\n— optional\n:::\n")).toEqual([]);
+  });
+
   test("curly quotes inside straight-quoted values and in prose are fine", () => {
     const { model } = compile(
       '# “T”\n\nIt’s short.\n\n::: {.likert #a low="He said “hi”"}\nHow’s it?\n- s\n:::\n',

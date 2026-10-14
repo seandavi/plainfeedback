@@ -31,7 +31,7 @@ const LIST_ITEM = /^ {0,3}(?:[-*+]|\d+[.)])\s+(.*)$/;
 const CURLY = /[‘’“”]/;
 const CURLY_MESSAGE =
   'Curly quotes (“ ” ‘ ’) can\'t be used around settings; they often come from pasting out of Word or Google Docs. Use straight quotes, like low="Not at all".';
-const PASTED_BULLET = /^\s*[•◦▪–—]\s*/;
+const PASTED_BULLET = /^\s*[•◦▪]\s+/; // not dashes: "— optional" is fine prompt text
 const ATTR =
   /\s*(?:\.([\w-]+)|#(\S*?)(?=\s|$)|([\w-]+)(?![\w-])(?:=(?:"([^"]*)"|'([^']*)'|([^\s"']+))|(?!=)))\s*/y;
 
