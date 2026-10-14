@@ -1,5 +1,6 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import type { MiddlewareHandler } from "hono";
+import { HTTPException } from "hono/http-exception";
 import { type AuthEnv, type AuthOptions, authRoutes, requireUser, sessionAuth } from "./auth";
 import type { Db } from "./db";
 import { groupRoutes } from "./groups";
@@ -15,7 +16,10 @@ export const isParticipantPath = (p: string) =>
 
 export const participantGuard: MiddlewareHandler = async (c, next) => {
   await next();
+  c.res.headers.set("X-Content-Type-Options", "nosniff"); // every response, staff exports included
   if (!isParticipantPath(c.req.path)) return;
+  // Otherwise the page's own /assets/* requests carry Referer: /s/{publicId} into proxy logs.
+  c.res.headers.set("Referrer-Policy", "no-referrer");
   // Mutate in place: Hono's `c.res =` setter merges old headers back (re-adding Set-Cookie).
   // ponytail: throws (500, no leak) if a handler returns an immutable Response, e.g. a raw fetch().
   c.res.headers.delete("Set-Cookie");
@@ -56,6 +60,14 @@ export const createApp = ({
       if (!result.success)
         return c.json({ error: "invalid request", issues: result.error.issues }, 400);
     },
+  });
+  // Hono's default handler console.errors the whole error, and a failed query's message carries its
+  // parameters (e.g. a participant's answers), so log only the error class and SQLSTATE.
+  app.onError((err, c) => {
+    if (err instanceof HTTPException) return err.getResponse();
+    const code = (err.cause as { code?: unknown } | undefined)?.code;
+    log(JSON.stringify({ error: err.name, ...(typeof code === "string" ? { code } : {}) }));
+    return c.json({ error: "internal error" }, 500);
   });
   app.use(accessLog(log));
   app.use(participantGuard);

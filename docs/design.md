@@ -155,6 +155,8 @@ OIDC (authorization code + PKCE, `openid-client`), configured by issuer, client 
 
 Permission tests (cross-group access, token handling, viewer rights) come first, then a threat model and a second review of auth before real data. The participant endpoint needs coarse rate limiting without IP logging.
 
+Threat model and residual risks: [`threat-model.md`](threat-model.md). Privacy statement template for authors: [`privacy-statement-template.md`](privacy-statement-template.md). Reverse proxy, CDN, backups and retention: [`deploy.md`](deploy.md). The independent auth review is #33.
+
 ## Open questions
 
 1. When (if ever) to add tokens/email for within-person linking.

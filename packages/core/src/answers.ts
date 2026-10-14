@@ -42,6 +42,8 @@ function checkOption(q: { options: string[]; other?: string }, v: unknown): stri
 }
 
 function check(q: Question, v: unknown): string | undefined {
+  // Postgres jsonb cannot store U+0000; reject it here instead of failing the insert.
+  if (JSON.stringify(v).includes("\\u0000")) return "Remove the unsupported character.";
   switch (q.type) {
     case "choice":
       return checkOption(q, v);
