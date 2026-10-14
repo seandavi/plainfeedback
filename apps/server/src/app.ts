@@ -14,10 +14,20 @@ import { tokenRoutes } from "./tokens";
 export const isParticipantPath = (p: string) =>
   p.startsWith("/s/") || p.startsWith("/api/v1/public/");
 
+const STAFF_CSP =
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
+
 export const participantGuard: MiddlewareHandler = async (c, next) => {
   await next();
   c.res.headers.set("X-Content-Type-Options", "nosniff"); // every response, staff exports included
-  if (!isParticipantPath(c.req.path)) return;
+  c.res.headers.set("X-Frame-Options", "DENY"); // legacy twin of frame-ancestors 'none'
+  if (!isParticipantPath(c.req.path)) {
+    // Staff SPA, API docs and JSON: a second layer if respondent text ever reaches the DOM as HTML.
+    // style-src 'unsafe-inline' (styles only, never scripts) because CodeMirror injects <style>
+    // tags and Swagger UI uses style attributes; neither supports nonces for these.
+    c.res.headers.set("Content-Security-Policy", STAFF_CSP);
+    return;
+  }
   // Otherwise the page's own /assets/* requests carry Referer: /s/{publicId} into proxy logs.
   c.res.headers.set("Referrer-Policy", "no-referrer");
   // Mutate in place: Hono's `c.res =` setter merges old headers back (re-adding Set-Cookie).
