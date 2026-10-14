@@ -264,6 +264,8 @@ export const groupRoutes = (db: Db) => {
       path: "/groups/{g}/members/{user}",
       tags: ["groups"],
       summary: "Remove a member (owner)",
+      description:
+        "Also revokes the member's API tokens for this group; re-adding them does not revive those tokens.",
       middleware: [sessionOnly, owner],
       security: sessionCookieOnly,
       request: { params: MemberParams },
@@ -283,6 +285,17 @@ export const groupRoutes = (db: Db) => {
           .where(and(eq(memberships.groupId, groupId), eq(memberships.userId, u.id)))
           .returning({ id: memberships.id });
         if (!gone.length) throw notFound();
+        // Revoke, not just hide: bearerUser's membership join would revive them on re-add (#57).
+        await tx
+          .update(apiTokens)
+          .set({ revokedAt: new Date() })
+          .where(
+            and(
+              eq(apiTokens.userId, u.id),
+              eq(apiTokens.groupId, groupId),
+              isNull(apiTokens.revokedAt),
+            ),
+          );
         return c.body(null, 204);
       });
     },
