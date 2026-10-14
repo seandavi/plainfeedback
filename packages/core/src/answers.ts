@@ -15,11 +15,15 @@ export function validateAnswers(model: Survey, answers: Answers): AnswerErrors {
     if (!ids.has(key)) errors[key] = "This is not a question in this survey.";
   for (const q of questions) {
     const value = Object.hasOwn(answers, q.id) ? answers[q.id] : undefined;
-    const message = isEmpty(value)
-      ? q.required
-        ? "This question is required."
-        : undefined
-      : check(q, value);
+    const message = otherBlank(q, value)
+      ? `Please describe "${(q as { other: string }).other}", or pick another option.`
+      : isEmpty(value)
+        ? q.required
+          ? q.type === "likert"
+            ? unrated(q, {})
+            : "This question is required."
+          : undefined
+        : check(q, value);
     if (message) errors[q.id] = message;
   }
   return errors;
@@ -31,6 +35,23 @@ function isEmpty(v: unknown): boolean {
   if (Array.isArray(v)) return v.length === 0;
   if (typeof v === "object") return Object.keys(v).length === 0;
   return false;
+}
+
+// With an Other box, a blank string means "Other" was picked and left empty (SurveyForm sends it so).
+function otherBlank(q: Question, v: unknown): boolean {
+  if ((q.type !== "choice" && q.type !== "multi") || q.other === undefined) return false;
+  const blank = (x: unknown) => typeof x === "string" && x.trim() === "";
+  return q.type === "choice" ? blank(v) : Array.isArray(v) && v.some(blank);
+}
+
+/** Names the unrated statements of a required grid: count, then up to three, plain text. */
+function unrated(q: Extract<Question, { type: "likert" }>, v: object): string {
+  const names = q.statements
+    .filter((_, i) => typeof Object.getOwnPropertyDescriptor(v, i + 1)?.value !== "number")
+    .map((s) => s.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[*_`]/g, ""));
+  const shown = names.slice(0, 3).join("; ");
+  const more = names.length > 3 ? ` and ${names.length - 3} more` : "";
+  return `Please rate every statement (${names.length} not rated: ${shown}${more}).`;
 }
 
 function checkOption(q: { options: string[]; other?: string }, v: unknown): string | undefined {
@@ -74,7 +95,7 @@ function check(q: Question, v: unknown): string | undefined {
           (_, i) => typeof Object.getOwnPropertyDescriptor(v, i + 1)?.value !== "number",
         )
       )
-        return "Please rate every statement.";
+        return unrated(q, v);
       return;
     }
     case "text":

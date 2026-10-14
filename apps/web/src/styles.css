@@ -4,7 +4,8 @@
   --fg: #1a1a1a;
   --bg: #fff;
   --muted: #555;
-  --line: #ccc;
+  --line: #ccc; /* decorative dividers only */
+  --control-border: #767676; /* inputs and buttons: >= 3:1 on --bg (WCAG 1.4.11, #71) */
   --accent: #0b57d0;
   --error: #b3261e;
   --panel: #f3f4f6;
@@ -18,6 +19,7 @@
     --bg: #121212;
     --muted: #aaa;
     --line: #444;
+    --control-border: #8a8a8a;
     --accent: #8ab4f8;
     --error: #f2b8b5;
     --panel: #1e1f22;
@@ -88,7 +90,7 @@ textarea {
   width: 100%;
   font: inherit;
   padding: 0.5rem;
-  border: 1px solid var(--line);
+  border: 1px solid var(--control-border);
   border-radius: 4px;
   background: var(--bg);
   color: var(--fg);
@@ -127,17 +129,46 @@ input.other {
   padding: 0.75rem 0;
   min-width: 0;
 }
+.statement.unrated {
+  border-left: 4px solid var(--error);
+  padding-left: 0.5rem;
+}
+.not-rated {
+  color: var(--error);
+  font-weight: 600;
+}
+.ends {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+  margin: 0;
+}
+.ends span:last-child {
+  text-align: right;
+}
+.limit {
+  display: block;
+  color: var(--error);
+  font-size: 0.875rem;
+}
+.limit:empty {
+  display: none;
+}
 .statement legend {
   padding: 0;
   margin-bottom: 0.4rem;
 }
+/* One line at any text size (#66): equal columns, never wrapping. Each label is the tap target. */
 .scale {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   gap: 0.25rem;
 }
 .scale label {
-  flex: 1 0 2.75rem;
+  min-height: 44px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -218,7 +249,7 @@ a.button {
   font: inherit;
   min-height: 2.75rem;
   padding: 0.4rem 0.9rem;
-  border: 1px solid var(--line);
+  border: 1px solid var(--control-border);
   border-radius: 6px;
   background: var(--bg);
   color: var(--fg);
@@ -278,7 +309,7 @@ a.button {
   width: 100%;
   font: inherit;
   padding: 0.5rem;
-  border: 1px solid var(--line);
+  border: 1px solid var(--control-border);
   border-radius: 4px;
   background: var(--bg);
   color: var(--fg);
@@ -308,7 +339,7 @@ a.button {
   margin: 0 0 0.5rem;
 }
 .code {
-  border: 1px solid var(--line);
+  border: 1px solid var(--control-border);
   border-radius: 4px;
   min-height: 20rem;
   max-height: 75vh;

@@ -27,14 +27,15 @@ export function ParticipantPage({ publicId }: { publicId: string }) {
   const [state, setState] = useState<State>({ kind: "loading" });
   const [notice, setNotice] = useState<string>();
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (): Promise<Loaded | undefined> => {
     try {
       const res = await fetch(url, { credentials: "omit" });
-      if (res.status === 404) return setState({ kind: "missing" });
-      if (!res.ok) return setState({ kind: "failed" });
+      if (res.status === 404) return void setState({ kind: "missing" });
+      if (!res.ok) return void setState({ kind: "failed" });
       const survey = { ...(await res.json()), loadedAt: Date.now() } as Loaded;
       document.title = survey.title;
       setState({ kind: "ready", survey });
+      return survey;
     } catch {
       setState({ kind: "failed" });
     }
@@ -95,9 +96,14 @@ export function ParticipantPage({ publicId }: { publicId: string }) {
     }
     if (res.status === 422) return ((await res.json()) as { errors: AnswerErrors }).errors;
     if (res.status === 409 || res.status === 410 || res.status === 403) {
-      await load(); // newer version, or the survey closed: show what is live now
+      const now = await load(); // newer version, or the survey closed: show what is live now
+      // 409 with the same version means our ticket expired (#77); the reload issued a fresh one.
       if (res.status === 409)
-        setNotice("This survey was just updated. Please check your answers and submit again.");
+        setNotice(
+          now?.versionId === s.versionId
+            ? "This page had expired, so we refreshed it. Your answers are still here; please submit again."
+            : "This survey was just updated. Please check your answers and submit again.",
+        );
       return;
     }
     if (res.status === 429) {
@@ -112,13 +118,14 @@ export function ParticipantPage({ publicId }: { publicId: string }) {
   return (
     <main>
       <h1>{s.title}</h1>
-      {s.intro && <Markdown text={s.intro} />}
-      <details className="privacy" open>
-        <summary>Privacy</summary>
-        <Markdown text={s.privacyStatement} />
-      </details>
+      {/* Status first and privacy collapsed, so the notice or the first question is in view (#65). */}
       {s.status === "closed" && <p role="status">This survey is closed.</p>}
       {s.status === "not_yet_open" && <p role="status">This survey is not open yet.</p>}
+      {s.intro && <Markdown text={s.intro} />}
+      <details className="privacy">
+        <summary>Privacy: what is stored and who can read your answers</summary>
+        <Markdown text={s.privacyStatement} />
+      </details>
       {s.status === "open" && (
         <>
           {notice && (

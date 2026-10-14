@@ -3,4 +3,5 @@ export const APP_NAME = "plainfeedback";
 export * from "./answers";
 export * from "./compile";
 export * from "./model";
+export * from "./privacy";
 export * from "./status";

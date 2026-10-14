@@ -1,12 +1,12 @@
 {
   "title": "2026 Fall Meeting Feedback",
-  "intro": "We want to hear your feedback so we can keep improving our logistics and content.\nPlease fill this quick survey and let us know your thoughts (your answers will be\nanonymous). As a reminder, the agenda is [here](https://example.org/agenda).",
+  "intro": "We want to hear your feedback so we can keep improving our logistics and content.\nPlease fill this quick survey and let us know your thoughts (we do not ask for your\nname or email). As a reminder, the agenda is [here](https://example.org/agenda).",
   "pages": [
     {
       "questions": [
         {
           "id": "affiliation",
-          "prompt": "Please specify any CFDE affiliation(s).",
+          "prompt": "What is your main CFDE affiliation?",
           "required": true,
           "type": "choice",
           "options": [

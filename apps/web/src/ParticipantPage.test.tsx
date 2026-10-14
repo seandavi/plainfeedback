@@ -61,8 +61,8 @@ describe("ParticipantPage", () => {
     const calls = serve(json(200, survey()), json(201, { ok: true }));
     render(<ParticipantPage publicId="abc123def456" />);
     expect(await screen.findByRole("heading", { name: "Fall feedback" })).toBeTruthy();
-    const privacy = screen.getByText("Privacy").closest("details");
-    expect(privacy?.open).toBe(true);
+    const privacy = screen.getByText(/^Privacy:/).closest("details");
+    expect(privacy?.open).toBe(false); // collapsed so the first question is in view (#65)
     expect(privacy?.querySelector("strong")?.textContent).toBe("no");
     choose();
     submit();
@@ -93,7 +93,8 @@ describe("ParticipantPage", () => {
     cleanup();
     serve(json(200, survey({ status: "closed" })));
     render(<ParticipantPage publicId="x" />);
-    expect(await screen.findByText("This survey is closed.")).toBeTruthy();
+    const closed = await screen.findByText("This survey is closed.");
+    expect(closed.previousElementSibling?.tagName).toBe("H1"); // right under the title (#65)
     expect(screen.queryByRole("button")).toBeNull();
     cleanup();
     serve(json(200, survey({ status: "not_yet_open" })));
@@ -116,6 +117,20 @@ describe("ParticipantPage", () => {
     submit();
     expect(await screen.findByText(/Thank you/)).toBeTruthy();
     expect(JSON.parse(calls[3]?.init?.body as string).versionId).toBe("v2");
+  });
+
+  it("says the page expired when a 409 reload returns the same version (#77)", async () => {
+    serve(
+      json(200, survey()),
+      json(409, { error: "expired" }),
+      json(200, survey({ ticket: "t2" })),
+    );
+    render(<ParticipantPage publicId="x" />);
+    await screen.findByRole("heading", { name: "Fall feedback" });
+    choose();
+    submit();
+    expect(await screen.findByText(/page had expired/)).toBeTruthy();
+    expect(screen.queryByText(/was just updated/)).toBeNull();
   });
 
   it("maps server 422 errors back to questions and shows 410 as closed", async () => {

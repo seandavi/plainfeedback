@@ -2,7 +2,7 @@
 // groups.ts. {g} is a group id, {e} is an event id under /events and a slug under /groups/{g}/events,
 // {s} is a survey slug (unique per event). Markdown is the source; versions are immutable (ADR 0003).
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
-import { compile } from "@plainfeedback/core";
+import { compile, DEFAULT_PRIVACY_STATEMENT, hasPlaceholder } from "@plainfeedback/core";
 import { and, asc, desc, eq, getTableColumns, sql } from "drizzle-orm";
 import {
   type Access,
@@ -17,18 +17,6 @@ import type { Db } from "./db";
 import { body, err, errors, json } from "./groups";
 import { qrPng, qrSvg } from "./qr";
 import { events, surveys, surveyVersions } from "./schema";
-
-// Keep in line with docs/privacy-statement-template.md. Claims only what the software does; the
-// host's own logs and the author's use of the data are for the author to add.
-export const DEFAULT_PRIVACY_STATEMENT =
-  "This survey does not ask for your name or email address. The survey page sets no cookies and " +
-  "stores nothing in your browser, and your answers are saved without your IP address or browser " +
-  "details. IP addresses are processed transiently in memory to limit abuse and are never stored " +
-  "or logged by the application. The time you submit is recorded to the hour only. The service " +
-  "hosting this page and the networks in between may keep their own " +
-  "connection logs. Free-text answers can still identify you, so leave out names and other " +
-  "details if you want to stay anonymous. The survey organisers and the administrators of this " +
-  "service can read individual answers.";
 
 const MAX_MARKDOWN = 200_000;
 const Slug = z
@@ -512,7 +500,13 @@ export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
           content: {
             "application/json": {
               schema: z.strictObject({
-                privacyStatement: z.string().trim().min(1).max(20_000).optional(),
+                privacyStatement: z
+                  .string()
+                  .trim()
+                  .min(1)
+                  .max(20_000)
+                  .refine((s) => !hasPlaceholder(s), "Replace every [[...]] placeholder first.")
+                  .optional(),
                 opensAt: z.iso.datetime({ offset: true }).nullable().optional(),
                 closesAt: z.iso.datetime({ offset: true }).nullable().optional(),
               }),

@@ -1,7 +1,12 @@
 // Survey editor (issue #8): markdown on the left, live preview on the right (stacked on narrow
 // screens). compile() from core runs in the browser on every pause in typing; the server runs the
 // same compiler on save and publish. Viewers get the same page read-only.
-import { type CompileResult, compile, type Survey as Model } from "@plainfeedback/core";
+import {
+  type CompileResult,
+  compile,
+  type Survey as Model,
+  PRIVACY_STATEMENT_TEMPLATE,
+} from "@plainfeedback/core";
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Markdown } from "../markdown";
 import { ShareLink } from "../ShareLink";
@@ -399,9 +404,13 @@ function PublishDialog({
               name="privacy"
               rows={6}
               autoFocus
-              defaultValue={prev?.privacyStatement ?? ""}
+              defaultValue={prev?.privacyStatement ?? PRIVACY_STATEMENT_TEMPLATE}
             />
-            <span className="meta">Leave empty to use the default statement.</span>
+            <span className="meta">
+              Replace each [[...]]: who runs the survey, a contact and how long answers are kept. Or
+              clear the box to use the default statement, which names no one and says answers are
+              kept until you delete them.
+            </span>
           </label>
           <label>
             Opens (optional)

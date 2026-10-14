@@ -1,11 +1,11 @@
 # 2026 Fall Meeting Feedback
 
 We want to hear your feedback so we can keep improving our logistics and content.
-Please fill this quick survey and let us know your thoughts (your answers will be
-anonymous). As a reminder, the agenda is [here](https://example.org/agenda).
+Please fill this quick survey and let us know your thoughts (we do not ask for your
+name or email). As a reminder, the agenda is [here](https://example.org/agenda).
 
 ::: {.choice #affiliation required other="Other"}
-Please specify any CFDE affiliation(s).
+What is your main CFDE affiliation?
 - CFDE Center Member
 - CFDE DCC Member
 - CFDE Program Member (not DCC affiliated)

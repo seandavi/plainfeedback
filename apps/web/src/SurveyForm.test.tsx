@@ -61,9 +61,13 @@ describe("SurveyForm", () => {
     expect(within(group("role")).getAllByRole("radio")).toHaveLength(3);
     expect(group("role").querySelector("strong")?.textContent).toBe("role");
     expect(within(group("Topics")).getAllByRole("checkbox")).toHaveLength(3);
-    expect(screen.getByText("1 = Poor")).toBeTruthy();
+    expect(screen.getAllByText("1 = Poor")).toHaveLength(3); // key, then under each row (#66)
     expect(screen.getByText("3 = Okay")).toBeTruthy();
-    expect(within(group("Venue")).getByRole("radio", { name: /^5\s*Great$/ })).toBeTruthy();
+    // Short radio names; the anchors are the row's description, read once per row.
+    expect(within(group("Venue")).getByRole("radio", { name: "5" })).toBeTruthy();
+    const ends = document.getElementById(group("Venue").getAttribute("aria-describedby") ?? "");
+    expect(ends?.textContent?.trim()).toBe("1 = Poor 5 = Great");
+    expect(ends?.getAttribute("aria-hidden")).toBe("true");
     expect(screen.getByLabelText("Notes").getAttribute("maxlength")).toBe("10");
     expect(screen.getByLabelText("Longer notes").tagName).toBe("TEXTAREA");
     expect(screen.getByLabelText("Years").getAttribute("type")).toBe("number");
@@ -75,11 +79,63 @@ describe("SurveyForm", () => {
     await flush();
     expect(onSubmit).not.toHaveBeenCalled();
     expect(within(group("role")).getByText("This question is required.")).toBeTruthy();
-    expect(within(group("Rate")).getByText("This question is required.")).toBeTruthy();
+    expect(
+      within(group("Rate")).getByText("Please rate every statement (2 not rated: Content; Venue)."),
+    ).toBeTruthy();
     const first = within(group("role")).getAllByRole("radio")[0] as HTMLElement;
     expect(first.getAttribute("aria-invalid")).toBe("true");
     expect(document.activeElement).toBe(first);
     expect(screen.getByRole("alert").textContent).toContain("2 answers");
+  });
+
+  it("names unrated grid rows next to the legend and marks each row (#56)", async () => {
+    setup();
+    fireEvent.click(within(group("role")).getByRole("radio", { name: "Staff" }));
+    fireEvent.click(within(group("Content")).getByRole("radio", { name: "3" }));
+    submit();
+    await flush();
+    const err = within(group("Rate")).getByText(
+      "Please rate every statement (1 not rated: Venue).",
+    );
+    const firstRow = group("Content");
+    expect(err.compareDocumentPosition(firstRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(group("Venue").className).toContain("unrated");
+    expect(group("Venue").querySelector("legend")?.textContent).toContain("(not rated)");
+    expect(firstRow.className).not.toContain("unrated");
+    const radio = within(group("Venue")).getAllByRole("radio")[0] as HTMLElement;
+    expect(radio.getAttribute("aria-invalid")).toBe("true");
+    expect(radio.getAttribute("aria-describedby")).toBe(err.id);
+    expect(document.activeElement).toBe(radio);
+  });
+
+  it("Other picked but blank: says so and focuses the text box (#67)", async () => {
+    const onSubmit = setup();
+    fillRequired();
+    fireEvent.click(within(group("role")).getByRole("radio", { name: "Other" }));
+    fireEvent.click(within(group("Topics")).getByRole("checkbox", { name: "Something else" }));
+    submit();
+    await flush();
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(within(group("role")).getByText('Please describe "Other", or pick another option.'));
+    expect(
+      within(group("Topics")).getByText(
+        'Please describe "Something else", or pick another option.',
+      ),
+    ).toBeTruthy();
+    const box = screen.getByLabelText("Other: please specify");
+    expect(document.activeElement).toBe(box);
+    expect(box.getAttribute("aria-describedby")).toBeTruthy();
+    for (const r of within(group("role")).getAllByRole("radio"))
+      expect(r.getAttribute("aria-invalid")).toBeNull();
+  });
+
+  it("announces when a text box reaches its limit (#77)", () => {
+    setup();
+    const notes = screen.getByLabelText("Notes");
+    const live = notes.parentElement?.querySelector("[aria-live]");
+    expect(live?.textContent).toBe(""); // mounted empty, so the change is announced
+    fireEvent.change(notes, { target: { value: "x".repeat(10) } });
+    expect(live?.textContent).toBe("Limit reached: only the first 10 characters are kept.");
   });
 
   it("submits typed answers including Other text, multi and number", async () => {
