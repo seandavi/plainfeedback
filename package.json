@@ -1,0 +1,20 @@
+{
+  "name": "plainfeedback",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.27.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "biome check .",
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.15",
+    "@types/node": "^22.20.5",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.4"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "@plainfeedback/core",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p ."
+  }
+}
