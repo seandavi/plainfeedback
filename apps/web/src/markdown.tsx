@@ -4,8 +4,9 @@
 // (no third-party requests). Add a library if authors need tables or nesting.
 import { Fragment, type ReactNode } from "react";
 
+// No lookbehind (Safari < 16.4 would fail to parse the bundle): the char before _ is captured.
 const INLINE =
-  /(`+)([^`]+?)\1|!\[([^\]]*)\]\([^)]*\)|\[([^\]]+)\]\(([^)\s]+)\)|\*\*(.+?)\*\*|(?<!\w)__(.+?)__(?!\w)|\*(.+?)\*|(?<!\w)_(.+?)_(?!\w)|\\([\\`*_[\]()!#.-])/gs;
+  /(`+)([^`]+?)\1|!\[([^\]]*)\]\([^)]*\)|\[([^\]]+)\]\(([^)\s]+)\)|\*\*(.+?)\*\*|(^|\W)__(.+?)__(?!\w)|\*(.+?)\*|(^|\W)_(.+?)_(?!\w)|\\([\\`*_[\]()!#.-])/gs;
 const SAFE_URL = /^(https?:|mailto:)/i;
 
 export function inline(text: string): ReactNode[] {
@@ -14,8 +15,10 @@ export function inline(text: string): ReactNode[] {
   for (const m of text.matchAll(INLINE)) {
     if (m.index > last) out.push(text.slice(last, m.index));
     last = m.index + m[0].length;
+    const [, , code, alt, label, href, strong, pre2, strong2, em, pre1, em2, escaped] = m;
+    const pre = pre2 ?? pre1;
+    if (pre) out.push(pre);
     const k = out.length;
-    const [, , code, alt, label, href, strong, strong2, em, em2, escaped] = m;
     if (code !== undefined) out.push(<code key={k}>{code}</code>);
     else if (alt !== undefined) out.push(alt);
     else if (label !== undefined && href !== undefined)

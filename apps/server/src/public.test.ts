@@ -74,6 +74,10 @@ describe("public survey API", () => {
   it("serves the latest version with no cookies or caching", async () => {
     const w = await world({ versions: 2 });
     expect(w.survey.publicId).toMatch(PUBLIC_ID);
+    const staff = await read(
+      call(w, "GET", `/events/${w.survey.eventId}/surveys/post`, w.who.viewer),
+    );
+    expect(staff.publicId).toBe(w.survey.publicId);
     const res = await call(w, "GET", w.path, w.who.owner);
     expect(res.status).toBe(200);
     expect(res.headers.get("set-cookie")).toBeNull();
