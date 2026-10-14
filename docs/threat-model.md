@@ -1,6 +1,6 @@
 # Threat model
 
-What plainfeedback protects, from whom, how, and what it does not protect. Written for issue #12 against the code as of October 2026 (phase 1: groups, surveys, participant page, export, API tokens; no staff UI yet). File paths are the actual mitigations. "Residual" is what is left after them. Update this file when a mitigation or a residual risk changes.
+What plainfeedback protects, from whom, how, and what it does not protect. Written for issue #12 against the code as of October 2026 (phase 1: groups, surveys, participant page, export, API tokens, staff shell and editor; no response viewer yet). File paths are the actual mitigations. "Residual" is what is left after them. Update this file when a mitigation or a residual risk changes.
 
 This is a self-review. It does not replace the independent review of auth and permission code in [#33](https://github.com/seandavi/plainfeedback/issues/33), which must happen before real data (see the [checklist](#before-real-data)).
 
