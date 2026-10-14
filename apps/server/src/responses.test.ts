@@ -1,6 +1,6 @@
 import { compile } from "@plainfeedback/core";
 import { describe, expect, it } from "vitest";
-import { csvCell } from "./responses";
+import { csvCell, flatten } from "./responses";
 import { events, responses, surveys, surveyVersions } from "./schema";
 import { useWorld, WHO } from "./testworld";
 
@@ -204,6 +204,25 @@ describe("CSV", () => {
     expect(csvCell("-1")).toBe("'-1");
     expect(csvCell(-1)).toBe("-1");
     expect(csvCell(undefined)).toBe("");
+  });
+
+  it("guards only text cells: negative numbers stay numeric, '-' free text is quoted", () => {
+    const model = {
+      pages: [
+        {
+          questions: [
+            { id: "age", type: "number" },
+            { id: "note", type: "text" },
+            { id: "r", type: "likert", statements: ["a"] },
+          ],
+        },
+      ],
+    } as never;
+    const flat = flatten(model, { age: -4.5, note: "-2+3", r: { "1": -1 } });
+    expect(flat).toEqual({ age: -4.5, note: "-2+3", r_1: -1 });
+    expect(csvCell(flat.age)).toBe("-4.5");
+    expect(csvCell(flat.r_1)).toBe("-1");
+    expect(csvCell(flat.note)).toBe("'-2+3");
   });
 });
 
