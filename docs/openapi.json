@@ -3412,7 +3412,7 @@
           "responses"
         ],
         "summary": "Export responses as JSONL or CSV, streamed (viewer)",
-        "description": "Ordered by `seq`. `since` is exclusive: the `seq` of the last row received (resume), or an ISO time (coarse filter). `submittedAt` is to the hour. CSV cells starting with = + - @ are prefixed with a single quote.",
+        "description": "Ordered by `seq`. `since` is the `seq` of the last row received (exclusive; resume), or an ISO time with offset (coarse filter: that whole hour and later). Any other `since` is 400. `submittedAt` is to the hour. CSV cells starting with = + - @ are prefixed with a single quote. If the stream fails midway the transfer is aborted, never ended cleanly.",
         "parameters": [
           {
             "schema": {
@@ -3445,12 +3445,20 @@
           },
           {
             "schema": {
-              "type": "string",
-              "maxLength": 100,
-              "description": "Exclusive: the `seq` of the last row received, or an ISO time"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{1,18}$"
+                },
+                {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              ],
+              "description": "The `seq` of the last row received (exclusive; resume cursor), or an ISO time with offset (coarse filter: rows submitted in that hour or later)"
             },
             "required": false,
-            "description": "Exclusive: the `seq` of the last row received, or an ISO time",
+            "description": "The `seq` of the last row received (exclusive; resume cursor), or an ISO time with offset (coarse filter: rows submitted in that hour or later)",
             "name": "since",
             "in": "query"
           },

@@ -1,12 +1,12 @@
 import { compile } from "@plainfeedback/core";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { csvCell, flatten } from "./responses";
 import { events, groups, responses, surveys, surveyVersions } from "./schema";
 import { useWorld, WHO } from "./testworld";
 
 // Response export (issue #10): role matrix, JSONL/CSV correctness, cursor, codebook.
-const { getDb, world: groupWorld, call } = useWorld();
+const { getDb, world: groupWorld, call, makeApp } = useWorld();
 
 const V1 = `# T
 
@@ -136,11 +136,13 @@ describe("JSONL", () => {
       await text(call(w, "GET", `${w.base}/responses?since=${rows[0].seq}`, w.who.viewer)),
     );
     expect(next.map((r) => r.answers)).toEqual([{ affiliation: "B" }, { comment: "later" }]);
-    // Plain ISO since is an exclusive, coarse filter.
-    const iso = lines(
-      await text(call(w, "GET", `${w.base}/responses?since=${same}`, w.who.viewer)),
-    );
-    expect(iso.length).toBe(1);
+    // ISO since is a coarse filter that includes its whole hour (#58): times are stored to the hour.
+    const iso = async (t: string) =>
+      lines(await text(call(w, "GET", `${w.base}/responses?since=${t}`, w.who.viewer))).length;
+    expect(await iso(same)).toBe(3);
+    expect(await iso("2026-01-01T00:30:00Z")).toBe(3);
+    expect(await iso("2026-01-01T01:30:00%2B01:00")).toBe(3); // 00:30Z
+    expect(await iso("2026-01-01T01:00:00Z")).toBe(1);
     // The old <submittedAt>_<responseId> cursor is gone.
     const old = `${same}_${rows[0].responseId}`;
     expect((await call(w, "GET", `${w.base}/responses?since=${old}`, w.who.viewer)).status).toBe(
@@ -149,6 +151,40 @@ describe("JSONL", () => {
     // version filter
     const v2 = lines(await text(call(w, "GET", `${w.base}/responses?version=2`, w.who.viewer)));
     expect(v2.length).toBe(1);
+  });
+
+  it("rejects malformed since with 400 before streaming (#58)", async () => {
+    const w = await world();
+    for (const bad of ["-1", "1e3", "2026-01-01", "2026-01-01T00:00:00", "Jan 1 2026", "1.5", ""])
+      expect(
+        (await call(w, "GET", `${w.base}/responses?since=${encodeURIComponent(bad)}`, w.who.viewer))
+          .status,
+        bad,
+      ).toBe(400);
+  });
+
+  it("a failure mid-stream aborts the transfer and logs only class and SQLSTATE (#58)", async () => {
+    const w = await world();
+    const db = getDb();
+    await db
+      .insert(responses)
+      .values(Array.from({ length: 501 }, () => ({ surveyVersionId: w.v1, answers: { age: 1 } })));
+    const logs: string[] = [];
+    const app = makeApp((l) => logs.push(l));
+    const res = await call({ app }, "GET", `${w.base}/responses?format=csv`, w.who.viewer);
+    expect(res.status).toBe(200);
+    const reader = (res.body as ReadableStream<Uint8Array>).getReader();
+    expect((await reader.read()).done).toBe(false); // header
+    expect((await reader.read()).done).toBe(false); // first batch, read before the response
+    await db.execute(sql`alter table responses rename column answers to answers_x`);
+    try {
+      await expect(reader.read()).rejects.toThrow("export failed");
+    } finally {
+      await db.execute(sql`alter table responses rename column answers_x to answers`);
+    }
+    const errs = logs.filter((l) => l.includes("error"));
+    expect(errs.map((l) => JSON.parse(l))).toEqual([{ error: expect.any(String), code: "42703" }]);
+    expect(logs.join()).not.toMatch(/select|answers/i);
   });
 
   it("streams more than one batch", async () => {
