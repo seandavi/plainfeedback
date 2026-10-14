@@ -9,7 +9,7 @@
 // ponytail (#59): `seq` is assigned at insert, not commit, so a slow insert can become visible after
 // a higher seq. Clients resume with an overlap and dedupe on responseId (docs/api.md). An exact
 // cursor needs serialised inserts or a commit-order horizon; xmin-based filters are not exact
-// (xid order != seq order) and a lock would make participant submits wait on exports.
+// (xid order != seq order); a global insert lock held to commit would serialise every submit.
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import type { Question, Survey } from "@plainfeedback/core";
 import { and, asc, eq, inArray, lt, sql } from "drizzle-orm";
