@@ -82,8 +82,9 @@ export function Dashboard() {
                         </td>
                         <th scope="row">
                           <Link href={paths.survey(g.id, r.slug, r.survey.slug)}>
-                            {r.survey.slug}
-                          </Link>
+                            {r.survey.title || r.survey.slug}
+                          </Link>{" "}
+                          {r.survey.title && <span className="meta">{r.survey.slug}</span>}
                         </th>
                         <td>{surveyStatus(r.survey)}</td>
                         <td>{r.survey.responseCount ?? 0}</td>

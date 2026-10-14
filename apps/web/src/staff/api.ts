@@ -24,6 +24,7 @@ export type SurveySummary = {
   opensAt?: string | null;
   closesAt?: string | null;
   responseCount?: number;
+  title?: string | null;
 };
 export type User = {
   id: string;

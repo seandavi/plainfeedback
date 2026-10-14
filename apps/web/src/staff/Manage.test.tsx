@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SurveySummary } from "./api";
 import { surveyStatus } from "./Dashboard";
-import { StaffApp } from "./StaffApp";
+import { StaffApp, slugify } from "./StaffApp";
 
 type Call = { method: string; path: string; body?: unknown };
 let calls: Call[];
@@ -74,7 +74,7 @@ describe("dashboard", () => {
         200,
         [
           { slug: "pre", closed: false, latestVersion: null, responseCount: 0 },
-          { slug: "post", closed: false, latestVersion: 2, responseCount: 17 },
+          { slug: "post", title: "Post-event", closed: false, latestVersion: 2, responseCount: 17 },
         ],
       ],
     };
@@ -84,6 +84,7 @@ describe("dashboard", () => {
     expect(within(rows[1] as HTMLElement).getByText("draft")).toBeTruthy();
     expect(within(rows[2] as HTMLElement).getByText("open")).toBeTruthy();
     expect(within(rows[2] as HTMLElement).getByText("17")).toBeTruthy();
+    expect(within(rows[2] as HTMLElement).getByRole("link", { name: "Post-event" })).toBeTruthy();
     expect(screen.getByText("creator")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Admin" })).toBeNull();
   });
@@ -456,5 +457,58 @@ describe("deletion (#36)", () => {
     expect(screen.queryByRole("button", { name: "Delete Lab" })).toBeNull();
     await confirm("Delete Old", "Delete group");
     await waitFor(() => expect(called("DELETE", "/api/v1/groups/g2")).toHaveLength(1));
+  });
+});
+
+describe("short names and titles (#72)", () => {
+  const ev = { id: "ev1", slug: "fall", title: "Fall", description: "" };
+  beforeEach(() => {
+    routes = {
+      ...base(false),
+      [`GET /api/v1/groups/${G}`]: () => [200, group("creator")],
+      [`GET /api/v1/groups/${G}/events`]: () => [200, [ev]],
+      [`GET /api/v1/groups/${G}/events/fall`]: () => [200, ev],
+      "GET /api/v1/events/ev1/surveys": () => [
+        200,
+        [{ slug: "post", title: "After the meeting", closed: false, latestVersion: null }],
+      ],
+      [`PUT /api/v1/groups/${G}/events/fall-meeting-2026`]: () => [201, ev],
+    };
+  });
+
+  it("slugify lowercases, hyphenates and drops accents", () => {
+    expect(slugify("  Fall Meeting 2026!  ")).toBe("fall-meeting-2026");
+    expect(slugify("Café Été")).toBe("cafe-ete");
+    expect(slugify("x".repeat(70))).toHaveLength(64);
+  });
+
+  it("fills the short name from the title until it is edited, with an inline error", async () => {
+    open(`/app/g/${G}`);
+    const form = (await screen.findByRole("group", { name: "New event" })) as HTMLElement;
+    const title = within(form).getByRole("textbox", { name: "Title" });
+    const slug = within(form).getByRole("textbox", { name: /Short name/ }) as HTMLInputElement;
+    fireEvent.change(title, { target: { value: "Fall Meeting 2026!" } });
+    expect(slug.value).toBe("fall-meeting-2026");
+
+    fireEvent.change(slug, { target: { value: "Fall 2026!" } });
+    fireEvent.change(title, { target: { value: "Something else" } });
+    expect(slug.value).toBe("Fall 2026!"); // edited by hand: no longer follows the title
+    fireEvent.click(within(form).getByRole("button", { name: "Create" }));
+    expect(slug.getAttribute("aria-invalid")).toBe("true");
+    expect(slug.validity.valid).toBe(true); // no browser bubble; our own message instead
+    expect(within(form).getByText(/Use only lowercase letters/)).toBeTruthy();
+    expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
+
+    fireEvent.change(slug, { target: { value: "fall-meeting-2026" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Create" }));
+    await waitFor(() =>
+      expect(called("PUT", `/api/v1/groups/${G}/events/fall-meeting-2026`)).toHaveLength(1),
+    );
+  });
+
+  it("lists surveys by title with the short name as meta", async () => {
+    open(`/app/g/${G}/e/fall`);
+    const link = await screen.findByRole("link", { name: "After the meeting" });
+    expect(link.parentElement?.textContent).toContain("post");
   });
 });

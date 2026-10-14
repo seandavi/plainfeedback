@@ -1,7 +1,15 @@
 // Staff app under /app: sign-in state, header, and the groups -> events -> surveys -> editor pages.
 // Routes: /app, /app/g/{groupId}, /app/g/{groupId}/e/{eventSlug}, .../s/{surveySlug}.
 // Later staff screens (#19: admin, members) add a route to `route` and reuse useLoad/ErrorNote.
-import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type FormEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import { AdminPage } from "./Admin";
 import { ApiError, api, canEdit, isOwner, type Me } from "./api";
 import { Dashboard, surveyStatus } from "./Dashboard";
@@ -18,7 +26,16 @@ export const paths = {
   event: (g: string, e: string) => `/app/g/${enc(g)}/e/${enc(e)}`,
   survey: (g: string, e: string, s: string) => `/app/g/${enc(g)}/e/${enc(e)}/s/${enc(s)}`,
 };
-const SLUG = "[a-z0-9]+(?:-[a-z0-9]+)*"; // same rule as the server's slug schema
+const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/; // same rule as the server's slug schema
+/** "Fall Meeting 2026!" -> "fall-meeting-2026" (accents dropped, at most 64 characters). */
+export const slugify = (title: string) =>
+  title
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .slice(0, 64)
+    .replace(/^-+|-+$/g, "");
 
 /** Loads data for a page; `reload` re-runs it. Errors are ApiErrors (or anything thrown). */
 export function useLoad<T>(load: () => Promise<T>, key: string) {
@@ -144,16 +161,33 @@ const Crumbs = ({ items }: { items: [string, string?][] }) => (
 /** Slug + title form used to create events and surveys. */
 function CreateForm({
   legend,
+  slugLabel,
+  slugHint,
   onCreate,
 }: {
   legend: string;
+  slugLabel: string;
+  slugHint: string;
   onCreate: (slug: string, title: string) => Promise<void>;
 }) {
   const [error, setError] = useState<unknown>();
   const [busy, setBusy] = useState(false);
+  // The short name follows the title until the user edits it (#72).
+  const [slug, setSlug] = useState("");
+  const [touched, setTouched] = useState(false);
+  const [slugError, setSlugError] = useState("");
+  const slugInput = useRef<HTMLInputElement>(null);
+  const hintId = useId();
+  const check = (v: string) =>
+    v === "" || SLUG.test(v)
+      ? ""
+      : "Use only lowercase letters, digits and single hyphens between them, like fall-2026.";
   const submit = async (ev: FormEvent<HTMLFormElement>) => {
     ev.preventDefault();
     const f = new FormData(ev.currentTarget);
+    const problem = slug ? check(slug) : "Enter a short name.";
+    setSlugError(problem);
+    if (problem) return slugInput.current?.focus();
     setBusy(true);
     setError(undefined);
     try {
@@ -168,11 +202,33 @@ function CreateForm({
       <fieldset>
         <legend>{legend}</legend>
         <label>
-          Title <input name="title" required maxLength={200} />
+          Title{" "}
+          <input
+            name="title"
+            required
+            maxLength={200}
+            onChange={(e) => !touched && setSlug(slugify(e.target.value))}
+          />
         </label>
         <label>
-          Short name for links <input name="slug" required pattern={SLUG} maxLength={64} />
-          <span className="meta">lowercase letters, digits and single hyphens, e.g. fall-2026</span>
+          {slugLabel}{" "}
+          <input
+            ref={slugInput}
+            name="slug"
+            maxLength={64}
+            value={slug}
+            aria-invalid={slugError ? true : undefined}
+            aria-describedby={hintId}
+            onChange={(e) => {
+              setTouched(true);
+              setSlug(e.target.value);
+              if (slugError) setSlugError(check(e.target.value));
+            }}
+            onBlur={() => setSlugError(check(slug))}
+          />
+          <span className="meta" id={hintId}>
+            {slugError ? <strong>{slugError}</strong> : slugHint}
+          </span>
         </label>
         <button type="submit" disabled={busy}>
           Create
@@ -225,7 +281,14 @@ function GroupPage({ me, g }: { me: Me; g: string }) {
         </ul>
       )}
       {act.error !== undefined && <ErrorNote error={act.error} />}
-      {canEdit(me, group) && <CreateForm legend="New event" onCreate={create} />}
+      {canEdit(me, group) && (
+        <CreateForm
+          legend="New event"
+          slugLabel="Short name (used in staff links and exports)"
+          slugHint="Filled in from the title. Lowercase letters, digits and hyphens, e.g. fall-2026."
+          onCreate={create}
+        />
+      )}
       <Members me={me} group={group} g={g} />
       <Tokens me={me} group={group} g={g} />
     </>
@@ -265,8 +328,9 @@ function EventPage({ me, g, e }: { me: Me; g: string; e: string }) {
         <ul className="list">
           {surveys.map((x) => (
             <li key={x.slug}>
-              <Link href={paths.survey(g, e, x.slug)}>{x.slug}</Link>{" "}
+              <Link href={paths.survey(g, e, x.slug)}>{x.title || x.slug}</Link>{" "}
               <span className="meta">
+                {x.title && `${x.slug}, `}
                 {x.latestVersion ? `published v${x.latestVersion}, ${surveyStatus(x)}` : "draft"}
                 {x.waveLabel && `, ${x.waveLabel}`}
               </span>{" "}
@@ -286,7 +350,14 @@ function EventPage({ me, g, e }: { me: Me; g: string; e: string }) {
         </ul>
       )}
       {act.error !== undefined && <ErrorNote error={act.error} />}
-      {canEdit(me, group) && <CreateForm legend="New survey" onCreate={create} />}
+      {canEdit(me, group) && (
+        <CreateForm
+          legend="New survey"
+          slugLabel="Short name (used in exports and staff links)"
+          slugHint="Filled in from the title. Participants never see it. E.g. pre, post, followup."
+          onCreate={create}
+        />
+      )}
       {isOwner(me, group) && (
         <DeleteResponses
           eventId={event.id}

@@ -94,6 +94,10 @@ const SurveyListItem = SurveySummary.extend({
   opensAt: z.string().nullable().openapi({ description: "Of the latest published version" }),
   closesAt: z.string().nullable().openapi({ description: "Of the latest published version" }),
   responseCount: z.number().openapi({ description: "Submitted responses, all versions" }),
+  title: z
+    .string()
+    .nullable()
+    .openapi({ description: "The draft's '# ' title line, if it has one" }),
 }).openapi("SurveyListItem");
 const Survey = SurveySummary.extend({
   publicId: z.string().openapi({ description: "Participant page: /s/{publicId}" }),
@@ -130,6 +134,8 @@ const markdownOf = async (c: {
 };
 
 const iso = (d: Date | null) => d?.toISOString() ?? null;
+// ponytail: the first "# " line of the draft, not a full compile; lists only need a label.
+const draftTitle = (md: string) => md.match(/^#[ \t]+(.+?)[ \t#]*$/m)?.[1] ?? null;
 const toEvent = (e: typeof events.$inferSelect) => ({
   id: e.id,
   slug: e.slug,
@@ -304,6 +310,7 @@ export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
           opensAt: iso(opensAt && new Date(opensAt)),
           closesAt: iso(closesAt && new Date(closesAt)),
           responseCount,
+          title: draftTitle(s.draftMarkdown),
         })),
         200,
       );
