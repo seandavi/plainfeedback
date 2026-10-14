@@ -275,7 +275,7 @@ describe("public survey API", () => {
 
   it("defaults to a few hundred submissions per 10 min from one address (#55)", async () => {
     const w = await world();
-    const { submit } = limited(w);
+    const { submit } = limited(w, { now: () => 1_000_000 }); // fixed clock: no refill mid-test
     expect(new Set(await statuses(300, () => submit("203.0.113.7")))).toEqual(new Set([201]));
     expect((await submit("203.0.113.7")).status).toBe(429);
   });
