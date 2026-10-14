@@ -147,10 +147,12 @@ describe("public survey API", () => {
     expect(Object.keys(rows[0] ?? {}).sort()).toEqual([
       "answers",
       "id",
+      "seq", // a counter, not a respondent identifier
       "submittedAt",
       "surveyVersionId",
     ]);
     expect(rows[0]?.answers).toEqual(answers);
+    expect((rows[0]?.submittedAt.getTime() ?? 1) % 3_600_000).toBe(0); // to the hour (#37)
   });
 
   it("rejects an outdated version with 409", async () => {

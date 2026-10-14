@@ -50,6 +50,13 @@
       "when": 1792014429844,
       "tag": "0006_survey_public_id",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792016305508,
+      "tag": "0007_deletion_coarse_time",
+      "breakpoints": true
     }
   ]
 }

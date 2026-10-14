@@ -4,11 +4,11 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { compile } from "@plainfeedback/core";
 import { and, asc, desc, eq, getTableColumns, sql } from "drizzle-orm";
-import type { MiddlewareHandler } from "hono";
 import {
   type Access,
   type AuthzEnv,
   fail,
+  notArchived,
   notFound,
   requireEventRole,
   requireGroupRole,
@@ -23,7 +23,7 @@ import { events, surveys, surveyVersions } from "./schema";
 export const DEFAULT_PRIVACY_STATEMENT =
   "This survey does not ask for your name or email address. The survey page sets no cookies and " +
   "stores nothing in your browser, and your answers are saved without your IP address or browser " +
-  "details. The service hosting this page and the networks in between may keep their own " +
+  "details. The time you submit is recorded to the hour only. The service hosting this page and the networks in between may keep their own " +
   "connection logs. Free-text answers can still identify you, so leave out names and other " +
   "details if you want to stay anonymous. The survey organisers and the administrators of this " +
   "service can read individual answers.";
@@ -148,12 +148,6 @@ const toVersion = (v: typeof surveyVersions.$inferSelect) => ({
   privacyStatement: v.privacyStatement,
 });
 
-// Writes below an archived group are refused; reads still work. Runs after the role check.
-const notArchived: MiddlewareHandler<AuthzEnv> = async (c, next) => {
-  if ((c.get("access") as Access).archived) throw fail(409, "group is archived");
-  return next();
-};
-
 // ETags are opaque random values, regenerated on every draft write; quoted on the wire.
 const quote = (etag: string) => `"${etag}"`;
 const unquote = (h: string) => h.replace(/^W\//, "").replace(/^"(.*)"$/, "$1");
@@ -162,6 +156,7 @@ export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
   const r = new OpenAPIHono<AuthzEnv>();
   const groupMember = requireGroupRole(db, "viewer");
   const groupCreator = requireGroupRole(db, "creator");
+  const groupOwner = requireGroupRole(db, "owner");
   const member = requireEventRole(db, "viewer");
   const creator = requireEventRole(db, "creator");
 
@@ -413,6 +408,66 @@ export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
       const v = await loadSurvey(e, s);
       c.header("ETag", v.etag);
       return c.json(v, 200);
+    },
+  );
+
+  // Deletion (#36) is real, no soft delete; backups keep data until they rotate (docs/deploy.md).
+  // Versions go only by cascade from their survey (ADR 0012).
+  r.openapi(
+    createRoute({
+      method: "delete",
+      path: "/groups/{g}/events/{e}",
+      tags: ["events"],
+      summary: "Delete an event with all its surveys, versions and responses (owner)",
+      middleware: [groupOwner, notArchived],
+      request: { params: GroupEventParams },
+      responses: { 204: { description: "Deleted" }, ...allErrors },
+    }),
+    async (c) => {
+      const gone = await db
+        .delete(events)
+        .where(
+          and(
+            eq(events.groupId, (c.get("access") as Access).groupId),
+            eq(events.slug, c.req.valid("param").e),
+          ),
+        )
+        .returning({ id: events.id });
+      if (!gone.length) throw notFound();
+      return c.body(null, 204) as never;
+    },
+  );
+
+  r.openapi(
+    createRoute({
+      method: "delete",
+      path: "/events/{e}/surveys/{s}",
+      tags: ["surveys"],
+      summary:
+        "Delete a survey with its versions and responses (owner; creator if never published)",
+      middleware: [creator, notArchived],
+      request: { params: SurveyParams },
+      responses: { 204: { description: "Deleted" }, ...allErrors },
+    }),
+    async (c) => {
+      const { e, s } = c.req.valid("param");
+      const { role } = c.get("access") as Access;
+      const owner = role === "owner" || !!c.get("user")?.isAdmin;
+      return db.transaction(async (tx) => {
+        // Same lock as publish, so a creator cannot race a publish between check and delete.
+        const [sv] = await tx.select().from(surveys).where(surveyWhere(e, s)).for("update");
+        if (!sv) throw notFound();
+        if (!owner) {
+          const [v] = await tx
+            .select({ n: surveyVersions.version })
+            .from(surveyVersions)
+            .where(eq(surveyVersions.surveyId, sv.id))
+            .limit(1);
+          if (v) throw fail(403, "only an owner can delete a published survey");
+        }
+        await tx.delete(surveys).where(eq(surveys.id, sv.id));
+        return c.body(null, 204) as never;
+      });
     },
   );
 

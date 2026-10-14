@@ -1,16 +1,15 @@
-// Response export (issue #10), mounted at /api/v1. Viewer role or higher (same 404/403 rules as the
-// rest of the event API). Streams JSONL or wide CSV in keyset batches, ordered by (submitted_at, id).
-// Never logs response contents. Parquet is deferred: DuckDB/polars read JSONL and CSV directly.
+// Response export (issue #10) and deletion (#36), mounted at /api/v1. Export is viewer or higher,
+// deletion owner only (same 404/403 rules as the rest of the event API). Streams JSONL or wide CSV in
+// keyset batches ordered by `seq`. Never logs response contents. Parquet is deferred.
 //
-// Cursor: `since` is exclusive and is either an ISO timestamp (submitted_at > since) or a stable
-// cursor `<submittedAt>_<responseId>` built from the last row you received (JSONL submittedAt has
-// microsecond precision, so rows sharing a timestamp are never skipped or repeated).
+// Cursor: `since` is exclusive and is either the `seq` of the last row you received (digits only)
+// or an ISO time, a coarse filter (submitted_at > since; times are stored to the hour, #37).
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import type { Question, Survey } from "@plainfeedback/core";
-import { and, asc, eq, sql } from "drizzle-orm";
-import { type AuthzEnv, fail, notFound, requireEventRole } from "./authz";
+import { and, asc, eq, inArray, lt, sql } from "drizzle-orm";
+import { type AuthzEnv, fail, notArchived, notFound, requireEventRole, UUID } from "./authz";
 import type { Db } from "./db";
-import { errors, json } from "./groups";
+import { err, errors, json } from "./groups";
 import { responses, surveys, surveyVersions } from "./schema";
 
 type Answers = Record<string, unknown>;
@@ -98,16 +97,20 @@ const CodebookParams = Params.extend({
 });
 const Query = z.object({
   format: z.enum(["jsonl", "csv"]).default("jsonl"),
-  since: z.string().max(100).optional().openapi({ description: "Exclusive: ISO time or cursor" }),
+  since: z
+    .string()
+    .max(100)
+    .optional()
+    .openapi({ description: "Exclusive: the `seq` of the last row received, or an ISO time" }),
   version: z.coerce.number().int().min(1).optional(),
 });
 
-const CURSOR = /^(.+)_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
-const ISO_US = `'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'`;
-
+const SEQ = /^\d{1,18}$/;
+const ISO = `'YYYY-MM-DD"T"HH24:MI:SS"Z"'`;
 export const responseRoutes = (db: Db) => {
   const r = new OpenAPIHono<AuthzEnv>();
   const viewer = requireEventRole(db, "viewer");
+  const owner = requireEventRole(db, "owner");
 
   // Versions of a survey, oldest first; 404 for a missing survey or (with n) a missing version.
   const versionsOf = async (e: string, s: string, n?: number) => {
@@ -141,8 +144,9 @@ export const responseRoutes = (db: Db) => {
       tags: ["responses"],
       summary: "Export responses as JSONL or CSV, streamed (viewer)",
       description:
-        "Ordered by submittedAt, id. `since` is exclusive: an ISO time, or `<submittedAt>_<responseId>` " +
-        "from the last row received. CSV cells starting with = + - @ are prefixed with a single quote.",
+        "Ordered by `seq`. `since` is exclusive: the `seq` of the last row received (resume), or an ISO " +
+        "time (coarse filter). `submittedAt` is to the hour. CSV cells starting with = + - @ are " +
+        "prefixed with a single quote.",
       middleware: [viewer],
       request: { params: Params, query: Query },
       responses: {
@@ -163,23 +167,21 @@ export const responseRoutes = (db: Db) => {
       const byId = new Map(versions.map((v) => [v.id, v]));
       const ids = versions.map((v) => v.id);
 
+      // Digits are a seq even though "2026" would also parse as a date.
       let after = sql`true`;
-      if (since) {
-        const m = CURSOR.exec(since);
-        const t = (m ? m[1] : since) as string;
-        if (Number.isNaN(Date.parse(t))) throw fail(400, "invalid since");
-        after = m
-          ? sql`(${responses.submittedAt}, ${responses.id}) > (${t}::timestamptz, ${m[2]}::uuid)`
-          : sql`${responses.submittedAt} > ${t}::timestamptz`;
+      if (since && SEQ.test(since)) after = sql`${responses.seq} > ${since}::bigint`;
+      else if (since) {
+        if (Number.isNaN(Date.parse(since))) throw fail(400, "invalid since");
+        after = sql`${responses.submittedAt} > ${since}::timestamptz`;
       }
-      type Cur = { t: string; id: string };
-      const page = (cur: Cur | null) =>
+      const page = (cur: number | null) =>
         db
           .select({
             id: responses.id,
+            seq: responses.seq,
             versionId: responses.surveyVersionId,
             answers: responses.answers,
-            at: sql<string>`to_char(${responses.submittedAt} at time zone 'utc', ${sql.raw(ISO_US)})`,
+            at: sql<string>`to_char(${responses.submittedAt} at time zone 'utc', ${sql.raw(ISO)})`,
           })
           .from(responses)
           .where(
@@ -189,12 +191,10 @@ export const responseRoutes = (db: Db) => {
                 sql`, `,
               )})`,
               after,
-              cur
-                ? sql`(${responses.submittedAt}, ${responses.id}) > (${cur.t}::timestamptz, ${cur.id}::uuid)`
-                : undefined,
+              cur === null ? undefined : sql`${responses.seq} > ${cur}`,
             ),
           )
-          .orderBy(asc(responses.submittedAt), asc(responses.id))
+          .orderBy(asc(responses.seq))
           .limit(BATCH);
 
       const csv = format === "csv";
@@ -204,10 +204,10 @@ export const responseRoutes = (db: Db) => {
         async start(ctrl) {
           try {
             if (csv) {
-              const head = ["responseId", "surveyVersion", "submittedAt", ...cols];
+              const head = ["responseId", "seq", "surveyVersion", "submittedAt", ...cols];
               ctrl.enqueue(enc.encode(`${head.map(csvCell).join(",")}\r\n`));
             }
-            let cur: Cur | null = null;
+            let cur: number | null = null;
             for (;;) {
               const rows: Awaited<ReturnType<typeof page>> = ids.length ? await page(cur) : [];
               let out = "";
@@ -215,16 +215,16 @@ export const responseRoutes = (db: Db) => {
                 const v = byId.get(row.versionId) as NonNullable<ReturnType<typeof byId.get>>;
                 if (csv) {
                   const flat = flatten(v.model, row.answers as Answers);
-                  const cells = [row.id, v.version, row.at, ...cols.map((n) => flat[n])];
+                  const cells = [row.id, row.seq, v.version, row.at, ...cols.map((n) => flat[n])];
                   out += `${cells.map(csvCell).join(",")}\r\n`;
                 } else {
-                  out += `${JSON.stringify({ responseId: row.id, surveyVersion: v.version, submittedAt: row.at, answers: row.answers })}\n`;
+                  out += `${JSON.stringify({ responseId: row.id, seq: row.seq, surveyVersion: v.version, submittedAt: row.at, answers: row.answers })}\n`;
                 }
               }
               if (out) ctrl.enqueue(enc.encode(out));
               const last = rows.at(-1);
               if (rows.length < BATCH || !last) break;
-              cur = { t: last.at, id: last.id };
+              cur = last.seq;
             }
             ctrl.close();
           } catch (err) {
@@ -238,6 +238,76 @@ export const responseRoutes = (db: Db) => {
           "cache-control": "no-store",
         },
       }) as never;
+    },
+  );
+
+  // Deletes are real (no soft delete); backups keep data until they rotate (docs/deploy.md).
+  // Only the count is returned; nothing about the deleted rows is logged.
+  const versionIds = async (e: string, s: string) => (await versionsOf(e, s)).map((v) => v.id);
+
+  r.openapi(
+    createRoute({
+      method: "delete",
+      path: "/events/{e}/surveys/{s}/responses",
+      tags: ["responses"],
+      summary: "Delete all responses of a survey, or those submitted before a time (owner)",
+      description:
+        "`before` is exclusive and compared with the hour-truncated `submittedAt`. Returns the count.",
+      middleware: [owner, notArchived],
+      request: {
+        params: Params,
+        query: z.object({ before: z.iso.datetime({ offset: true }).optional() }),
+      },
+      responses: {
+        200: json(z.object({ deleted: z.number() }).openapi("Deleted")),
+        ...errors,
+        409: err("The group is archived"),
+      },
+    }),
+    async (c) => {
+      const { e, s } = c.req.valid("param");
+      const { before } = c.req.valid("query");
+      const ids = await versionIds(e, s);
+      if (!ids.length) return c.json({ deleted: 0 }, 200);
+      const gone = await db
+        .delete(responses)
+        .where(
+          and(
+            inArray(responses.surveyVersionId, ids),
+            before ? lt(responses.submittedAt, new Date(before)) : undefined,
+          ),
+        )
+        .returning({ id: responses.id });
+      return c.json({ deleted: gone.length }, 200);
+    },
+  );
+
+  r.openapi(
+    createRoute({
+      method: "delete",
+      path: "/events/{e}/surveys/{s}/responses/{id}",
+      tags: ["responses"],
+      summary: "Delete one response by its responseId from the export (owner)",
+      middleware: [owner, notArchived],
+      request: {
+        params: Params.extend({
+          id: z.string().openapi({ param: { name: "id", in: "path" } }),
+        }),
+      },
+      responses: { 204: { description: "Deleted" }, ...errors, 409: err("The group is archived") },
+    }),
+    async (c) => {
+      const { e, s, id } = c.req.valid("param");
+      if (!UUID.test(id)) throw notFound();
+      const ids = await versionIds(e, s);
+      const gone = ids.length
+        ? await db
+            .delete(responses)
+            .where(and(eq(responses.id, id), inArray(responses.surveyVersionId, ids)))
+            .returning({ id: responses.id })
+        : [];
+      if (!gone.length) throw notFound();
+      return c.body(null, 204) as never;
     },
   );
 

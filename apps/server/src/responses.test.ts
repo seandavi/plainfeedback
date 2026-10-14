@@ -1,7 +1,8 @@
 import { compile } from "@plainfeedback/core";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { csvCell, flatten } from "./responses";
-import { events, responses, surveys, surveyVersions } from "./schema";
+import { events, groups, responses, surveys, surveyVersions } from "./schema";
 import { useWorld, WHO } from "./testworld";
 
 // Response export (issue #10): role matrix, JSONL/CSV correctness, cursor, codebook.
@@ -112,7 +113,7 @@ describe("role matrix", () => {
 });
 
 describe("JSONL", () => {
-  it("one object per response, ordered, with version; since cursor is exclusive and stable", async () => {
+  it("one object per response in seq order; since is a seq cursor or a coarse ISO time", async () => {
     const w = await world();
     const same = "2026-01-01T00:00:00.000Z";
     await w.add(w.v1, { affiliation: "A" }, same, "00000000-0000-4000-8000-000000000002");
@@ -122,24 +123,29 @@ describe("JSONL", () => {
     expect(res.headers.get("content-type")).toContain("ndjson");
     const rows = lines(await res.text());
     expect(rows.map((r) => r.surveyVersion)).toEqual([1, 1, 2]);
-    expect(rows[0].responseId.endsWith("1")).toBe(true); // ties broken by id
-    expect(rows[0]).toEqual({
+    expect(rows.map((r) => r.answers.affiliation)).toEqual(["A", "B", undefined]); // insert order
+    expect(rows[1]).toEqual({
       responseId: "00000000-0000-4000-8000-000000000001",
+      seq: rows[0].seq + 1,
       surveyVersion: 1,
-      submittedAt: "2026-01-01T00:00:00.000000Z",
+      submittedAt: "2026-01-01T00:00:00Z", // to the hour (#37)
       answers: { affiliation: "B" },
     });
-    // Cursor from the first row skips exactly that row, even with an identical timestamp.
-    const cur = `${rows[0].submittedAt}_${rows[0].responseId}`;
+    // The seq of a row skips exactly that row, even with an identical timestamp.
     const next = lines(
-      await text(call(w, "GET", `${w.base}/responses?since=${cur}`, w.who.viewer)),
+      await text(call(w, "GET", `${w.base}/responses?since=${rows[0].seq}`, w.who.viewer)),
     );
-    expect(next.map((r) => r.answers)).toEqual([{ affiliation: "A" }, { comment: "later" }]);
-    // Plain ISO since is exclusive.
+    expect(next.map((r) => r.answers)).toEqual([{ affiliation: "B" }, { comment: "later" }]);
+    // Plain ISO since is an exclusive, coarse filter.
     const iso = lines(
       await text(call(w, "GET", `${w.base}/responses?since=${same}`, w.who.viewer)),
     );
     expect(iso.length).toBe(1);
+    // The old <submittedAt>_<responseId> cursor is gone.
+    const old = `${same}_${rows[0].responseId}`;
+    expect((await call(w, "GET", `${w.base}/responses?since=${old}`, w.who.viewer)).status).toBe(
+      400,
+    );
     // version filter
     const v2 = lines(await text(call(w, "GET", `${w.base}/responses?version=2`, w.who.viewer)));
     expect(v2.length).toBe(1);
@@ -152,7 +158,6 @@ describe("JSONL", () => {
       Array.from({ length: 1203 }, (_, i) => ({
         surveyVersionId: w.v1,
         answers: { age: i },
-        submittedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, 0, i)),
       })),
     );
     const rows = lines(await text(call(w, "GET", `${w.base}/responses`, w.who.viewer)));
@@ -186,7 +191,7 @@ describe("CSV", () => {
     const [head, r1, r2, r3, ...rest] = csv.split("\r\n");
     expect(rest).toEqual([""]);
     expect(head).toBe(
-      "responseId,surveyVersion,submittedAt,affiliation,affiliation_other,tools,tools_other,ratings_1,ratings_2,comment,age,extra",
+      "responseId,seq,surveyVersion,submittedAt,affiliation,affiliation_other,tools,tools_other,ratings_1,ratings_2,comment,age,extra",
     );
     // r1 spans a quoted newline, so rebuild from the raw text instead of splitting by line.
     expect(csv).toContain(
@@ -194,8 +199,8 @@ describe("CSV", () => {
     );
     expect(csv).toContain(",5,3,'+1 great,-4,"); // formula guard on text; numbers untouched
     expect(r1).toBeDefined();
-    expect(r2).toContain(",1,2026-01-02T00:00:00.000000Z,A,,y,,,1,,,");
-    expect(r3).toContain(",2,2026-01-03T00:00:00.000000Z,,,,,,,'@home,,ünï");
+    expect(r2).toContain(",1,2026-01-02T00:00:00Z,A,,y,,,1,,,");
+    expect(r3).toContain(",2,2026-01-03T00:00:00Z,,,,,,,'@home,,ünï");
   });
 
   it("csvCell basics", () => {
@@ -223,6 +228,60 @@ describe("CSV", () => {
     expect(csvCell(flat.age)).toBe("-4.5");
     expect(csvCell(flat.r_1)).toBe("-1");
     expect(csvCell(flat.note)).toBe("'-2+3");
+  });
+});
+
+describe("deletion (#36)", () => {
+  const ids = async (w: Awaited<ReturnType<typeof world>>) =>
+    lines(await text(call(w, "GET", `${w.base}/responses`, w.who.owner))).map((r) => r.responseId);
+
+  it("owner only: delete one response, and bulk delete", async () => {
+    const got: number[][] = [[], []];
+    for (const k of WHO) {
+      const w = await world();
+      const id = crypto.randomUUID();
+      await w.add(w.v1, {}, "2026-01-01T00:00:00Z", id);
+      const one = `${w.base}/responses/${id}`;
+      got[0]?.push((await call(w, "DELETE", one, w.who[k])).status);
+      got[1]?.push((await call(w, "DELETE", `${w.base}/responses`, w.who[k])).status);
+    }
+    expect(got).toEqual([
+      [401, 404, 403, 403, 204, 204],
+      [401, 404, 403, 403, 200, 200],
+    ]);
+  });
+
+  it("deletes one response by id, scoped to the survey; unknown or garbage ids are 404", async () => {
+    const w = await world();
+    await w.add(w.v1, {}, "2026-01-01T00:00:00Z");
+    await w.add(w.v2, {}, "2026-01-02T00:00:00Z");
+    const [a, b] = await ids(w);
+    // Same response id under another (missing) survey path is 404, not a delete.
+    const other = `/events/${w.event.id}/surveys/nope/responses/${a}`;
+    expect((await call(w, "DELETE", other, w.who.owner)).status).toBe(404);
+    expect((await call(w, "DELETE", `${w.base}/responses/${a}`, w.who.owner)).status).toBe(204);
+    expect(await ids(w)).toEqual([b]);
+    expect((await call(w, "DELETE", `${w.base}/responses/${a}`, w.who.owner)).status).toBe(404);
+    expect((await call(w, "DELETE", `${w.base}/responses/junk`, w.who.owner)).status).toBe(404);
+  });
+
+  it("bulk deletes, optionally only before a time, and returns the count", async () => {
+    const w = await world();
+    await w.add(w.v1, {}, "2026-01-01T00:00:00Z");
+    await w.add(w.v1, {}, "2026-01-01T05:00:00Z");
+    await w.add(w.v2, {}, "2026-01-03T00:00:00Z");
+    const del = (q = "") => call(w, "DELETE", `${w.base}/responses${q}`, w.who.owner);
+    expect(await (await del("?before=2026-01-01T05:00:00Z")).json()).toEqual({ deleted: 1 });
+    expect((await ids(w)).length).toBe(2);
+    expect((await del("?before=junk")).status).toBe(400);
+    expect(await (await del()).json()).toEqual({ deleted: 2 });
+    expect(await ids(w)).toEqual([]);
+  });
+
+  it("refuses deletes in an archived group (409)", async () => {
+    const w = await world();
+    await getDb().update(groups).set({ archivedAt: new Date() }).where(eq(groups.id, w.g.id));
+    expect((await call(w, "DELETE", `${w.base}/responses`, w.who.owner)).status).toBe(409);
   });
 });
 

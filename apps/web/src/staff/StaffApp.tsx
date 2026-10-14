@@ -3,10 +3,10 @@
 // Later staff screens (#19: admin, members) add a route to `route` and reuse useLoad/ErrorNote.
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { AdminPage } from "./Admin";
-import { ApiError, api, canEdit, type Me } from "./api";
+import { ApiError, api, canEdit, isOwner, type Me } from "./api";
 import { Dashboard, surveyStatus } from "./Dashboard";
 import { Editor } from "./Editor";
-import { Members, Tokens } from "./Manage";
+import { ConfirmButton, DeleteResponses, Members, Tokens, useAction } from "./Manage";
 import { Link, navigate, usePath } from "./router";
 
 export const LOGIN_URL = "/api/v1/auth/login";
@@ -185,6 +185,7 @@ function CreateForm({
 
 function GroupPage({ me, g }: { me: Me; g: string }) {
   const data = useLoad(() => Promise.all([api.group(g), api.events(g)]), g);
+  const act = useAction(data.reload);
   if (data.error) return <ErrorNote error={data.error} />;
   if (!data.data) return <Loading />;
   const [group, events] = data.data;
@@ -207,11 +208,23 @@ function GroupPage({ me, g }: { me: Me; g: string }) {
           {events.map((x) => (
             <li key={x.id}>
               <Link href={paths.event(g, x.slug)}>{x.title}</Link>{" "}
-              <span className="meta">{x.slug}</span>
+              <span className="meta">{x.slug}</span>{" "}
+              {isOwner(me, group) && (
+                <ConfirmButton
+                  label="Delete"
+                  name={x.title}
+                  title="Delete event"
+                  onConfirm={() => act.run(() => api.deleteEvent(g, x.slug))}
+                >
+                  Permanently delete {x.title} with all its surveys and responses? This cannot be
+                  undone. Backups keep a copy until they expire.
+                </ConfirmButton>
+              )}
             </li>
           ))}
         </ul>
       )}
+      {act.error !== undefined && <ErrorNote error={act.error} />}
       {canEdit(me, group) && <CreateForm legend="New event" onCreate={create} />}
       <Members me={me} group={group} g={g} />
       <Tokens me={me} group={group} g={g} />
@@ -227,6 +240,7 @@ function EventPage({ me, g, e }: { me: Me; g: string; e: string }) {
     const [group, event] = await Promise.all([api.group(g), api.event(g, e)]);
     return { group, event, surveys: await api.surveys(event.id) };
   }, `${g}/${e}`);
+  const act = useAction(data.reload);
   if (data.error) return <ErrorNote error={data.error} />;
   if (!data.data) return <Loading />;
   const { group, event, surveys } = data.data;
@@ -255,12 +269,31 @@ function EventPage({ me, g, e }: { me: Me; g: string; e: string }) {
               <span className="meta">
                 {x.latestVersion ? `published v${x.latestVersion}, ${surveyStatus(x)}` : "draft"}
                 {x.waveLabel && `, ${x.waveLabel}`}
-              </span>
+              </span>{" "}
+              {(isOwner(me, group) || (canEdit(me, group) && !x.latestVersion)) && (
+                <ConfirmButton
+                  label="Delete"
+                  name={x.slug}
+                  title="Delete survey"
+                  onConfirm={() => act.run(() => api.deleteSurvey(event.id, x.slug))}
+                >
+                  Permanently delete {x.slug} with all its versions and responses? This cannot be
+                  undone. Backups keep a copy until they expire.
+                </ConfirmButton>
+              )}
             </li>
           ))}
         </ul>
       )}
+      {act.error !== undefined && <ErrorNote error={act.error} />}
       {canEdit(me, group) && <CreateForm legend="New survey" onCreate={create} />}
+      {isOwner(me, group) && (
+        <DeleteResponses
+          eventId={event.id}
+          surveys={surveys.filter((x) => x.latestVersion).map((x) => x.slug)}
+          onDone={data.reload}
+        />
+      )}
     </>
   );
 }

@@ -27,7 +27,7 @@ export const fail = (status: 400 | 401 | 403 | 404 | 409 | 412 | 428, error: str
   new HTTPException(status, { res: Response.json({ error }, { status }) });
 export const notFound = () => fail(404, "not found");
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const resolveGroup = async (db: Db, r: Resource, userId: string) => {
   const id = "groupId" in r ? r.groupId : "eventId" in r ? r.eventId : r.surveyId;
@@ -84,3 +84,9 @@ export const requireGroupRole = (db: Db, min: Role) =>
 // For paths with an `{e}` event id.
 export const requireEventRole = (db: Db, min: Role) =>
   requireRole(db, min, (p) => ({ eventId: p("e") }));
+
+// Writes below an archived group are refused (409); reads still work. Runs after the role check.
+export const notArchived: MiddlewareHandler<AuthzEnv> = async (c, next) => {
+  if ((c.get("access") as Access).archived) throw fail(409, "group is archived");
+  return next();
+};

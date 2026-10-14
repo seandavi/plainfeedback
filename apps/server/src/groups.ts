@@ -12,6 +12,7 @@ import {
   notFound,
   ROLES,
   requireGroupRole,
+  UUID,
 } from "./authz";
 import type { Db } from "./db";
 import { groups, memberships, users } from "./schema";
@@ -163,6 +164,36 @@ export const groupRoutes = (db: Db) => {
         ? await db.update(groups).set(set).where(eq(groups.id, groupId)).returning()
         : await db.select().from(groups).where(eq(groups.id, groupId));
       return c.json(toGroup(g as GroupRow, role), 200);
+    },
+  );
+
+  // Admin only, and only once archived, so a group is never deleted in one careless click. Cascades
+  // to memberships, tokens, events, surveys, versions and responses (#36); no soft delete.
+  r.openapi(
+    createRoute({
+      method: "delete",
+      path: "/groups/{g}",
+      tags: ["groups"],
+      summary: "Delete an archived group and everything in it (admin)",
+      middleware: [requireAdmin],
+      security: sessionCookieOnly,
+      request: { params: GroupParams },
+      responses: {
+        204: { description: "Deleted" },
+        ...errors,
+        409: err("The group is not archived"),
+      },
+    }),
+    async (c) => {
+      const { g } = c.req.valid("param");
+      if (!UUID.test(g)) throw notFound();
+      const gone = await db
+        .delete(groups)
+        .where(and(eq(groups.id, g), isNotNull(groups.archivedAt)))
+        .returning({ id: groups.id });
+      if (gone.length) return c.body(null, 204);
+      const [exists] = await db.select({ id: groups.id }).from(groups).where(eq(groups.id, g));
+      throw exists ? fail(409, "archive the group before deleting it") : notFound();
     },
   );
 

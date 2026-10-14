@@ -14,7 +14,7 @@ How to use it:
 
 **Who is asking.** This survey is run by [[TEAM OR PROJECT NAME]] for [[EVENT NAME]]. Questions about it: [[CONTACT EMAIL]].
 
-**What we collect.** Only your answers to the questions below, the survey version you answered, and the time you submitted. We do not ask for your name or email address. The survey page sets no cookies and stores nothing in your browser. Your answers are saved without your IP address or browser details.
+**What we collect.** Only your answers to the questions below, the survey version you answered, and the time you submitted, recorded to the hour only. We do not ask for your name or email address. The survey page sets no cookies and stores nothing in your browser. Your answers are saved without your IP address or browser details.
 
 **What others may see.** [[HOSTING ORGANISATION]] runs the service that hosts this page. [[Its web servers keep no record of visitors' IP addresses for this site. | Its web servers keep connection logs, which include IP addresses, for [[N]] days.]] [[OPTIONAL, if behind a CDN: Traffic passes through [[CDN, e.g. Cloudflare]], which processes connection details such as IP addresses under its own privacy policy: [[LINK]].]] Your network or employer may also log that you visited this site.
 
@@ -37,13 +37,13 @@ How to use it:
 | Sentence | True because | Check before publishing |
 |---|---|---|
 | "We do not ask for your name or email address." | v1 has no participant identity ([ADR 0004](adr/0004-anonymous-link-only-v1.md)). | Your survey has no question asking for them. |
-| "What we collect: answers, version, time." | A response row is `answers`, `survey_version_id`, `submitted_at` (`apps/server/src/schema/index.ts`). | Nothing to check. |
+| "What we collect: answers, version, time to the hour." | A response row is `answers`, `survey_version_id`, `submitted_at` truncated to the hour by a database constraint, and `seq`, a counter for exports (`apps/server/src/schema/index.ts`, [#37](https://github.com/seandavi/plainfeedback/issues/37)). | Nothing to check. |
 | "Sets no cookies and stores nothing in your browser." | Participant routes never set cookies (`participantGuard`, `apps/server/src/app.ts`); the page keeps state in memory (`apps/web/src/ParticipantPage.tsx`). | No CDN feature sets cookies on your domain (Cloudflare Bot Fight Mode, challenges and some analytics do). See [deploy.md](deploy.md#cloudflare). |
 | "Saved without your IP address or browser details." | The app never reads IP or user-agent headers and its log has method, path and status only. | Nothing in the app; but see the next row. |
 | "[Host] keeps no record of IP addresses." | Only if the reverse proxy is configured as in [deploy.md](deploy.md). | Ask the operator. If unsure, use the "keeps connection logs" wording. |
 | "Administrators of this service can read individual answers." | Global admins pass every group check (`authorize`, `apps/server/src/authz.ts`), and the operator can read the database. | Nothing to check; do not remove this. |
 | "Never sent to AI services." | Invariant in AGENTS.md; no code sends responses anywhere. | Your own analysis workflow does not paste exports into an AI tool. If it does, say so. |
-| Retention period | **Not enforced by the software yet** ([#36](https://github.com/seandavi/plainfeedback/issues/36)). Deletion is a manual operator task. | The operator has agreed to delete on that date, and backups expire. |
-| Withdrawal | No identifier exists, so a response can only be found by its content or time. | Do not promise deletion on request. |
+| Retention period | Owners can delete responses, surveys and events in the app ([#36](https://github.com/seandavi/plainfeedback/issues/36)), but **nothing deletes on a schedule** ([#47](https://github.com/seandavi/plainfeedback/issues/47)). | Someone (owner or operator) is named to delete on that date, and backups expire. |
+| Withdrawal | No identifier exists, so a response can only be found by its content or its hour. An owner can delete it once found. | Do not promise deletion on request. |
 
 Do not write "anonymous" without qualification. "We do not collect your name or email" is accurate; "your answers are anonymous" is not, for the reasons in [threat-model.md](threat-model.md).

@@ -101,7 +101,7 @@ curl -sS "$BASE/api/v1/events/$EVENT/surveys/feedback/responses?format=csv" -b "
 curl -sS "$BASE/api/v1/events/$EVENT/surveys/feedback/versions/1/codebook" -b "pf_session=$PF_SESSION"
 ```
 
-Viewer role or higher. `format=jsonl` (default) or `csv`; `version=<n>` limits to one version; `since` is exclusive and is an ISO time or a cursor `<submittedAt>_<responseId>` built from the last JSONL row you received. CSV is wide (multi answers joined with `;`, Likert as `<id>_<statement number>`, Other text in `<id>_other`, a `surveyVersion` column, union of columns across versions). Cells starting with `=`, `+`, `-` or `@` get a leading single quote (formula-injection guard). The codebook maps Likert statement numbers to text and lists scale anchors and free-text questions. Parquet is deferred: DuckDB and polars read these files directly.
+Viewer role or higher. `format=jsonl` (default) or `csv`; `version=<n>` limits to one version; rows are ordered by `seq`; `since` is exclusive and is the `seq` of the last row you received (to resume) or an ISO time (a coarse filter: `submittedAt` is recorded to the hour only, [#37](https://github.com/seandavi/plainfeedback/issues/37)). CSV is wide (multi answers joined with `;`, Likert as `<id>_<statement number>`, Other text in `<id>_other`, `seq` and `surveyVersion` columns, union of columns across versions). Cells starting with `=`, `+`, `-` or `@` get a leading single quote (formula-injection guard). The codebook maps Likert statement numbers to text and lists scale anchors and free-text questions. Parquet is deferred: DuckDB and polars read these files directly.
 
 ## Coming
 

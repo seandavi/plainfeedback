@@ -171,13 +171,24 @@ function Groups() {
                     Rename
                   </button>{" "}
                   {g.archived ? (
-                    <button
-                      type="button"
-                      aria-label={`Unarchive ${g.name}`}
-                      onClick={() => run(() => api.patchGroup(g.id, { archived: false }))}
-                    >
-                      Unarchive
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        aria-label={`Unarchive ${g.name}`}
+                        onClick={() => run(() => api.patchGroup(g.id, { archived: false }))}
+                      >
+                        Unarchive
+                      </button>{" "}
+                      <ConfirmButton
+                        label="Delete"
+                        name={g.name}
+                        title="Delete group"
+                        onConfirm={() => run(() => api.deleteGroup(g.id))}
+                      >
+                        Permanently delete {g.name} with all its events, surveys and responses? This
+                        cannot be undone. Backups keep a copy until they expire.
+                      </ConfirmButton>
+                    </>
                   ) : (
                     <ConfirmButton
                       label="Archive"

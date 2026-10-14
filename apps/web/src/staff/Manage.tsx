@@ -344,3 +344,92 @@ export function Tokens({ me, group, g }: { me: Me; group: Group; g: string }) {
     </section>
   );
 }
+
+type Pending = { slug: string; id: string; before: string };
+
+/** Owner only (#36): delete one response by its id from the export, or all of a survey's
+ * responses, optionally only those submitted before a date. Always confirms first. */
+export function DeleteResponses({
+  eventId,
+  surveys,
+  onDone,
+}: {
+  eventId: string;
+  surveys: string[];
+  onDone: () => void;
+}) {
+  const [pending, setPending] = useState<Pending>();
+  const [note, setNote] = useState<string>();
+  const { error, run } = useAction(onDone);
+  const submit = (ev: FormEvent<HTMLFormElement>) => {
+    ev.preventDefault();
+    const f = new FormData(ev.currentTarget);
+    const v = (k: string) => String(f.get(k) ?? "").trim();
+    setNote(undefined);
+    setPending({ slug: v("survey"), id: v("id"), before: v("before") });
+  };
+  const confirm = (p: Pending) =>
+    run(async () => {
+      if (p.id) {
+        await api.deleteResponse(eventId, p.slug, p.id);
+        setNote("Deleted 1 response.");
+      } else {
+        const before = p.before ? new Date(p.before).toISOString() : undefined;
+        const r = await api.deleteResponses(eventId, p.slug, before);
+        setNote(`Deleted ${r.deleted} responses.`);
+      }
+    });
+  if (!surveys.length) return null;
+  return (
+    <form className="create" onSubmit={submit}>
+      <fieldset>
+        <legend>Delete responses</legend>
+        <label>
+          Survey{" "}
+          <select name="survey" required>
+            {surveys.map((s) => (
+              <option key={s}>{s}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Response id <input name="id" pattern="[0-9a-fA-F\-]{36}" />
+          <span className="meta">From the export. Leave empty to delete many.</span>
+        </label>
+        <label>
+          Submitted before <input name="before" type="date" />
+          <span className="meta">UTC. Leave empty to delete all.</span>
+        </label>
+        <button type="submit">Delete responses</button>
+        {note && <p role="status">{note}</p>}
+        {error !== undefined && <ErrorNote error={error} />}
+      </fieldset>
+      {pending && (
+        <Dialog title="Delete responses" onClose={() => setPending(undefined)}>
+          <p>
+            {pending.id
+              ? `Permanently delete response ${pending.id} from ${pending.slug}?`
+              : pending.before
+                ? `Permanently delete all responses to ${pending.slug} submitted before ${pending.before}?`
+                : `Permanently delete all responses to ${pending.slug}?`}{" "}
+            This cannot be undone. Backups keep a copy until they expire.
+          </p>
+          <div className="actions">
+            <button type="button" onClick={() => setPending(undefined)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPending(undefined);
+                confirm(pending);
+              }}
+            >
+              Delete
+            </button>
+          </div>
+        </Dialog>
+      )}
+    </form>
+  );
+}

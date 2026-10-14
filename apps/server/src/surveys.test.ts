@@ -45,8 +45,12 @@ type Case = {
   path: (w: World) => string;
   body?: unknown;
   headers?: Record<string, string>;
+  setup?: (w: World) => Promise<unknown>;
   expect: [number, number, number, number, number, number]; // in WHO order
 };
+// An unpublished survey "draft" next to "post".
+const addDraft = (w: World) =>
+  getDb().insert(surveys).values({ eventId: w.event.id, slug: "draft", draftMarkdown: MD });
 const ev = (w: World) => `/events/${w.event.id}`;
 const cases: Case[] = [
   {
@@ -108,6 +112,23 @@ const cases: Case[] = [
     path: (w) => `${ev(w)}/surveys/post/versions/1`,
     expect: [401, 404, 200, 200, 200, 200],
   },
+  // Deletion (#36): published surveys and events need an owner; a creator may delete a draft.
+  {
+    method: "DELETE",
+    path: (w) => `${ev(w)}/surveys/post`,
+    expect: [401, 404, 403, 403, 204, 204],
+  },
+  {
+    method: "DELETE",
+    path: (w) => `${ev(w)}/surveys/draft`,
+    setup: addDraft,
+    expect: [401, 404, 403, 204, 204, 204],
+  },
+  {
+    method: "DELETE",
+    path: (w) => `/groups/${w.g.id}/events/fall-2026`,
+    expect: [401, 404, 403, 403, 204, 204],
+  },
 ];
 const placeholder = { g: { id: "{g}" }, event: { id: "{e}" } } as World;
 
@@ -116,6 +137,7 @@ describe("permission matrix: endpoint x role", () => {
     WHO.forEach((role, i) => {
       it(`${c.method} ${c.path(placeholder)} as ${role} -> ${c.expect[i]}`, async () => {
         const w = await world();
+        await c.setup?.(w);
         const res = await call(w, c.method, c.path(w), w.who[role], c.body, undefined, c.headers);
         expect(res.status).toBe(c.expect[i]);
       });
@@ -126,6 +148,7 @@ describe("permission matrix: endpoint x role", () => {
   for (const c of cases) {
     it(`${c.method} ${c.path(placeholder)} as a user in no group -> 404`, async () => {
       const w = await world();
+      await c.setup?.(w);
       const res = await call(w, c.method, c.path(w), w.who.stranger, c.body, undefined, c.headers);
       expect(res.status).toBe(404);
     });
@@ -173,6 +196,7 @@ describe("CSRF on state-changing routes", () => {
     for (const origin of [null, "https://evil.test"]) {
       it(`${c.method} ${c.path(placeholder)} with Origin ${origin} -> 403`, async () => {
         const w = await world();
+        await c.setup?.(w);
         const res = await call(w, c.method, c.path(w), w.who.admin, c.body, origin, c.headers);
         expect(res.status).toBe(403);
         expect(await read(res)).toEqual({ error: "cross-origin request rejected" });
@@ -213,6 +237,49 @@ describe("events", () => {
     expect((await call(w, "GET", `${ev(w)}/surveys/post`, as)).status).toBe(200);
     // The viewer still gets 403, not 409: role checks come first.
     expect((await call(w, "PUT", `${ev(w)}/surveys/new`, w.who.viewer, MD)).status).toBe(403);
+  });
+});
+
+describe("deletion", () => {
+  it("deleting an event removes its surveys, versions and responses; versions stay immutable", async () => {
+    const w = await world();
+    const db = getDb();
+    const [v] = await db
+      .select()
+      .from(surveyVersions)
+      .where(eq(surveyVersions.surveyId, w.survey.id));
+    await db.insert(responses).values({ surveyVersionId: v?.id as string, answers: {} });
+    const res = await call(w, "DELETE", `/groups/${w.g.id}/events/fall-2026`, w.who.owner);
+    expect(res.status).toBe(204);
+    expect(await db.select().from(surveys).where(eq(surveys.id, w.survey.id))).toEqual([]);
+    const vid = v?.id as string;
+    expect(await db.select().from(responses).where(eq(responses.surveyVersionId, vid))).toEqual([]);
+    expect(await db.select().from(surveyVersions).where(eq(surveyVersions.id, vid))).toEqual([]);
+    expect((await call(w, "GET", `/groups/${w.g.id}/events/fall-2026`, w.who.owner)).status).toBe(
+      404,
+    );
+    expect(
+      (await call(w, "DELETE", `/groups/${w.g.id}/events/fall-2026`, w.who.owner)).status,
+    ).toBe(404);
+  });
+
+  it("a creator cannot delete a survey once it is published", async () => {
+    const w = await world();
+    await addDraft(w);
+    const path = `${ev(w)}/surveys/draft`;
+    expect((await call(w, "POST", `${path}/publish`, w.who.creator)).status).toBe(201);
+    expect((await call(w, "DELETE", path, w.who.creator)).status).toBe(403);
+    expect((await call(w, "DELETE", path, w.who.owner)).status).toBe(204);
+    expect((await call(w, "DELETE", path, w.who.owner)).status).toBe(404);
+  });
+
+  it("refuses deletes in an archived group (409)", async () => {
+    const w = await world();
+    await getDb().update(groups).set({ archivedAt: new Date() }).where(eq(groups.id, w.g.id));
+    expect((await call(w, "DELETE", `${ev(w)}/surveys/post`, w.who.owner)).status).toBe(409);
+    expect(
+      (await call(w, "DELETE", `/groups/${w.g.id}/events/fall-2026`, w.who.owner)).status,
+    ).toBe(409);
   });
 });
 

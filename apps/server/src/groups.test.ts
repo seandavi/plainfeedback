@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { users } from "./schema";
+import { apiTokens, events, memberships, users } from "./schema";
 import { type U, useWorld, WHO, type World } from "./testworld";
 
 // RBAC (issue #4, ADR 0009).
@@ -49,6 +49,8 @@ const cases: Case[] = [
     path: (w) => `/groups/${w.g.id}/members/${w.target.id}`,
     expect: [401, 404, 403, 403, 204, 204],
   },
+  // Admin only; the admin gets 409 here because the group is not archived (see "deletion" below).
+  { method: "DELETE", path: (w) => `/groups/${w.g.id}`, expect: [401, 403, 403, 403, 403, 409] },
   { method: "GET", path: () => "/users", expect: [401, 403, 403, 403, 403, 200] },
   {
     method: "PATCH",
@@ -155,6 +157,42 @@ describe("groups", () => {
   });
 });
 
+describe("group deletion (#36)", () => {
+  it("deletes an archived group and everything in it; unknown or garbage ids are 404", async () => {
+    const w = await world();
+    const db = getDb();
+    const [ev] = await db
+      .insert(events)
+      .values({ groupId: w.g.id, slug: "e", title: "E" })
+      .returning();
+    await db.insert(apiTokens).values({
+      userId: w.who.owner.id,
+      groupId: w.g.id,
+      name: "t",
+      role: "viewer",
+      tokenHash: crypto.randomUUID(),
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const path = `/groups/${w.g.id}`;
+    expect((await call(w, "DELETE", path, w.who.admin)).status).toBe(409);
+    await call(w, "PATCH", path, w.who.owner, { archived: true });
+    expect((await call(w, "DELETE", path, w.who.owner)).status).toBe(403);
+    expect((await call(w, "DELETE", path, w.who.admin)).status).toBe(204);
+    expect(await db.select().from(memberships).where(eq(memberships.groupId, w.g.id))).toEqual([]);
+    expect(await db.select().from(apiTokens).where(eq(apiTokens.groupId, w.g.id))).toEqual([]);
+    expect(
+      await db
+        .select()
+        .from(events)
+        .where(eq(events.id, ev?.id as string)),
+    ).toEqual([]);
+    expect((await call(w, "DELETE", path, w.who.admin)).status).toBe(404);
+    expect((await call(w, "DELETE", "/groups/not-a-uuid", w.who.admin)).status).toBe(404);
+    // The other group is untouched.
+    expect((await call(w, "GET", `/groups/${w.other.id}`, w.who.nonMember)).status).toBe(200);
+  });
+});
+
 describe("members", () => {
   it("adds an existing user by email (case-insensitive); unknown emails are 404", async () => {
     const w = await world();
@@ -251,6 +289,7 @@ describe("OpenAPI registry (#18 builds the spec page on this)", () => {
       "/api/v1/events/{e}/surveys/{s}/link/qr.svg",
       "/api/v1/events/{e}/surveys/{s}/publish",
       "/api/v1/events/{e}/surveys/{s}/responses",
+      "/api/v1/events/{e}/surveys/{s}/responses/{id}",
       "/api/v1/events/{e}/surveys/{s}/validate",
       "/api/v1/events/{e}/surveys/{s}/versions",
       "/api/v1/events/{e}/surveys/{s}/versions/{n}",
