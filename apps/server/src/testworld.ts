@@ -13,6 +13,7 @@ export const useWorld = () => {
 
   const makeApp = () =>
     createApp({
+      publicBaseUrl: "https://pf.example.org",
       ping: async () => {},
       log: () => {},
       auth: {

@@ -113,7 +113,8 @@ POST   /events/{e}/surveys/{s}/validate         viewer: dry run of supplied or s
 POST   /events/{e}/surveys/{s}/publish          creator: freeze the draft as a new version
 GET    /events/{e}/surveys/{s}/versions         viewer
 GET    /events/{e}/surveys/{s}/versions/{n}     viewer
-GET    /events/{e}/surveys/{s}/link             public URL and QR code (SVG/PNG)
+GET    /events/{e}/surveys/{s}/link             viewer: public URL + published flag
+GET    /events/{e}/surveys/{s}/link/qr.svg|png  viewer: QR code of that URL (png: ?size=)
 GET    /events/{e}/responses?format=jsonl|csv|parquet&since=   viewer
 
 GET    /s/{publicId}                            participant page (no cookies)
@@ -133,7 +134,7 @@ Events and surveys (#6):
 - Close/reopen is `surveys.closed_at` (set = closed), not a version field: versions are immutable, and closing is an operational switch that applies to whichever version is live. `closes_at` on a version is the scheduled end.
 - In an archived group, event and survey writes return 409; reads still work.
 
-Participant API (#7, [ADR 0010](adr/0010-participant-page.md)):
+Participant API (#7, [ADR 0011](adr/0011-participant-page.md)):
 - `publicId` is a random 12-character id on `surveys` (returned by the staff survey GET), not the slugs.
 - GET returns `status: open | closed | not_yet_open`; closed (`closed_at`, or `closes_at` past) wins. 404 until published.
 - POST is JSON only (415 otherwise), at most 64 KB (413). Errors: 404 unknown, 429 rate limited, 410 closed, **403 not yet open**, 409 `versionId` is not the latest (client reloads), 422 `{errors: {questionId: message}}` from `validateAnswers`. Stores answers, version and `submitted_at` only.

@@ -13,6 +13,8 @@ const list = z
 const schema = z.object({
   DATABASE_URL: z.string().regex(/^postgres(ql)?:\/\//, "DATABASE_URL must be a postgresql:// URL"),
   PORT: z.coerce.number().int().default(3000),
+  // Public origin of this app, used to build participant links (no trailing slash).
+  PUBLIC_BASE_URL: z.url({ protocol: /^https?$/ }).transform((u) => u.replace(/\/+$/, "")),
   WEB_DIST: z.string().default("../web/dist"),
   // Staff auth (ADR 0005). Auth is mounted only when client id, secret and redirect URI are set.
   OIDC_PROVIDER: z.string().default("Google"),

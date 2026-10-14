@@ -24,7 +24,7 @@ const auth: AuthOptions | undefined =
     : undefined;
 if (!auth)
   console.warn("staff auth disabled: set OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_REDIRECT_URI");
-const app = createApp({ ping: () => ping(db), auth, db });
+const app = createApp({ ping: () => ping(db), auth, db, publicBaseUrl: config.PUBLIC_BASE_URL });
 
 // Serve the built SPA; unknown GETs (e.g. /s/...) fall back to index.html.
 app.use("*", serveStatic({ root: config.WEB_DIST }));

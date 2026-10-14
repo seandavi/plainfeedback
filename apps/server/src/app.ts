@@ -40,9 +40,16 @@ export type AppDeps = {
   log?: (line: string) => void;
   auth?: AuthOptions; // staff auth is mounted only when configured
   db?: Db; // participant API; defaults to auth.db
+  publicBaseUrl?: string; // PUBLIC_BASE_URL; defaults to the origin of auth.redirectUri
 };
 
-export const createApp = ({ ping, log = console.log, auth, db = auth?.db }: AppDeps) => {
+export const createApp = ({
+  ping,
+  log = console.log,
+  auth,
+  db = auth?.db,
+  publicBaseUrl,
+}: AppDeps) => {
   // OpenAPIHono so routes declared with createRoute land in one registry for the spec (#18).
   const app = new OpenAPIHono<AuthEnv>({
     defaultHook: (result, c) => {
@@ -72,7 +79,7 @@ export const createApp = ({ ping, log = console.log, auth, db = auth?.db }: AppD
       return c.json({ id, email, isAdmin });
     });
     app.route("/api/v1", groupRoutes(auth.db));
-    app.route("/api/v1", surveyRoutes(auth.db));
+    app.route("/api/v1", surveyRoutes(auth.db, publicBaseUrl ?? new URL(auth.redirectUri).origin));
     app.route("/api/v1", responseRoutes(auth.db));
     app.route("/api/v1", tokenRoutes(auth.db));
   }

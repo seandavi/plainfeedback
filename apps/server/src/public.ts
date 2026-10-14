@@ -1,5 +1,5 @@
 // Participant API (issue #7), mounted at /api/v1/public. No session, no cookies, no identifiers:
-// a response row is answers + version + submitted_at only (ADR 0004, ADR 0010). participantGuard in
+// a response row is answers + version + submitted_at only (ADR 0004, ADR 0011). participantGuard in
 // app.ts strips Set-Cookie and disables caching on these paths.
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { type Survey as Model, validateAnswers } from "@plainfeedback/core";

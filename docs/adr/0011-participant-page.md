@@ -1,4 +1,4 @@
-# 0010. Participant page: random public id and a hand-rolled markdown renderer
+# 0011. Participant page: random public id and a hand-rolled markdown renderer
 
 - Status: accepted
 - Date: 2026-10-14

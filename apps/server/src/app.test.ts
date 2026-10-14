@@ -71,5 +71,9 @@ test("access log has method/path/status only, no IP or user-agent", async () => 
 
 test("config requires a postgres DATABASE_URL", () => {
   expect(() => loadConfig({})).toThrow();
-  expect(loadConfig({ DATABASE_URL: "postgresql://u:p@h/d" }).PORT).toBe(3000);
+  const base = { DATABASE_URL: "postgresql://u:p@h/d", PUBLIC_BASE_URL: "https://pf.example.org/" };
+  expect(loadConfig(base).PORT).toBe(3000);
+  expect(loadConfig(base).PUBLIC_BASE_URL).toBe("https://pf.example.org");
+  expect(() => loadConfig({ ...base, PUBLIC_BASE_URL: undefined })).toThrow();
+  expect(() => loadConfig({ ...base, PUBLIC_BASE_URL: "ftp://x.org" })).toThrow();
 });

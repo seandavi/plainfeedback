@@ -246,6 +246,9 @@ describe("OpenAPI registry (#18 builds the spec page on this)", () => {
     expect(Object.keys(doc.paths ?? {}).sort()).toEqual([
       "/api/v1/events/{e}/surveys",
       "/api/v1/events/{e}/surveys/{s}",
+      "/api/v1/events/{e}/surveys/{s}/link",
+      "/api/v1/events/{e}/surveys/{s}/link/qr.png",
+      "/api/v1/events/{e}/surveys/{s}/link/qr.svg",
       "/api/v1/events/{e}/surveys/{s}/publish",
       "/api/v1/events/{e}/surveys/{s}/responses",
       "/api/v1/events/{e}/surveys/{s}/validate",
