@@ -1,5 +1,5 @@
 {
-  "files": { "includes": ["**", "!**/dist", "!**/node_modules", "!.claude"] },
+  "files": { "includes": ["**", "!**/dist", "!**/node_modules", "!.claude", "!docs/openapi.json"] },
   "formatter": { "indentStyle": "space", "lineWidth": 100 },
   "linter": { "enabled": true }
 }

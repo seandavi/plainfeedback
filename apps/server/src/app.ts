@@ -2,6 +2,7 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import type { MiddlewareHandler } from "hono";
 import { type AuthEnv, type AuthOptions, authRoutes, requireUser, sessionAuth } from "./auth";
 import { groupRoutes } from "./groups";
+import { mountDocs } from "./openapi";
 import { surveyRoutes } from "./surveys";
 
 // Participant routes must stay identifier-free: no cookies, no caching, minimal logs.
@@ -49,6 +50,7 @@ export const createApp = ({ ping, log = console.log, auth }: AppDeps) => {
       return c.json({ status: "db unavailable" }, 503);
     }
   });
+  mountDocs(app);
   if (auth) {
     const session = sessionAuth(auth);
     // Participant paths never read the session, even though /api/v1/public/* receives the cookie.

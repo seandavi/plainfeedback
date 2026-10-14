@@ -23,6 +23,10 @@ down:
 migrate:
     pnpm -C apps/server migrate
 
+# regenerate docs/openapi.json (commit it; a test fails on drift)
+openapi:
+    pnpm -C apps/server exec tsx src/openapi-gen.ts
+
 # generate a migration after editing apps/server/src/schema
 migration-generate name:
     pnpm -C apps/server exec drizzle-kit generate --name {{name}}
