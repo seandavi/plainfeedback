@@ -261,6 +261,8 @@ describe("OpenAPI registry (#18 builds the spec page on this)", () => {
       "/api/v1/groups/{g}/tokens",
       "/api/v1/groups/{g}/tokens/{id}",
       "/api/v1/me/tokens",
+      "/api/v1/public/surveys/{publicId}",
+      "/api/v1/public/surveys/{publicId}/responses",
       "/api/v1/users",
       "/api/v1/users/{id}",
     ]);

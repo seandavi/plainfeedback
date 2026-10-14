@@ -83,6 +83,7 @@ const SurveySummary = z
   })
   .openapi("SurveySummary");
 const Survey = SurveySummary.extend({
+  publicId: z.string().openapi({ description: "Participant page: /s/{publicId}" }),
   markdown: z.string(),
   etag: z.string(),
   latest: VersionSummary.nullable(),
@@ -167,6 +168,7 @@ export const surveyRoutes = (db: Db) => {
       updatedAt: s.updatedAt.toISOString(),
       latestVersion: latest?.version ?? null,
       latest: latest ? toSummary(latest) : null,
+      publicId: s.publicId,
       markdown: s.draftMarkdown,
       etag: quote(s.draftEtag),
     };

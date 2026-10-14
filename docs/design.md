@@ -116,9 +116,9 @@ GET    /events/{e}/surveys/{s}/versions/{n}     viewer
 GET    /events/{e}/surveys/{s}/link             public URL and QR code (SVG/PNG)
 GET    /events/{e}/responses?format=jsonl|csv|parquet&since=   viewer
 
-GET    /s/{event}/{survey}                      participant page (no cookies)
-GET    /api/v1/public/surveys/{id}              model JSON
-POST   /api/v1/public/surveys/{id}/responses    submit answers (no identifier)
+GET    /s/{publicId}                            participant page (no cookies)
+GET    /api/v1/public/surveys/{publicId}        latest published version: model, privacy statement, status
+POST   /api/v1/public/surveys/{publicId}/responses   submit {versionId, answers} (no identifier)
 ```
 
 Outside your groups everything is 404; a role too low within your group is 403 ([ADR 0009](adr/0009-group-rbac-404.md)). Members must have signed in once before they can be added; invitations come later.
@@ -132,6 +132,12 @@ Events and surveys (#6):
 - Publish compiles the stored draft (422 with line-numbered errors if invalid) and inserts the next immutable version. `privacyStatement`, `opensAt`, `closesAt` left out of the body are inherited from the latest version; the privacy statement defaults to a template. If draft and settings equal the latest version, publish returns it (200) instead of creating a new one.
 - Close/reopen is `surveys.closed_at` (set = closed), not a version field: versions are immutable, and closing is an operational switch that applies to whichever version is live. `closes_at` on a version is the scheduled end.
 - In an archived group, event and survey writes return 409; reads still work.
+
+Participant API (#7, [ADR 0010](adr/0010-participant-page.md)):
+- `publicId` is a random 12-character id on `surveys` (returned by the staff survey GET), not the slugs.
+- GET returns `status: open | closed | not_yet_open`; closed (`closed_at`, or `closes_at` past) wins. 404 until published.
+- POST is JSON only (415 otherwise), at most 64 KB (413). Errors: 404 unknown, 429 rate limited, 410 closed, **403 not yet open**, 409 `versionId` is not the latest (client reloads), 422 `{errors: {questionId: message}}` from `validateAnswers`. Stores answers, version and `submitted_at` only.
+- Rate limit: in-memory token bucket per survey (burst 200, then 5/s), no client identity. Single process only.
 
 ## Auth
 

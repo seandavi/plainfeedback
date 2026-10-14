@@ -1,0 +1,178 @@
+/* Mobile first, system fonts only (no font downloads). */
+:root {
+  color-scheme: light dark;
+  --fg: #1a1a1a;
+  --bg: #fff;
+  --muted: #555;
+  --line: #ccc;
+  --accent: #0b57d0;
+  --error: #b3261e;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.5;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fg: #eee;
+    --bg: #121212;
+    --muted: #aaa;
+    --line: #444;
+    --accent: #8ab4f8;
+    --error: #f2b8b5;
+  }
+}
+body {
+  margin: 0;
+  color: var(--fg);
+  background: var(--bg);
+}
+main {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+a {
+  color: var(--accent);
+}
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+.privacy {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  margin: 1rem 0;
+}
+.privacy summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.question {
+  border: 0;
+  margin: 0 0 1.75rem;
+  padding: 0;
+  min-width: 0;
+}
+.question > legend,
+.question > label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  padding: 0;
+}
+.req {
+  color: var(--muted);
+  font-weight: normal;
+}
+.option {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  min-height: 2.75rem; /* touch target */
+}
+input[type="radio"],
+input[type="checkbox"] {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+  flex: none;
+}
+input[type="text"],
+input[type="number"],
+textarea {
+  box-sizing: border-box;
+  width: 100%;
+  font: inherit;
+  padding: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+}
+input.other {
+  margin: 0 0 0.5rem 1.85rem;
+  width: calc(100% - 1.85rem);
+}
+[aria-invalid="true"] {
+  border-color: var(--error);
+  outline-color: var(--error);
+}
+.error,
+.form-message {
+  color: var(--error);
+  font-weight: 600;
+  margin: 0.25rem 0 0;
+}
+.count {
+  display: block;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+.anchors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+  margin: 0 0 0.5rem;
+}
+.statement {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 0;
+  padding: 0.75rem 0;
+  min-width: 0;
+}
+.statement legend {
+  padding: 0;
+  margin-bottom: 0.4rem;
+}
+.scale {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+.scale label {
+  flex: 1 0 2.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.4rem 0;
+  cursor: pointer;
+}
+/* Wider screens: statement and its scale side by side. */
+@media (min-width: 40rem) {
+  .statement {
+    display: grid;
+    grid-template-columns: 1fr minmax(16rem, 1fr);
+    align-items: center;
+    gap: 1rem;
+  }
+  .statement legend {
+    float: left; /* lets the legend take part in the grid */
+    margin: 0;
+  }
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+button[type="submit"] {
+  font: inherit;
+  font-weight: 600;
+  padding: 0.75rem 1.5rem;
+  min-height: 2.75rem;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--bg);
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.6;
+}
