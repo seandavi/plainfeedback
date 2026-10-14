@@ -17,9 +17,9 @@ const REDIRECT = `${ORIGIN}/api/v1/auth/callback`;
 const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url");
 
 type Claims = Record<string, unknown>;
-const fakeIdp = (claims: (nonce: string) => Claims) => {
+const fakeIdp = (claims: (nonce: string) => Claims, iss = ISS) => {
   const config = new oidc.Configuration(
-    { issuer: ISS, authorization_endpoint: `${ISS}/authorize`, token_endpoint: `${ISS}/token` },
+    { issuer: iss, authorization_endpoint: `${ISS}/authorize`, token_endpoint: `${ISS}/token` },
     CLIENT,
     "secret",
   );
@@ -27,7 +27,7 @@ const fakeIdp = (claims: (nonce: string) => Claims) => {
   config[oidc.customFetch] = async () => {
     const now = Math.floor(Date.now() / 1000);
     const payload = {
-      iss: ISS,
+      iss,
       aud: CLIENT,
       sub: "sub-1",
       iat: now,
@@ -42,8 +42,8 @@ const fakeIdp = (claims: (nonce: string) => Claims) => {
 
 const getDb = useTestDb();
 
-const setup = (claims: (nonce: string) => Claims, over: Partial<AuthOptions> = {}) => {
-  const idp = fakeIdp(claims);
+const setup = (claims: (nonce: string) => Claims, over: Partial<AuthOptions> = {}, iss = ISS) => {
+  const idp = fakeIdp(claims, iss);
   const auth: AuthOptions = {
     db: getDb(),
     provider: "Test",
@@ -162,6 +162,79 @@ describe("staff auth", () => {
       expect((await login(setup(ok(bad), { allowedDomains }))).status).toBe(403);
     }
     expect((await login(setup(ok("X@Example.ORG"), { allowedDomains }))).status).toBe(302);
+  });
+
+  it("requires Google's hd claim to match ALLOWED_EMAIL_DOMAINS (#35)", async () => {
+    const allowedDomains = ["example.org"];
+    const claims = (hd?: string) => (nonce: string) => ({
+      ...ok()(nonce),
+      sub: "sub-hd",
+      ...(hd && { hd }),
+    });
+    for (const iss of ["https://accounts.google.com", "accounts.google.com"]) {
+      const status = async (hd?: string, domains = allowedDomains) =>
+        (await login(setup(claims(hd), { allowedDomains: domains }, iss))).status;
+      expect(await status(), "consumer account on an org address").toBe(403);
+      expect(await status("evil.example"), "other Workspace").toBe(403);
+      expect(await status("Example.org")).toBe(302);
+      expect(await status(undefined, []), "no allowlist: any verified email").toBe(302);
+    }
+    expect(
+      (await login(setup(claims(), { allowedDomains }))).status,
+      "other issuers: email check only",
+    ).toBe(302);
+  });
+
+  it("refuses disabled users (#38)", async () => {
+    const claims = (nonce: string) => ({ ...ok("gone@example.org")(nonce), sub: "sub-gone" });
+    await sid(setup(claims));
+    const gone = eq(users.email, "gone@example.org");
+    await getDb().update(users).set({ disabledAt: new Date() }).where(gone);
+    // A stale ADMIN_EMAILS entry must not promote the disabled account either.
+    const res = await login(setup(claims, { adminEmails: ["gone@example.org"] }));
+    expect(res.status).toBe(403);
+    expect(cookieValue(res, "pf_session")).toBeUndefined();
+    expect((await getDb().select().from(users).where(gone))[0]?.isAdmin).toBe(false);
+  });
+
+  it("ends sessions after the idle timeout and the absolute lifetime (#38)", async () => {
+    const MIN = 60_000;
+    const s = setup(ok(), { sessionTtlMs: 12 * 60 * MIN, sessionIdleMs: 120 * MIN });
+    const id = await sid(s);
+    const h = await hashSessionId(id);
+    const row = async () =>
+      (await getDb().select().from(sessions).where(eq(sessions.idHash, h)))[0] as {
+        expiresAt: Date;
+      };
+    const left = async () => (await row()).expiresAt.getTime() - Date.now();
+    expect(await left()).toBeCloseTo(120 * MIN, -4);
+    const set = (v: Partial<typeof sessions.$inferInsert>) =>
+      getDb().update(sessions).set(v).where(eq(sessions.idHash, h));
+    // Used again after 119 idle minutes: slides forward.
+    await set({ expiresAt: new Date(Date.now() + MIN) });
+    expect((await me(s, id)).status).toBe(200);
+    expect(await left()).toBeCloseTo(120 * MIN, -4);
+    // Near the absolute lifetime: capped at created + 12 h.
+    await set({
+      createdAt: new Date(Date.now() - 11 * 60 * MIN),
+      expiresAt: new Date(Date.now() + MIN),
+    });
+    expect((await me(s, id)).status).toBe(200);
+    expect(await left()).toBeCloseTo(60 * MIN, -4);
+    // Idle too long: gone.
+    await set({ expiresAt: new Date(Date.now() - 1000) });
+    expect((await me(s, id)).status).toBe(401);
+  });
+
+  it("purges expired sessions at login", async () => {
+    const s = setup(ok());
+    const old = await hashSessionId(await sid(s));
+    await getDb()
+      .update(sessions)
+      .set({ expiresAt: new Date(Date.now() - 1000) })
+      .where(eq(sessions.idHash, old));
+    await sid(s);
+    expect(await getDb().select().from(sessions).where(eq(sessions.idHash, old))).toHaveLength(0);
   });
 
   it("bootstraps admins from ADMIN_EMAILS and upserts by (issuer, subject)", async () => {

@@ -9,7 +9,7 @@ Internet ──TLS──> [optional CDN] ──> reverse proxy (TLS, HSTS, no IP
 ```
 
 - Run with `just up` (Docker Compose, [ADR 0006](adr/0006-docker-compose.md)). `compose.yaml` publishes the app on `127.0.0.1:3000` only (`APP_BIND`, `APP_PORT` override it) and Postgres on `127.0.0.1:5432`. Keep both off public interfaces; all traffic must pass the proxy.
-- The app does not terminate TLS and never reads `X-Forwarded-For` or similar headers, so it has nothing to log about the client. You do not need to pass client IP headers to it.
+- The app does not terminate TLS. It uses the client address for one thing: a per-client limit on survey submissions ([ADR 0013](adr/0013-transient-client-rate-limit.md)). The address is HMACed with a random in-memory key that is replaced every 24 hours, and neither the address nor the key is stored or logged. See [client address and rate limits](#client-address-and-rate-limits).
 
 ## Settings that must be right
 
@@ -21,6 +21,28 @@ Internet ──TLS──> [optional CDN] ──> reverse proxy (TLS, HSTS, no IP
 | `ALLOWED_EMAIL_DOMAINS` | your staff domain(s) | Empty means any verified email at the issuer can sign in (they see nothing until added to a group, but can still sign in). |
 | `ADMIN_EMAILS` | first admin only, then empty | Promotes on every login while set. |
 | `POSTGRES_PASSWORD` | a real secret | The compose default is for local dev. |
+| `TRUST_PROXY` | the header your proxy overwrites, usually `x-forwarded-for` | Without it, everyone behind a local proxy looks like one client and the per-client limit is off. [Details](#client-address-and-rate-limits). |
+
+## Client address and rate limits
+
+Survey submissions are limited twice, in memory, per process ([#34](https://github.com/seandavi/plainfeedback/issues/34)):
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `RATE_LIMIT_SURVEY_BURST`, `RATE_LIMIT_SURVEY_PER_SECOND` | `1000`, `10` | Everyone answering one survey, together. |
+| `RATE_LIMIT_CLIENT_MAX`, `RATE_LIMIT_CLIENT_WINDOW_MINUTES` | `30`, `10` | One client address (IPv6: its /64) per survey. Attendees on one conference Wi-Fi share an address, so keep this generous; raise it for a large event on one network. |
+
+People who hit the client limit see "A lot of answers have come from your network in the last few minutes... please wait a few minutes", and their answers stay on the page.
+
+Where the client address comes from, `TRUST_PROXY`:
+
+- unset: the TCP peer. Use this only when the app is reachable directly. If the peer is a loopback or private address (a proxy on the same host or network), the per-client limit is skipped, because every participant would share that address.
+- `x-forwarded-for`: the **rightmost** entry, which is the one your proxy added. Entries to its left are whatever the client sent. Make the proxy overwrite or append the header (nginx: `proxy_set_header X-Forwarded-For $remote_addr;`; Caddy and Traefik do it by default), and keep the app unreachable except through the proxy (compose binds it to `127.0.0.1`).
+- `cf-connecting-ip`: Cloudflare's header. Use it when Cloudflare is in front of your proxy (with Cloudflare plus a proxy, the rightmost `X-Forwarded-For` entry is a Cloudflare edge address). Only safe if the origin accepts traffic from Cloudflare alone; otherwise anyone can send the header.
+
+Choosing the wrong one either makes everyone one client (too strict) or lets each client pick its own key (no per-client limit). The per-survey limit applies either way.
+
+Two identity-free bot checks also run: a hidden form field that people never see, and a minimum of 3 seconds between loading the page and submitting. Submissions that fail them get a normal "thank you" and are not stored.
 
 ## Reverse proxy: no IP or user-agent logs
 
@@ -102,24 +124,26 @@ server {
 
     client_max_body_size 1m;
 
+    # Overwrites whatever the client sent; the app reads it with TRUST_PROXY=x-forwarded-for.
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;
+
     location / {
         proxy_pass http://127.0.0.1:3000;
-        proxy_set_header Host $host;
     }
-    location /s/      { access_log off; proxy_pass http://127.0.0.1:3000; proxy_set_header Host $host; }
-    location /assets/ { access_log off; proxy_pass http://127.0.0.1:3000; proxy_set_header Host $host; }
+    location /s/      { access_log off; proxy_pass http://127.0.0.1:3000; }
+    location /assets/ { access_log off; proxy_pass http://127.0.0.1:3000; }
     location /api/v1/public/ {
         access_log off;
         limit_req zone=pf_submit burst=10 nodelay;
         limit_req_status 429;
         limit_req_log_level info;   # rejected requests are logged to error_log with the IP; crit hides them
         proxy_pass http://127.0.0.1:3000;
-        proxy_set_header Host $host;
     }
 }
 ```
 
-The per-IP limit is the only place an IP is used, and only in memory. It complements the app's per-survey limit ([#34](https://github.com/seandavi/plainfeedback/issues/34)); people behind one conference NAT share an IP, so keep it generous. This config passes `nginx -t`.
+The nginx per-IP limit is optional now that the app has its own per-client limit; it uses the IP only in memory. People behind one conference NAT share an IP, so keep it generous. This config passes `nginx -t`.
 
 ### Traefik (the CDSCI host, onclappc02)
 
@@ -177,7 +201,7 @@ Deletion is real: there is no soft delete or undo, and the data stays in backups
 - Owner: `DELETE /api/v1/events/{e}/surveys/{s}/responses?before=<ISO time>` deletes a survey's responses (all of them without `before`) and returns the count; `DELETE .../responses/{responseId}` deletes one (ids are in the export).
 - Owner: `DELETE /api/v1/events/{e}/surveys/{s}` deletes a survey with its versions and responses; a creator may delete a survey that was never published. `DELETE /api/v1/groups/{g}/events/{slug}` deletes an event with everything in it.
 - Admin: `DELETE /api/v1/groups/{g}` deletes a group with everything in it, and only once it is archived.
-- In an archived group, un-archive first; other deletes answer 409 there. Expired staff sessions are only removed when presented; `delete from sessions where expires_at < now();` cleans them up.
+- In an archived group, un-archive first; other deletes answer 409 there. Expired staff sessions are deleted at each staff login.
 
 ## Before real data
 

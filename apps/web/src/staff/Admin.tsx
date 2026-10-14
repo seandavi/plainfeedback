@@ -36,6 +36,7 @@ function Users({ me }: { me: Me }) {
             <tr>
               <th scope="col">Email</th>
               <th scope="col">Admin</th>
+              <th scope="col">Status</th>
               <th scope="col">Created</th>
               <th scope="col">Actions</th>
             </tr>
@@ -45,6 +46,7 @@ function Users({ me }: { me: Me }) {
               <tr key={u.id}>
                 <th scope="row">{u.email}</th>
                 <td>{u.isAdmin ? "Yes" : "No"}</td>
+                <td>{u.disabled ? "Disabled" : "Active"}</td>
                 <td>{when(u.createdAt)}</td>
                 <td>
                   {u.isAdmin ? (
@@ -52,7 +54,7 @@ function Users({ me }: { me: Me }) {
                       label="Revoke admin"
                       name={u.email}
                       title="Revoke admin"
-                      onConfirm={() => run(() => api.setAdmin(u.id, false))}
+                      onConfirm={() => run(() => api.patchUser(u.id, { isAdmin: false }))}
                     >
                       {u.id === me.id
                         ? "Revoke your own admin access"
@@ -63,10 +65,31 @@ function Users({ me }: { me: Me }) {
                     <button
                       type="button"
                       aria-label={`Grant admin ${u.email}`}
-                      onClick={() => run(() => api.setAdmin(u.id, true))}
+                      onClick={() => run(() => api.patchUser(u.id, { isAdmin: true }))}
                     >
                       Grant admin
                     </button>
+                  )}{" "}
+                  {u.disabled ? (
+                    <button
+                      type="button"
+                      aria-label={`Enable ${u.email}`}
+                      onClick={() => run(() => api.patchUser(u.id, { disabled: false }))}
+                    >
+                      Enable
+                    </button>
+                  ) : (
+                    <ConfirmButton
+                      label="Disable"
+                      name={u.email}
+                      title="Disable user"
+                      onConfirm={() => run(() => api.patchUser(u.id, { disabled: true }))}
+                    >
+                      Disable {u.id === me.id ? "your own account" : u.email}? They are signed out
+                      everywhere, their API tokens are revoked for good, and they cannot sign in
+                      until enabled again. Their group memberships are kept. The last active admin
+                      cannot be disabled.
+                    </ConfirmButton>
                   )}
                 </td>
               </tr>

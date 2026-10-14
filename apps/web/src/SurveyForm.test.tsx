@@ -99,13 +99,16 @@ describe("SurveyForm", () => {
     expect(screen.getByText("2 / 10 characters")).toBeTruthy();
     submit();
     await flush();
-    expect(onSubmit).toHaveBeenCalledWith({
-      role: "Visitor",
-      topics: ["Tools", "Ethics"],
-      ratings: { "1": 3, "2": 5 },
-      notes: "ok",
-      years: 4.5,
-    });
+    expect(onSubmit).toHaveBeenCalledWith(
+      {
+        role: "Visitor",
+        topics: ["Tools", "Ethics"],
+        ratings: { "1": 3, "2": 5 },
+        notes: "ok",
+        years: 4.5,
+      },
+      "",
+    );
   });
 
   it("validates number range on the client", async () => {

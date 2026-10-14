@@ -1,6 +1,6 @@
 // Participant page /s/{publicId} (issue #7). Talks only to same-origin /api/v1/public, sends no
 // credentials and keeps state in memory: no cookies, no storage, no third-party requests.
-import type { AnswerErrors, Answers, Survey } from "@plainfeedback/core";
+import { type AnswerErrors, type Answers, MIN_SUBMIT_MS, type Survey } from "@plainfeedback/core";
 import { useCallback, useEffect, useState } from "react";
 import { Markdown } from "./markdown";
 import { SurveyForm } from "./SurveyForm";
@@ -12,6 +12,8 @@ type Loaded = {
   model: Survey;
   privacyStatement: string;
   status: "open" | "closed" | "not_yet_open";
+  ticket: string; // signed load time, sent back with the answers (#34)
+  loadedAt: number; // local clock, for waiting out MIN_SUBMIT_MS
 };
 type State =
   | { kind: "loading" }
@@ -30,7 +32,7 @@ export function ParticipantPage({ publicId }: { publicId: string }) {
       const res = await fetch(url, { credentials: "omit" });
       if (res.status === 404) return setState({ kind: "missing" });
       if (!res.ok) return setState({ kind: "failed" });
-      const survey = (await res.json()) as Loaded;
+      const survey = { ...(await res.json()), loadedAt: Date.now() } as Loaded;
       document.title = survey.title;
       setState({ kind: "ready", survey });
     } catch {
@@ -65,15 +67,24 @@ export function ParticipantPage({ publicId }: { publicId: string }) {
     );
 
   const s = state.survey;
-  const submit = async (answers: Answers): Promise<AnswerErrors | undefined> => {
+  const submit = async (answers: Answers, hp: string): Promise<AnswerErrors | undefined> => {
     setNotice(undefined);
+    // The server silently drops answers sent sooner than MIN_SUBMIT_MS after it issued the ticket.
+    // Our interval is never longer than the server's, so waiting it out here is enough.
+    const wait = s.loadedAt + MIN_SUBMIT_MS + 100 - Date.now();
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     let res: Response;
     try {
       res = await fetch(`${url}/responses`, {
         method: "POST",
         credentials: "omit",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ versionId: s.versionId, answers }),
+        body: JSON.stringify({
+          versionId: s.versionId,
+          answers,
+          ticket: s.ticket,
+          ...(hp && { hp }),
+        }),
       });
     } catch {
       throw new Error("Could not reach the server. Your answers are still here; try again.");
@@ -89,8 +100,12 @@ export function ParticipantPage({ publicId }: { publicId: string }) {
         setNotice("This survey was just updated. Please check your answers and submit again.");
       return;
     }
-    if (res.status === 429)
-      throw new Error("Many people are answering right now. Please wait a minute and try again.");
+    if (res.status === 429) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      throw new Error(
+        body.error ?? "Many people are answering right now. Please wait a minute and try again.",
+      );
+    }
     throw new Error("Something went wrong. Your answers are still here; please try again.");
   };
 

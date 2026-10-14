@@ -3,6 +3,7 @@ import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { createApp } from "./app";
 import { type AuthOptions, discover } from "./auth";
+import { clientAddress } from "./clientip";
 import { loadConfig } from "./config";
 import { createDb, ping } from "./db";
 
@@ -20,11 +21,28 @@ const auth: AuthOptions | undefined =
         adminEmails: config.ADMIN_EMAILS,
         cookieSecure: config.COOKIE_SECURE,
         sessionTtlMs: config.SESSION_TTL_HOURS * 3600_000,
+        sessionIdleMs: config.SESSION_IDLE_HOURS * 3600_000,
       }
     : undefined;
 if (!auth)
   console.warn("staff auth disabled: set OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_REDIRECT_URI");
-const app = createApp({ ping: () => ping(db), auth, db, publicBaseUrl: config.PUBLIC_BASE_URL });
+const app = createApp({
+  ping: () => ping(db),
+  auth,
+  db,
+  publicBaseUrl: config.PUBLIC_BASE_URL,
+  participant: {
+    surveyRate: {
+      burst: config.RATE_LIMIT_SURVEY_BURST,
+      perSecond: config.RATE_LIMIT_SURVEY_PER_SECOND,
+    },
+    clientRate: {
+      max: config.RATE_LIMIT_CLIENT_MAX,
+      windowMs: config.RATE_LIMIT_CLIENT_WINDOW_MINUTES * 60_000,
+    },
+    clientAddress: clientAddress(config.TRUST_PROXY),
+  },
+});
 
 // Serve the built SPA; unknown GETs (e.g. /s/...) fall back to index.html.
 app.use("*", serveStatic({ root: config.WEB_DIST }));

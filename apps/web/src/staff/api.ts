@@ -25,7 +25,13 @@ export type SurveySummary = {
   closesAt?: string | null;
   responseCount?: number;
 };
-export type User = { id: string; email: string; isAdmin: boolean; createdAt: string };
+export type User = {
+  id: string;
+  email: string;
+  isAdmin: boolean;
+  disabled: boolean;
+  createdAt: string;
+};
 export type Member = { userId: string; email: string; role: Role };
 export type TokenRole = "viewer" | "creator";
 export type ApiToken = {
@@ -115,8 +121,8 @@ export const api = {
   logout: () => call<void>("POST", "/auth/logout"),
   groups: () => get<Group[]>("/groups"),
   users: () => get<User[]>("/users"),
-  setAdmin: (id: string, isAdmin: boolean) =>
-    call<User>("PATCH", `/users/${enc(id)}`, { isAdmin }).then((r) => r.data),
+  patchUser: (id: string, patch: { isAdmin?: boolean; disabled?: boolean }) =>
+    call<User>("PATCH", `/users/${enc(id)}`, patch).then((r) => r.data),
   createGroup: (name: string) => call<Group>("POST", "/groups", { name }).then((r) => r.data),
   patchGroup: (g: string, patch: { name?: string; archived?: boolean }) =>
     call<Group>("PATCH", `/groups/${enc(g)}`, patch).then((r) => r.data),

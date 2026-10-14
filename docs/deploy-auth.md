@@ -25,14 +25,17 @@ The production client already exists. Its id and secret are in GCP Secret Manage
 | `PUBLIC_BASE_URL` | yes | Public origin, e.g. `https://feedback.example.org`; survey links and QR codes are `${PUBLIC_BASE_URL}/s/{publicId}` |
 | `OIDC_ISSUER` | no | default `https://accounts.google.com`; any OIDC issuer with discovery |
 | `OIDC_PROVIDER` | no | display name, default `Google` (`GET /api/v1/auth/provider`) |
-| `ALLOWED_EMAIL_DOMAINS` | no | comma-separated, exact domain match; empty = any verified email |
-| `ADMIN_EMAILS` | no | comma-separated; these users become admin when they sign in (first-admin bootstrap; never demotes) |
+| `ALLOWED_EMAIL_DOMAINS` | no | comma-separated, exact domain match; empty = any verified email. With Google as the issuer, the `hd` (Workspace hosted domain) claim must also be one of these, so personal Google accounts registered on an org address are refused. Other issuers have no standard equivalent: only the email is checked, so allow only domains whose accounts that issuer controls. |
+| `ADMIN_EMAILS` | no | comma-separated; these users become admin when they sign in (first-admin bootstrap; never demotes). **Empty it once the first admin exists**: while set, any login with that verified email from the issuer is promoted. |
 | `COOKIE_SECURE` | no | default `true`; set `false` only for plain-http localhost |
-| `SESSION_TTL_HOURS` | no | default `12` |
+| `SESSION_TTL_HOURS` | no | default `12`; absolute session lifetime |
+| `SESSION_IDLE_HOURS` | no | default `2`; a session unused this long ends |
 
 If the client id, secret or redirect URI is missing, the server starts with auth disabled and logs a warning.
 
 Behind a reverse proxy, the app must be reachable at the origin in `OIDC_REDIRECT_URI`. Login starts at `/api/v1/auth/login` and ends with a redirect to `/app`.
+
+**Off-boarding.** Disabling someone at the identity provider stops new logins only. To end their access here at once, an admin disables them under **Administration → Users** (`PATCH /api/v1/users/{id}` with `{"disabled": true}`): their sessions are deleted, their API tokens are revoked for good, and logins are refused until an admin enables them again. The last active admin cannot be disabled.
 
 ## 3. Injecting secrets at deploy
 

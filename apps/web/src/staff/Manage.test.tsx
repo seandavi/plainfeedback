@@ -136,6 +136,32 @@ describe("admin", () => {
     expect(await screen.findByText(/at least one admin is required/)).toBeTruthy();
   });
 
+  it("disables after confirmation and enables a disabled user (#38)", async () => {
+    adminRoutes();
+    let disabled = false;
+    routes["GET /api/v1/users"] = () => [
+      200,
+      [user("me", "me@x.org", true), { ...user("u2", "bob@x.org"), disabled }],
+    ];
+    routes["PATCH /api/v1/users/u2"] = (c) => {
+      disabled = (c.body as { disabled: boolean }).disabled;
+      return [200, { ...user("u2", "bob@x.org"), disabled }];
+    };
+    open("/app/admin");
+    await screen.findByRole("table", { name: "Users who have signed in" });
+    fireEvent.click(screen.getByRole("button", { name: "Disable bob@x.org" }));
+    const dialog = await screen.findByRole("dialog", { name: "Disable user" });
+    expect(dialog.textContent).toMatch(/signed out everywhere/);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Disable" }));
+    await waitFor(() =>
+      expect(called("PATCH", "/api/v1/users/u2")[0]?.body).toEqual({ disabled: true }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Enable bob@x.org" }));
+    await waitFor(() =>
+      expect(called("PATCH", "/api/v1/users/u2")[1]?.body).toEqual({ disabled: false }),
+    );
+  });
+
   it("creates, renames, archives and unarchives groups", async () => {
     adminRoutes();
     routes["POST /api/v1/groups"] = () => [201, group(null, { name: "New" })];

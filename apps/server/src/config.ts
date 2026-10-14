@@ -28,7 +28,16 @@ const schema = z.object({
     .enum(["true", "false"])
     .default("true")
     .transform((v) => v === "true"),
-  SESSION_TTL_HOURS: z.coerce.number().positive().default(12),
+  SESSION_TTL_HOURS: z.coerce.number().positive().default(12), // absolute lifetime
+  SESSION_IDLE_HOURS: z.coerce.number().positive().default(2), // ends after this long unused
+  // Participant submissions (#34). Where the client IP comes from: unset = the TCP peer; set only
+  // when a proxy you control overwrites that header (docs/deploy.md). Never stored or logged.
+  TRUST_PROXY: z.enum(["", "x-forwarded-for", "cf-connecting-ip"]).default(""),
+  RATE_LIMIT_SURVEY_BURST: z.coerce.number().int().positive().default(1000),
+  RATE_LIMIT_SURVEY_PER_SECOND: z.coerce.number().positive().default(10),
+  // Generous: a conference shares one Wi-Fi address.
+  RATE_LIMIT_CLIENT_MAX: z.coerce.number().int().positive().default(30),
+  RATE_LIMIT_CLIENT_WINDOW_MINUTES: z.coerce.number().positive().default(10),
 });
 
 export type Config = z.infer<typeof schema>;

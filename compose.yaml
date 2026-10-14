@@ -18,6 +18,13 @@ services:
       ADMIN_EMAILS:
       COOKIE_SECURE:
       SESSION_TTL_HOURS:
+      SESSION_IDLE_HOURS:
+      # Participant rate limits (docs/deploy.md#client-address-and-rate-limits).
+      TRUST_PROXY:
+      RATE_LIMIT_SURVEY_BURST:
+      RATE_LIMIT_SURVEY_PER_SECOND:
+      RATE_LIMIT_CLIENT_MAX:
+      RATE_LIMIT_CLIENT_WINDOW_MINUTES:
     depends_on:
       db:
         condition: service_healthy

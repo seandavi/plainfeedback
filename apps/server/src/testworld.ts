@@ -16,6 +16,7 @@ export const useWorld = () => {
       publicBaseUrl: "https://pf.example.org",
       ping: async () => {},
       log: () => {},
+      participant: { minSubmitMs: 0 }, // bot timing check is tested in public.test.ts
       auth: {
         db: getDb(),
         provider: "Test",
