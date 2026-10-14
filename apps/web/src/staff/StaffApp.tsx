@@ -11,7 +11,7 @@ import {
   useState,
 } from "react";
 import { AdminPage } from "./Admin";
-import { ApiError, api, canEdit, isOwner, type Me } from "./api";
+import { ApiError, api, canEdit, isOwner, type Me, type Wave } from "./api";
 import { Dashboard, surveyStatus } from "./Dashboard";
 import { Editor } from "./Editor";
 import { ConfirmButton, DeleteResponses, Members, Tokens, useAction } from "./Manage";
@@ -158,17 +158,34 @@ const Crumbs = ({ items }: { items: [string, string?][] }) => (
   </nav>
 );
 
+const WAVES = ["pre", "post", "followup", "other"] as const;
+const waveOf = (v: unknown): Wave | null => (WAVES.includes(v as Wave) ? (v as Wave) : null);
+const WaveOptions = () => (
+  <>
+    <option value="">not a wave</option>
+    {WAVES.map((w) => (
+      <option key={w} value={w}>
+        {w}
+      </option>
+    ))}
+  </>
+);
+const eventDates = (e: { startsOn: string | null; endsOn: string | null }) =>
+  e.endsOn && e.endsOn !== e.startsOn ? `${e.startsOn} to ${e.endsOn}` : e.startsOn;
+
 /** Slug + title form used to create events and surveys. */
 function CreateForm({
   legend,
   slugLabel,
   slugHint,
   onCreate,
+  children,
 }: {
   legend: string;
   slugLabel: string;
   slugHint: string;
-  onCreate: (slug: string, title: string) => Promise<void>;
+  onCreate: (slug: string, title: string, f: FormData) => Promise<void>;
+  children?: ReactNode; // extra fields, read by onCreate from the FormData
 }) {
   const [error, setError] = useState<unknown>();
   const [busy, setBusy] = useState(false);
@@ -191,7 +208,7 @@ function CreateForm({
     setBusy(true);
     setError(undefined);
     try {
-      await onCreate(String(f.get("slug")), String(f.get("title")).trim());
+      await onCreate(String(f.get("slug")), String(f.get("title")).trim(), f);
     } catch (x) {
       setError(x);
       setBusy(false);
@@ -230,6 +247,7 @@ function CreateForm({
             {slugError ? <strong>{slugError}</strong> : slugHint}
           </span>
         </label>
+        {children}
         <button type="submit" disabled={busy}>
           Create
         </button>
@@ -245,11 +263,14 @@ function GroupPage({ me, g }: { me: Me; g: string }) {
   if (data.error) return <ErrorNote error={data.error} />;
   if (!data.data) return <Loading />;
   const [group, events] = data.data;
-  const create = async (slug: string, title: string) => {
+  const create = async (slug: string, title: string, f: FormData) => {
     // PUT is an upsert; refuse to silently rename an existing event.
     if (events.some((x) => x.slug === slug))
       throw new Error(`An event with the short name "${slug}" already exists.`);
-    await api.putEvent(g, slug, title);
+    await api.putEvent(g, slug, title, {
+      startsOn: String(f.get("startsOn")) || null,
+      endsOn: String(f.get("endsOn")) || null,
+    });
     navigate(paths.event(g, slug));
   };
   return (
@@ -264,7 +285,10 @@ function GroupPage({ me, g }: { me: Me; g: string }) {
           {events.map((x) => (
             <li key={x.id}>
               <Link href={paths.event(g, x.slug)}>{x.title}</Link>{" "}
-              <span className="meta">{x.slug}</span>{" "}
+              <span className="meta">
+                {x.slug}
+                {x.startsOn && `, ${eventDates(x)}`}
+              </span>{" "}
               {isOwner(me, group) && (
                 <ConfirmButton
                   label="Delete"
@@ -287,7 +311,14 @@ function GroupPage({ me, g }: { me: Me; g: string }) {
           slugLabel="Short name (used in staff links and exports)"
           slugHint="Filled in from the title. Lowercase letters, digits and hyphens, e.g. fall-2026."
           onCreate={create}
-        />
+        >
+          <label>
+            Starts on <input type="date" name="startsOn" />
+          </label>
+          <label>
+            Ends on <input type="date" name="endsOn" />
+          </label>
+        </CreateForm>
       )}
       <Members me={me} group={group} g={g} />
       <Tokens me={me} group={group} g={g} />
@@ -307,9 +338,10 @@ function EventPage({ me, g, e }: { me: Me; g: string; e: string }) {
   if (data.error) return <ErrorNote error={data.error} />;
   if (!data.data) return <Loading />;
   const { group, event, surveys } = data.data;
-  const create = async (slug: string, title: string) => {
+  const create = async (slug: string, title: string, f: FormData) => {
     try {
-      await api.saveDraft(event.id, slug, starter(title)); // no If-Match: create only
+      // no If-Match: create only
+      await api.saveDraft(event.id, slug, starter(title), undefined, waveOf(f.get("waveLabel")));
     } catch (x) {
       if (x instanceof ApiError && x.status === 428)
         throw new Error(`A survey with the short name "${slug}" already exists.`);
@@ -321,6 +353,7 @@ function EventPage({ me, g, e }: { me: Me; g: string; e: string }) {
     <>
       <Crumbs items={[["Groups", paths.groups], [group.name, paths.group(g)], [event.title]]} />
       <h1>{event.title}</h1>
+      {event.startsOn && <p className="meta">{eventDates(event)}</p>}
       <h2>Surveys</h2>
       {surveys.length === 0 ? (
         <p>No surveys yet.</p>
@@ -332,8 +365,22 @@ function EventPage({ me, g, e }: { me: Me; g: string; e: string }) {
               <span className="meta">
                 {x.title && `${x.slug}, `}
                 {x.latestVersion ? `published v${x.latestVersion}, ${surveyStatus(x)}` : "draft"}
-                {x.waveLabel && `, ${x.waveLabel}`}
               </span>{" "}
+              {canEdit(me, group) ? (
+                <label className="meta">
+                  Wave{" "}
+                  <select
+                    value={x.waveLabel ?? ""}
+                    onChange={(ev) =>
+                      act.run(() => api.setWave(event.id, x.slug, waveOf(ev.target.value)))
+                    }
+                  >
+                    <WaveOptions />
+                  </select>
+                </label>
+              ) : (
+                x.waveLabel && <span className="meta">{x.waveLabel}</span>
+              )}{" "}
               {(isOwner(me, group) || (canEdit(me, group) && !x.latestVersion)) && (
                 <ConfirmButton
                   label="Delete"
@@ -356,7 +403,14 @@ function EventPage({ me, g, e }: { me: Me; g: string; e: string }) {
           slugLabel="Short name (used in exports and staff links)"
           slugHint="Filled in from the title. Participants never see it. E.g. pre, post, followup."
           onCreate={create}
-        />
+        >
+          <label>
+            Wave{" "}
+            <select name="waveLabel">
+              <WaveOptions />
+            </select>
+          </label>
+        </CreateForm>
       )}
       {isOwner(me, group) && (
         <DeleteResponses

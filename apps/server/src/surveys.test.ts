@@ -1,5 +1,5 @@
 import { compile } from "@plainfeedback/core";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { authorize } from "./authz";
 import { events, groups, responses, surveys, surveyVersions } from "./schema";
@@ -472,5 +472,79 @@ describe("publish and versions", () => {
     expect((await call(w, "POST", path, as, dates)).status).toBe(400);
     expect((await call(w, "POST", path, as, { version: 7 })).status).toBe(400);
     expect((await call(w, "POST", `${ev(w)}/surveys/nope/publish`, as)).status).toBe(404);
+  });
+});
+
+describe("wave labels (#54) and event dates (#61)", () => {
+  const put = (w: World, slug: string, body: unknown, headers: Record<string, string> = {}) =>
+    call(w, "PUT", `${ev(w)}/surveys/${slug}`, w.who.creator, body, undefined, headers);
+
+  it("accepts only pre, post, followup, other or null", async () => {
+    const w = await world();
+    expect((await put(w, "a", { markdown: MD, waveLabel: "Post" })).status).toBe(400);
+    expect((await put(w, "a", { markdown: MD, waveLabel: "post-event" })).status).toBe(400);
+    expect((await put(w, "a", { markdown: MD, waveLabel: "followup" })).status).toBe(201);
+    expect((await put(w, "b", { markdown: MD, waveLabel: null })).status).toBe(201);
+    // The database enforces it too, not just zod.
+    await expect(
+      getDb()
+        .insert(surveys)
+        .values({ eventId: w.event.id, slug: "c", waveLabel: "Pre" as never }),
+    ).rejects.toThrow();
+  });
+
+  it("allows one survey per pre/post/followup in an event, any number of other", async () => {
+    const w = await world();
+    await getDb().update(surveys).set({ waveLabel: "post" }).where(eq(surveys.id, w.survey.id));
+    expect((await put(w, "a", { markdown: MD, waveLabel: "pre" })).status).toBe(201);
+    expect((await put(w, "b", { markdown: MD, waveLabel: "pre" })).status).toBe(409);
+    expect((await put(w, "b", { markdown: MD, waveLabel: "other" })).status).toBe(201);
+    expect((await put(w, "c", { markdown: MD, waveLabel: "other" })).status).toBe(201);
+    // Update path: "post" is taken by the fixture survey.
+    const upd = await put(w, "b", { markdown: MD, waveLabel: "post" }, { "if-match": "*" });
+    expect(upd.status).toBe(409);
+  });
+
+  it("sets and clears the wave with PATCH, 409 on a taken one", async () => {
+    const w = await world();
+    const patch = (slug: string, b: unknown) =>
+      call(w, "PATCH", `${ev(w)}/surveys/${slug}`, w.who.creator, b);
+    await getDb().update(surveys).set({ waveLabel: "post" }).where(eq(surveys.id, w.survey.id));
+    await put(w, "a", MD);
+    expect((await read(patch("a", { waveLabel: "pre" }))).waveLabel).toBe("pre");
+    expect((await patch("a", { waveLabel: "post" })).status).toBe(409);
+    expect((await patch("a", { waveLabel: "bogus" })).status).toBe(400);
+    expect((await patch("a", {})).status).toBe(400);
+    const cleared = await read(patch("a", { waveLabel: null }));
+    expect(cleared.waveLabel).toBeNull();
+    const list = await read(call(w, "GET", `${ev(w)}/surveys`, w.who.viewer));
+    expect(list.find((s: { slug: string }) => s.slug === "post").waveLabel).toBe("post");
+  });
+
+  it("stores event start and end dates and returns them", async () => {
+    const w = await world();
+    const path = `/groups/${w.g.id}/events/spring-2027`;
+    const putEvent = (b: unknown) => call(w, "PUT", path, w.who.creator, b);
+    const created = await putEvent({
+      title: "Spring",
+      startsOn: "2027-03-01",
+      endsOn: "2027-03-03",
+    });
+    expect(created.status).toBe(201);
+    expect(await read(created)).toMatchObject({ startsOn: "2027-03-01", endsOn: "2027-03-03" });
+    const got = await read(call(w, "GET", path, w.who.viewer));
+    expect(got).toMatchObject({ startsOn: "2027-03-01", endsOn: "2027-03-03" });
+    // Replace semantics: omitted dates are cleared.
+    expect(await read(putEvent({ title: "Spring" }))).toMatchObject({
+      startsOn: null,
+      endsOn: null,
+    });
+    const bad = (b: object) => (async () => (await putEvent({ title: "S", ...b })).status)();
+    expect(await bad({ startsOn: "2027-03-05", endsOn: "2027-03-01" })).toBe(400);
+    expect(await bad({ startsOn: "2027-02-31" })).toBe(400);
+    expect(await bad({ startsOn: "2027-03-01T10:00:00Z" })).toBe(400);
+    await expect(
+      getDb().execute(sql`update events set starts_on = '2027-03-05', ends_on = '2027-03-01'`),
+    ).rejects.toThrow();
   });
 });

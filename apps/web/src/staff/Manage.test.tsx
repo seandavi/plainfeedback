@@ -512,3 +512,67 @@ describe("short names and titles (#72)", () => {
     expect(link.parentElement?.textContent).toContain("post");
   });
 });
+
+describe("event dates (#61) and wave (#54)", () => {
+  const ev = {
+    id: "ev1",
+    slug: "fall",
+    title: "Fall",
+    description: "",
+    startsOn: "2026-10-01",
+    endsOn: "2026-10-03",
+  };
+  const setup = () => {
+    routes = {
+      ...base(false),
+      [`GET /api/v1/groups/${G}`]: () => [200, group("creator")],
+      [`GET /api/v1/groups/${G}/events`]: () => [200, [ev]],
+      [`GET /api/v1/groups/${G}/events/fall`]: () => [200, ev],
+      "GET /api/v1/events/ev1/surveys": () => [
+        200,
+        [{ slug: "pre", waveLabel: "pre", closed: false, latestVersion: null }],
+      ],
+    };
+  };
+
+  it("sends dates when creating an event and shows them in the list", async () => {
+    setup();
+    routes[`PUT /api/v1/groups/${G}/events/spring`] = () => [201, { ...ev, slug: "spring" }];
+    open(`/app/g/${G}`);
+    expect(await screen.findByText(/2026-10-01 to 2026-10-03/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/^Title/), { target: { value: "Spring" } });
+    fireEvent.change(screen.getByLabelText(/Short name/), { target: { value: "spring" } });
+    fireEvent.change(screen.getByLabelText(/Starts on/), { target: { value: "2027-03-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() =>
+      expect(called("PUT", `/api/v1/groups/${G}/events/spring`)[0]?.body).toEqual({
+        title: "Spring",
+        startsOn: "2027-03-01",
+        endsOn: null,
+      }),
+    );
+  });
+
+  it("shows the event date, sends the wave on create and PATCHes it on change", async () => {
+    setup();
+    routes["PUT /api/v1/events/ev1/surveys/post"] = () => [201, { slug: "post" }];
+    routes["PATCH /api/v1/events/ev1/surveys/pre"] = () => [200, { slug: "pre" }];
+    open(`/app/g/${G}/e/fall`);
+    expect(await screen.findByText("2026-10-01 to 2026-10-03")).toBeTruthy();
+    fireEvent.change(await screen.findByDisplayValue("pre"), { target: { value: "followup" } });
+    await waitFor(() =>
+      expect(called("PATCH", "/api/v1/events/ev1/surveys/pre")[0]?.body).toEqual({
+        waveLabel: "followup",
+      }),
+    );
+    fireEvent.change(screen.getByLabelText(/^Title/), { target: { value: "Post" } });
+    fireEvent.change(screen.getByLabelText(/Short name/), { target: { value: "post" } });
+    fireEvent.change(screen.getByDisplayValue("not a wave"), { target: { value: "post" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() =>
+      expect(called("PUT", "/api/v1/events/ev1/surveys/post")[0]?.body).toMatchObject({
+        waveLabel: "post",
+      }),
+    );
+  });
+});
