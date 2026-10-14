@@ -153,21 +153,19 @@ input.other {
   color: var(--error);
   font-size: 0.875rem;
 }
-.limit:empty {
-  display: none;
-}
 .statement legend {
   padding: 0;
   margin-bottom: 0.4rem;
 }
-/* One line at any text size (#66): equal columns, never wrapping. Each label is the tap target. */
+/* Columns just wider than the radio (#66): a 5-point scale stays on one line at 200% text on a
+   phone; an 11-point one wraps rather than overlapping. Each label is the tap target. */
 .scale {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.25rem;
 }
 .scale label {
+  flex: 1 0 1.5rem;
   min-height: 44px;
   display: flex;
   flex-direction: column;

@@ -4,6 +4,7 @@
 import {
   type CompileResult,
   compile,
+  hasPlaceholder,
   type Survey as Model,
   PRIVACY_STATEMENT_TEMPLATE,
 } from "@plainfeedback/core";
@@ -372,6 +373,12 @@ function PublishDialog({
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const privacy = String(f.get("privacy")).trim();
+    if (hasPlaceholder(privacy))
+      return setError(
+        new Error(
+          "Replace every [[...]] in the privacy statement, or clear it to use the default.",
+        ),
+      );
     setBusy(true);
     setError(undefined);
     try {

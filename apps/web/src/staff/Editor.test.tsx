@@ -162,6 +162,9 @@ describe("Editor", () => {
     // First publish starts from the template and asks for contact and retention (#65).
     expect(privacy.value).toContain("[[CONTACT EMAIL]]");
     expect(privacy.value).toContain("[[RETENTION");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Publish" }));
+    await within(dialog).findByText(/Replace every \[\[\.\.\.\]\] in the privacy statement/);
+    expect(calls.find((c) => c.method === "POST")).toBeUndefined(); // never sent
     fireEvent.change(privacy, { target: { value: "" } }); // empty: the server's default
     fireEvent.click(within(dialog).getByRole("button", { name: "Publish" }));
     await within(dialog).findByText(/Line 7: Unknown question type/);
