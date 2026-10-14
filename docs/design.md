@@ -94,8 +94,14 @@ Staff authenticate with OIDC sessions or per-user API tokens scoped to a group a
 
 ```
 POST   /groups                                  admin
-PUT    /groups/{g}/members/{user}               owner
-DELETE /groups/{g}/members/{user}               owner
+GET    /groups                                  admin: all; others: their groups
+GET    /groups/{g}                              viewer
+PATCH  /groups/{g}                              owner: rename, archive
+GET    /groups/{g}/members                      viewer
+PUT    /groups/{g}/members/{user}               owner: {user} is an id or the email of an existing user
+DELETE /groups/{g}/members/{user}               owner (never the last owner)
+GET    /users                                   admin
+PATCH  /users/{id}                              admin: grant/revoke admin (never the last admin)
 PUT    /groups/{g}/events/{e}                   creator: upsert by slug
 PUT    /events/{e}/surveys/{s}                  creator: upsert draft from markdown (If-Match)
 POST   /events/{e}/surveys/{s}:validate         dry run, line-numbered errors, model preview
@@ -108,6 +114,8 @@ GET    /s/{event}/{survey}                      participant page (no cookies)
 GET    /api/v1/public/surveys/{id}              model JSON
 POST   /api/v1/public/surveys/{id}/responses    submit answers (no identifier)
 ```
+
+Outside your groups everything is 404; a role too low within your group is 403 ([ADR 0009](adr/0009-group-rbac-404.md)). Members must have signed in once before they can be added; invitations come later.
 
 Idempotent upserts by slug allow a GitOps flow. Publishing is always an explicit human action.
 

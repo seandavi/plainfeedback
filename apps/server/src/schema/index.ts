@@ -44,6 +44,7 @@ export const sessions = pgTable("sessions", {
 export const groups = pgTable("groups", {
   id: id(),
   name: text("name").notNull(),
+  archivedAt: ts("archived_at"),
   createdAt: createdAt(),
 });
 
