@@ -24,7 +24,7 @@ curl -sS -X POST $BASE/api/v1/groups/$GROUP/tokens -H "Origin: $BASE" -b "pf_ses
   -H "Content-Type: application/json" -d '{"name":"ci","role":"creator","expiresInDays":90}' | jq -r .token
 ```
 
-- Scoped to one group; `role` is `creator` or `viewer`, at most your own. The effective role is min(token role, your current role), so it never exceeds what you can do; it stops working when you leave the group, it expires (default 90 days, max 365) or it is revoked. Other groups answer 404.
+- Scoped to one group; `role` is `creator` or `viewer`, at most your own. The effective role is min(token role, your current role), so it never exceeds what you can do; removing you from the group revokes it for good (re-adding you does not revive it); it also stops when it expires (default 90 days, max 365) or it is revoked. Other groups answer 404.
 - Then send `-H "Authorization: Bearer $PF_TOKEN"` instead of the cookie and `Origin` in the steps below.
 - List with `GET /api/v1/groups/{g}/tokens` (owners see all of the group's tokens, others their own) or `GET /api/v1/me/tokens`; revoke with `DELETE /api/v1/groups/{g}/tokens/{id}`.
 - Tokens cannot manage tokens, members, groups or users, and cannot log out (403). See ADR 0010.
@@ -42,8 +42,10 @@ BASE=https://feedback.example.org   # PF_SESSION = value of the pf_session cooki
 ```sh
 EVENT=$(curl -sS -X PUT $BASE/api/v1/groups/my-group/events/spring-2026 \
   -H "Origin: $BASE" -H "Content-Type: application/json" -b "pf_session=$PF_SESSION" \
-  -d '{"title":"Spring workshop"}' | jq -r .id)
+  -d '{"title":"Spring workshop","startsOn":"2026-04-10","endsOn":"2026-04-11"}' | jq -r .id)
 ```
+
+`startsOn` and `endsOn` are optional calendar dates (`YYYY-MM-DD`, no time of day); `endsOn` may not precede `startsOn`. The PUT replaces the event, so omitting a field clears it.
 
 2. Create the survey draft (no `If-Match` needed on create; the `ETag` response header is the draft version).
 
@@ -52,6 +54,8 @@ curl -sS -i -X PUT $BASE/api/v1/events/$EVENT/surveys/feedback \
   -H "Origin: $BASE" -H "Content-Type: text/markdown" -b "pf_session=$PF_SESSION" \
   --data-binary @survey.md      # note the ETag header in the response
 ```
+
+   To tag the survey as a wave, send JSON instead: `{"markdown": "...", "waveLabel": "pre"}`. `waveLabel` is one of `pre`, `post`, `followup`, `other`, or `null` (not a wave, the default, e.g. speaker feedback). An event may have at most one survey each of `pre`, `post` and `followup` (a second gets `409`); `other` can be used any number of times. Change it later with `PATCH /events/{e}/surveys/{s}` and `{"waveLabel": "post"}` (no `If-Match` needed). The markdown-only form leaves an existing wave unchanged.
 
 3. Update the draft: `If-Match` must carry the current ETag (`*` to overwrite blindly). A stale ETag gives 412; a missing one on an existing draft gives 428.
 
