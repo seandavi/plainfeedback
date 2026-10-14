@@ -170,55 +170,54 @@ The app lists every problem it finds, each with a line number, for example:
 
 This survey has a single-choice question with an Other box, a 13-statement rating
 grid on one 1 to 5 scale, and four free-text questions. The structure follows
-the real CFDE Fall 2026 form; the wording of some statements and free-text
-prompts is illustrative.
+the real CFDE Fall 2026 form.
 
 ```markdown
 # 2026 Fall Meeting Feedback
 
-We want to hear your feedback on the CFDE Fall 2026 meeting. Your answers are
-anonymous and help us plan future meetings. The meeting agenda is
-[here](https://example.org/cfde-fall-2026-agenda).
+We want to hear your feedback so we can keep improving our logistics and content.
+Please fill this quick survey and let us know your thoughts (your answers will be
+anonymous). As a reminder, the agenda is [here](https://example.org/agenda).
 
 ::: {.choice #affiliation required other="Other"}
 Please specify any CFDE affiliation(s).
 - CFDE Center Member
 - CFDE DCC Member
+- CFDE Program Member (not DCC affiliated)
 - NIH Representative
-- No CFDE affiliation
 :::
 
-::: {.likert #ratings scale="1-5" low="Not at all / Poor" mid="Somewhat / Okay" high="Very / Excellent"}
-Answer any applicable questions:
+::: {.likert #ratings scale="1-5" low="Not at all · None · Poor · Very unlikely · Very dissatisfied" mid="Somewhat · Okay" high="Very · All · Excellent · Definitely · Very satisfied"}
+Answer any applicable questions on a scale from low to high:
 - Before attending, how familiar were you with the CFDE?
 - After attending, how familiar do you feel with the CFDE?
-- Overall, how satisfied are you with the meeting?
-- How useful were the plenary talks?
-- How useful were the breakout sessions?
-- How useful were the hands-on training sessions?
-- How useful was the poster session?
-- How well did the meeting support networking with other attendees?
-- How likely are you to collaborate with someone you met here?
-- How clear were the CFDE's goals for the coming year?
-- How well was the meeting organized?
-- How suitable was the venue?
-- How likely are you to attend a future CFDE meeting?
+- How much of the duration were you able to attend?
+- How relevant was the content to your work and interests?
+- How engaged were you?
+- How much did you participate?
+- How likely/prepared are you to use the resources you heard about in your work?
+- How many of your questions about the resources got answered?
+- How well did the event facilitate new connections and collaborations?
+- How suitable were the dates/times/length?
+- How suitable was the venue (incl. accommodations, food/drink, etc.) or technology platform?
+- How well was the event organized and communicated (pre/during/post)?
+- Overall, how satisfied are you?
 :::
 
 ::: {.text #elaborate multiline maxlength=2000}
-Please elaborate on your answers above.
+Please elaborate on your answers above and share any other notes.
 :::
 
 ::: {.text #most-valuable multiline maxlength=2000}
-What was the most valuable part of the meeting for you?
+Which sessions or content did you find most valuable? See [here](https://example.org/agenda) for the agenda.
 :::
 
-::: {.text #improve multiline maxlength=2000}
-What could we do better at the next meeting?
+::: {.text #least-valuable multiline maxlength=2000}
+Which sessions or content did you find least valuable? See [here](https://example.org/agenda) for the agenda.
 :::
 
-::: {.text #other-comments multiline maxlength=2000}
-Any other comments?
+::: {.text #spring-2027 multiline maxlength=2000}
+What would you like to see included in the Spring 2027 meeting?
 :::
 ```
 
