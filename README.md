@@ -1,11 +1,11 @@
-# survey-machine
+# plainfeedback
 
 Open-source, self-hostable, de-identified event-feedback surveys, built for the
 NIH Common Fund Data Ecosystem (CFDE) metrics effort and usable by any
 consortium that wants to move off one-off Google Forms and Qualtrics.
 
 - Surveys are written in **markdown** (with a live-preview editor) and shared as a link or QR code.
-- Participants are anonymous: **no cookies, no IP or user-agent logging**.
+- Designed to avoid collecting participant identifiers: the app sets no cookies and logs no IP or user-agent. See the limits in [`docs/design.md`](docs/design.md#privacy).
 - Groups with owners, creators and viewers; an admin manages the system.
 - Free-text answers and CSV/JSONL/Parquet export for analysis.
 

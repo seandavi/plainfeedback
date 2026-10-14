@@ -1,4 +1,4 @@
-# survey-machine: design
+# plainfeedback: design
 
 De-identified event-feedback surveys for the Common Fund Data Ecosystem (CFDE) metrics grant. Open source, MIT licensed. Decisions are recorded in [`adr/`](adr/). Platform survey and rationale: [`research/platform-survey.md`](../research/platform-survey.md).
 
@@ -79,6 +79,8 @@ The Likert grid is first-class (the real form has 13 statements on one shared sc
 v1 has no participant identifiers: a published survey has one public link and QR code, and each wave is its own survey. Retrospective pre/post items (as in the CFDE form) work. Deferred design, if within-person linking is wanted later: each event gets a batch of random codes, distributed as links or QR codes. The same code works for all waves of the event; the database keeps only its hash. Without a code, a response is anonymous and unlinked. Lost codes cannot be recovered. Whether to offer a separately stored "remind me" email for follow-ups is **open**.
 
 ## Privacy
+
+Goal: avoid collecting participant identifiers. This is not a guarantee of anonymity. Limits: free text can contain identifying details; small groups can be re-identified from demographic fields; reverse proxies, hosting providers and networks may log IPs outside the app, so deployers must configure their own stack; a shared link allows duplicate submissions.
 
 - No cookies. Page state lives in memory; `sessionStorage` use must be stated in the privacy statement.
 - No IP or user-agent logging, including in reverse-proxy logs for participant endpoints.
