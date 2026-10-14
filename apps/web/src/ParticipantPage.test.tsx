@@ -104,8 +104,8 @@ describe("ParticipantPage", () => {
   it("reloads on 409 and resubmits with the new version, keeping answers", async () => {
     const calls = serve(
       json(200, survey()),
-      json(409, { error: "changed" }),
-      json(200, survey({ versionId: "v2" })),
+      json(409, { error: "This survey was just updated. Please check your answers." }),
+      json(200, survey({ versionId: "v2", ticket: "t2" })),
       json(201, { ok: true }),
     );
     render(<ParticipantPage publicId="x" />);
@@ -115,7 +115,45 @@ describe("ParticipantPage", () => {
     expect(await screen.findByText(/was just updated/)).toBeTruthy();
     submit();
     expect(await screen.findByText(/Thank you/)).toBeTruthy();
-    expect(JSON.parse(calls[3]?.init?.body as string).versionId).toBe("v2");
+    expect(JSON.parse(calls[3]?.init?.body as string)).toMatchObject({
+      versionId: "v2",
+      ticket: "t2",
+    });
+  });
+
+  it("on a used or stale ticket (409) shows the server's message and resends with a fresh one (#60)", async () => {
+    const calls = serve(
+      json(200, survey()),
+      json(409, { error: "This page has already sent its answers." }),
+      json(200, survey({ ticket: "t2" })),
+      json(201, { ok: true }),
+    );
+    render(<ParticipantPage publicId="x" />);
+    await screen.findByRole("heading", { name: "Fall feedback" });
+    choose();
+    submit();
+    expect(await screen.findByText(/already sent its answers/)).toBeTruthy();
+    submit();
+    expect(await screen.findByText(/Thank you/)).toBeTruthy();
+    expect(JSON.parse(calls[3]?.init?.body as string)).toMatchObject({
+      answers: { role: "Staff" },
+      ticket: "t2",
+    });
+  });
+
+  it("waits out a short Retry-After on 429 and resends by itself (#55)", async () => {
+    const busy = () =>
+      new Response(JSON.stringify({ error: "busy" }), {
+        status: 429,
+        headers: { "retry-after": "1" },
+      });
+    const calls = serve(json(200, survey()), busy(), json(201, { ok: true }));
+    render(<ParticipantPage publicId="x" />);
+    await screen.findByRole("heading", { name: "Fall feedback" });
+    choose();
+    submit();
+    expect(await screen.findByText(/Thank you/, {}, { timeout: 3000 })).toBeTruthy();
+    expect(calls).toHaveLength(3);
   });
 
   it("maps server 422 errors back to questions and shows 410 as closed", async () => {
