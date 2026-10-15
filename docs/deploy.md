@@ -11,6 +11,26 @@ Internet ──TLS──> [optional CDN] ──> reverse proxy (TLS, HSTS, no IP
 - Run with `just up` (Docker Compose, [ADR 0006](adr/0006-docker-compose.md)). `compose.yaml` publishes the app on `127.0.0.1:3000` only (`APP_BIND`, `APP_PORT` override it) and Postgres on `127.0.0.1:5432`. Keep both off public interfaces; all traffic must pass the proxy.
 - The app does not terminate TLS. It uses the client address for one thing: a per-client limit on survey submissions ([ADR 0013](adr/0013-transient-client-rate-limit.md)). The address is HMACed with a random in-memory key that is replaced every 24 hours, and neither the address nor the key is stored or logged. See [client address and rate limits](#client-address-and-rate-limits).
 
+## First run
+
+On a new host, with Docker, Node 22, pnpm and [`just`](https://just.systems) installed (`just migrate` runs on the host, from this checkout):
+
+1. `pnpm install` and `cp .env.example .env`. Set `PUBLIC_BASE_URL`, real `POSTGRES_PASSWORD` and `APP_DB_PASSWORD` (URL-safe), `TRUST_PROXY`, and the staff-auth variables ([deploy-auth.md](deploy-auth.md)).
+2. `just up` (`docker compose up --build -d --wait`). On a new volume the db container creates the `plainfeedback_app` role. The app starts but its tables do not exist yet.
+3. `just migrate` with `DATABASE_URL` set to the **owner** role, not the app role (the db port is published on loopback):
+   ```bash
+   export DATABASE_URL="postgresql://plainfeedback:${POSTGRES_PASSWORD}@localhost:5432/plainfeedback"
+   just migrate
+   ```
+   Migrations are never run on app start. This step also makes `responses` and `survey_versions` append-only for the app role ([database roles](#database-roles)). Rerun it after every upgrade.
+4. Put the TLS proxy in front ([reverse proxy](#reverse-proxy-no-ip-or-user-agent-logs)) and check `curl localhost:3000/healthz`.
+5. Sign in at `https://<host>/app`. With a Workspace domain, set `ALLOWED_EMAIL_DOMAINS` and `ADMIN_EMAILS` for the first sign-in, then **empty `ADMIN_EMAILS`** and redeploy. For a Gmail-only setup, promote yourself in SQL after first login ([deploy-auth.md](deploy-auth.md#gmail-and-other-consumer-google-accounts)):
+   ```bash
+   docker compose exec -T db psql -U plainfeedback -d plainfeedback \
+     -c "update users set is_admin = true where email = 'you@gmail.com';"
+   ```
+6. As admin, create a group and add its owner (members must have signed in once). Work through [Before real data](#before-real-data).
+
 ## Settings that must be right
 
 | Setting | Production value | Why |
@@ -187,7 +207,7 @@ The app does not connect as the table owner ([#76](https://github.com/seandavi/p
 - `plainfeedback` (owner, `POSTGRES_PASSWORD`) owns the schema. `just migrate` and `pg_dump` use it, with `DATABASE_URL` in the deploying shell or `.env`.
 - `plainfeedback_app` (`APP_DB_PASSWORD`) may only read and write rows: no `ALTER`, `DROP`, `TRUNCATE` or `TRIGGER`, and no `UPDATE` on `responses` or `survey_versions` (append-only; deletion is `DELETE`). So it cannot disable the trigger that keeps published survey versions immutable. `compose.yaml` gives the app this role in its `DATABASE_URL`.
 
-On a new database volume, the postgres container creates the role on first start from `db/` (`10-app-role.sh`, then `20-app-grants.sql`; the default privileges there cover tables that later migrations add). The scripts run before any table exists, so the `REVOKE UPDATE` on `responses` and `survey_versions` is a migration (`0011_revoke_app_update`), applied by `just migrate` once the role exists ([#103](https://github.com/seandavi/plainfeedback/issues/103)). Run `just migrate` after the first `docker compose up`; the app is not append-only before that.
+On a new database volume, the postgres container creates the role on first start from `db/` (`10-app-role.sh`, then `20-app-grants.sql`; the default privileges there cover tables that later migrations add). The scripts run before any table exists, so the `REVOKE UPDATE` on `responses` and `survey_versions` is a migration (`0011_revoke_app_update`), applied by `just migrate` once the role exists ([#103](https://github.com/seandavi/plainfeedback/issues/103)). Run `just migrate` after the first `docker compose up` ([first run](#first-run)); the app is not append-only before that.
 
 The `db` service is built from `db/Dockerfile`, which copies the scripts into the image with fixed permissions, so a strict host umask (e.g. 027) cannot make them unreadable to the container's `postgres` user. After editing `db/`, run `docker compose up -d --build db`.
 
@@ -234,7 +254,7 @@ Deletion is real: there is no soft delete or undo, and the data stays in backups
 
 ## Before real data
 
-Work through the checklist at the end of [threat-model.md](threat-model.md#before-real-data). In particular, the independent review of auth and permission code ([#33](https://github.com/seandavi/plainfeedback/issues/33)) is still required.
+Work through the checklist at the end of [threat-model.md](threat-model.md#before-real-data). The independent review of auth and permission code ([#33](https://github.com/seandavi/plainfeedback/issues/33)) is done ([review](reviews/2026-10-14-phase-1.md)); its [deployment checklist](reviews/2026-10-14-phase-1.md#deployment-checklist) still applies.
 
 ## onclappc02 (reference deployment)
 

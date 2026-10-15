@@ -18,18 +18,18 @@ De-identified event-feedback surveys for the Common Fund Data Ecosystem (CFDE) m
 | Stack | TypeScript end to end, pnpm monorepo: shared `core`, Hono + Drizzle + Postgres server, Vite + React web ([ADR 0007](adr/0007-typescript-everywhere.md)). |
 | Authoring | Markdown is the source of truth. It compiles to a JSON survey model; the JSON is what is stored, rendered, validated and exported. |
 | Renderer | Small custom React renderer in the web app, driven by the compiled JSON model. SurveyJS is not used. |
-| Auth | Pluggable OIDC. Google is the default for development; the client id and secret are in GCP Secret Manager (`cdsci-infra`: `cancerdatasci-oauth-client-id`, `cancerdatasci-oauth-client-secret`). |
+| Auth | Pluggable OIDC. Google is the first provider. For the CDSCI deployment the client id and secret are in GCP Secret Manager (`cdsci-infra`: `cancerdatasci-oauth-client-id`, `cancerdatasci-oauth-client-secret`). |
 | Participants | v1: shared anonymous link and QR code, no tokens, no email ([ADR 0004](adr/0004-anonymous-link-only-v1.md)). Built: `/s/{publicId}` page, one single-use ticket per response and in-memory rate limits ([ADR 0011](adr/0011-participant-page.md), [0013](adr/0013-transient-client-rate-limit.md), [0014](adr/0014-single-use-tickets-and-crowd-sized-limit.md)). |
 | Permissions | Group roles owner, creator, viewer plus a global admin; anything outside your groups is 404 ([ADR 0009](adr/0009-group-rbac-404.md)). Per-user API tokens scoped to one group, never above the owner's rights ([ADR 0010](adr/0010-api-tokens.md)). |
 | Time and deletion | Submission time is stored to the hour. Deletion is real and cascades; nothing deletes on a schedule ([ADR 0012](adr/0012-deletion-and-coarse-time.md)). |
 | Export | JSONL (lossless) and wide CSV, streamed, for a survey, an event, a group (and the whole deployment for admins). Every row names its event, survey and wave, and publishing refuses changes that would change what an existing column means ([ADR 0015](adr/0015-export-column-stability.md)). Parquet is deferred. |
-| Deployment | Docker Compose ([ADR 0006](adr/0006-docker-compose.md)). The app image holds production dependencies only; it connects to Postgres as a role without `ALTER`, `TRUNCATE` or `UPDATE` on responses and versions ([deploy guide](deploy.md#database-roles)). |
-| Chat layer | Edits the markdown, never the JSON. Phase 2, not started. |
-| Conditionals, pages | Phase 3, not started. The JSON model has the slots from phase 1 (`pages[]`, reserved `visibleIf`). |
+| Deployment | Docker Compose ([ADR 0006](adr/0006-docker-compose.md)). Phase 1 is deployed as a preview instance on onclappc02 (`https://plainfeedback.cancerdatasci.org`, Traefik + Cloudflare; data may be wiped), using `deploy/onclappc02/compose.override.yaml`. The app image holds production dependencies only; it connects to Postgres as a role without `ALTER`, `TRUNCATE` or `UPDATE` on responses and versions ([deploy guide](deploy.md#database-roles)). |
+| Chat layer | Edits the markdown, never the JSON. Phase 2, not started ([#13](https://github.com/seandavi/plainfeedback/issues/13)). |
+| Conditionals, pages | Phase 3, not started ([#14](https://github.com/seandavi/plainfeedback/issues/14)). The JSON model has the slots from phase 1 (`pages[]`, reserved `visibleIf`). |
 
 ## Phases
 
-1. **Core** (built; the [phase-1 review](reviews/2026-10-14-phase-1.md) lists what remains): groups and roles, API and API tokens, markdown to JSON, single-page renderer, web markdown editor with live preview, publish with shareable link and QR code, response viewer, export, deletion, staff UI for groups, events and surveys.
+1. **Core** (done and deployed; the [phase-1 review](reviews/2026-10-14-phase-1.md) was independent and its findings were filed and fixed as issues; privacy follow-ups still open: [#46](https://github.com/seandavi/plainfeedback/issues/46) small-cell suppression, [#47](https://github.com/seandavi/plainfeedback/issues/47) automated retention; also [#98](https://github.com/seandavi/plainfeedback/issues/98) cross-group export token and [#105](https://github.com/seandavi/plainfeedback/issues/105) GA4 on staff pages only): groups and roles, API and API tokens, markdown to JSON, single-page renderer, web markdown editor with live preview, publish with shareable link and QR code, response viewer, export, deletion, staff UI for groups, events and surveys.
 2. **Chat** (not started, [#13](https://github.com/seandavi/plainfeedback/issues/13)): markdown-editing assistant with live preview, blank-page start with suggested prompts, intake from pasted text or uploaded documents.
 3. **Conditionals and multiple pages** (not started, [#14](https://github.com/seandavi/plainfeedback/issues/14)): grammar and renderer extensions; update the chat's grammar spec and examples.
 
@@ -47,7 +47,9 @@ De-identified event-feedback surveys for the Common Fund Data Ecosystem (CFDE) m
 
 `pages[] -> questions[]`. Each question has a stable author-set slug `id`, `type` (choice, multi, likert, text, number), `required`, options or statements, and an optional `visibleIf` (unused until phase 3). Likert scale anchors are stored in the version so exports stay interpretable. Answers are keyed by question id.
 
-## Markdown grammar (sketch, not final)
+## Markdown grammar (overview)
+
+The full reference is [`grammar.md`](grammar.md); this is the flavour.
 
 Pandoc-style fenced divs, as in `quarto-revealjs-live-questions`. Worked example, from the CFDE Fall 2026 meeting feedback form:
 
@@ -163,7 +165,7 @@ Participant API (#7, [ADR 0011](adr/0011-participant-page.md)):
 
 ## Auth
 
-OIDC (authorization code + PKCE, `openid-client`), configured by issuer, client id, client secret, redirect URI, allowed email domains and admin emails. Config comes from environment, with secrets read from GCP Secret Manager at deploy. Google is the first provider. Server-side sessions; the staff cookie is scoped to `/api/v1` and never set or read on participant routes ([ADR 0005](adr/0005-pluggable-oidc.md), [deploy guide](deploy-auth.md)). The OAuth client must have this app's redirect URI registered before it works.
+OIDC (authorization code + PKCE, `openid-client`), configured by issuer, client id, client secret, redirect URI, allowed email domains and admin emails. Config comes from environment; on the CDSCI host the OAuth secrets come from GCP Secret Manager at deploy, other deployers set them however they manage secrets. Google is the first provider. Server-side sessions; the staff cookie is scoped to `/api/v1` and never set or read on participant routes ([ADR 0005](adr/0005-pluggable-oidc.md), [deploy guide](deploy-auth.md)). The OAuth client must have this app's redirect URI registered before it works.
 
 ## Conditionals and pages (phase 3 design)
 
@@ -182,5 +184,4 @@ Threat model and residual risks: [`threat-model.md`](threat-model.md). Privacy s
 
 1. When (if ever) to add tokens/email for within-person linking.
 2. Duplicate submissions from the shared link (accepted in v1; rate limiting only).
-3. Where it runs (onclappc02 conventions in `monode/infrastructure/`; shared Postgres vs compose Postgres).
-4. Editor design: split-pane markdown editor with live preview (decided in; details open).
+3. Whether to move beyond compose Postgres on onclappc02 (the preview instance uses the bundled one).
