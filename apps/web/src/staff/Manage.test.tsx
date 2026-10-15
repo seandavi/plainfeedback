@@ -246,6 +246,10 @@ describe("group page", () => {
           { userId: "v1", email: "view@x.org", role: "viewer" },
         ],
       ],
+      [`GET /api/v1/groups/${G}/invites`]: () => [
+        200,
+        [{ email: "pend@x.org", role: "creator", createdAt: "2026-10-01T00:00:00Z" }],
+      ],
       [`GET /api/v1/groups/${G}/tokens`]: () => [200, []],
     };
   };
@@ -297,18 +301,23 @@ describe("group page", () => {
     expect(await screen.findByText(/at least one owner/)).toBeTruthy();
   });
 
-  it("adds a member by email and explains an unknown email", async () => {
+  it("adds a member by email and explains an invite for an unknown email", async () => {
     groupRoutes("owner");
     routes[`PUT ${M}/ann%40x.org`] = () => [
       200,
       { userId: "a", email: "ann@x.org", role: "creator" },
     ];
-    routes[`PUT ${M}/nobody%40x.org`] = () => [404, { error: "not found" }];
+    routes[`PUT ${M}/nobody%40x.org`] = () => [
+      202,
+      { email: "nobody@x.org", role: "viewer", createdAt: "2026-10-01T00:00:00Z" },
+    ];
     open(`/app/g/${G}`);
     await screen.findByRole("table", { name: "Members of Lab" });
     fireEvent.change(screen.getByLabelText(/^Email/), { target: { value: "nobody@x.org" } });
     fireEvent.click(screen.getByRole("button", { name: "Add member" }));
-    expect(await screen.findByText(/Ask them to sign in once first/)).toBeTruthy();
+    expect((await screen.findByText(/Invited nobody@x.org as viewer/)).textContent).toMatch(
+      /first sign in/,
+    );
     fireEvent.change(screen.getByLabelText(/^Email/), { target: { value: "ann@x.org" } });
     const add = screen.getByRole("group", { name: "Add a member" });
     fireEvent.change(within(add).getByLabelText("Role"), { target: { value: "creator" } });
@@ -318,11 +327,27 @@ describe("group page", () => {
     );
   });
 
+  it("shows pending invites with a badge and lets an owner revoke them", async () => {
+    groupRoutes("owner");
+    routes[`DELETE /api/v1/groups/${G}/invites/pend%40x.org`] = () => [204, undefined];
+    open(`/app/g/${G}`);
+    const table = await screen.findByRole("table", { name: "Members of Lab" });
+    const row = within(table).getByRole("rowheader", { name: /pend@x.org/ });
+    expect(within(row).getByText("pending")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Revoke pend@x.org" }));
+    const dialog = await screen.findByRole("dialog", { name: "Revoke invite" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke" }));
+    await waitFor(() =>
+      expect(called("DELETE", `/api/v1/groups/${G}/invites/pend%40x.org`)).toHaveLength(1),
+    );
+  });
+
   it("gives viewers a read-only member list and no member controls", async () => {
     groupRoutes("viewer");
     open(`/app/g/${G}`);
     await screen.findByRole("table", { name: "Members of Lab" });
-    expect(screen.queryByRole("button", { name: /Remove/ })).toBeNull();
+    expect(screen.getByText("pending")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Remove|Revoke/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add member" })).toBeNull();
     // A viewer can only create a viewer token.
     expect(

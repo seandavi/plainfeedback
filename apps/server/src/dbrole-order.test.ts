@@ -35,6 +35,9 @@ test("after init grants on an empty DB then migrations, plainfeedback_app cannot
     }
     expect(await has("responses", "DELETE")).toBe(true);
     expect(await has("surveys", "UPDATE")).toBe(true); // other tables keep default privileges
+    for (const p of ["SELECT", "INSERT", "UPDATE", "DELETE"]) {
+      expect(await has("pending_invites", p), `pending_invites ${p}`).toBe(true);
+    }
   } finally {
     await db.$client.end();
     await admin.query(`drop database if exists ${name}`);

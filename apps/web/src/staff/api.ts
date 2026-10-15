@@ -42,6 +42,8 @@ export type User = {
   createdAt: string;
 };
 export type Member = { userId: string; email: string; role: Role };
+/** Pending: becomes a membership when someone first signs in with this verified email. */
+export type Invite = { email: string; role: Role; createdAt: string };
 export type TokenRole = "viewer" | "creator";
 export type ApiToken = {
   id: string;
@@ -175,11 +177,16 @@ export const api = {
   patchGroup: (g: string, patch: { name?: string; archived?: boolean }) =>
     call<Group>("PATCH", `/groups/${enc(g)}`, patch).then((r) => r.data),
   members: (g: string) => get<Member[]>(`/groups/${enc(g)}/members`),
-  /** `user` is a user id or the email of someone who has signed in once. */
+  /** `user` is a user id or an email; an email nobody has signed in with yet gives an Invite. */
   setMember: (g: string, user: string, role: Role) =>
-    call<Member>("PUT", `/groups/${enc(g)}/members/${enc(user)}`, { role }).then((r) => r.data),
+    call<Member | Invite>("PUT", `/groups/${enc(g)}/members/${enc(user)}`, { role }).then(
+      (r) => r.data,
+    ),
   removeMember: (g: string, user: string) =>
     call<void>("DELETE", `/groups/${enc(g)}/members/${enc(user)}`),
+  invites: (g: string) => get<Invite[]>(`/groups/${enc(g)}/invites`),
+  revokeInvite: (g: string, email: string) =>
+    call<void>("DELETE", `/groups/${enc(g)}/invites/${enc(email)}`),
   tokens: (g: string) => get<ApiToken[]>(`/groups/${enc(g)}/tokens`),
   createToken: (g: string, name: string, role: TokenRole, expiresInDays: number) =>
     call<ApiToken & { token: string }>("POST", `/groups/${enc(g)}/tokens`, {

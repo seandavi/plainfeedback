@@ -1,7 +1,7 @@
 // Group members and API tokens (#19), shown on the group page. Every action calls the same
 // permission-checked API as everything else; hiding controls here is a convenience, never the check.
 import { type FormEvent, type ReactNode, useRef, useState } from "react";
-import { ApiError, api, type Group, type Me, type Role, type TokenRole } from "./api";
+import { api, type Group, type Me, type Role, type TokenRole } from "./api";
 import { Dialog } from "./Editor";
 import { ErrorNote, useLoad } from "./StaffApp";
 
@@ -101,25 +101,27 @@ const RoleSelect = ({
 );
 
 export function Members({ me, group, g }: { me: Me; group: Group; g: string }) {
-  const members = useLoad(() => api.members(g), g);
+  const members = useLoad(() => Promise.all([api.members(g), api.invites(g)]), g);
   const { error, run } = useAction(members.reload);
   const [note, setNote] = useState("");
   if (members.error) return <ErrorNote error={members.error} />;
   if (!members.data) return <p aria-busy="true">Loading members…</p>;
+  const [list, invites] = members.data;
   const manage = me.isAdmin || group.role === "owner";
   const add = async (ev: FormEvent<HTMLFormElement>) => {
     ev.preventDefault();
     const form = ev.currentTarget;
     const f = new FormData(form);
     const email = String(f.get("email")).trim();
+    const role = String(f.get("role")) as Role;
+    setNote("");
     await run(async () => {
-      try {
-        await api.setMember(g, email, String(f.get("role")) as Role);
-      } catch (x) {
-        if (x instanceof ApiError && x.kind === "notFound")
-          throw new Error(`No user with the email ${email}. Ask them to sign in once first.`);
-        throw x;
-      }
+      const r = await api.setMember(g, email, role);
+      setNote(
+        "userId" in r
+          ? `${r.email} is now ${role}.`
+          : `Invited ${r.email} as ${role}. It takes effect when they first sign in.`,
+      );
       form.reset();
     });
   };
@@ -146,7 +148,7 @@ export function Members({ me, group, g }: { me: Me; group: Group; g: string }) {
             </tr>
           </thead>
           <tbody>
-            {members.data.map((m) => (
+            {list.map((m) => (
               <tr key={m.userId}>
                 <th scope="row">{m.email}</th>
                 <td>
@@ -181,6 +183,27 @@ export function Members({ me, group, g }: { me: Me; group: Group; g: string }) {
                 )}
               </tr>
             ))}
+            {invites.map((i) => (
+              <tr key={`invite:${i.email}`}>
+                <th scope="row">
+                  {i.email} <span className="badge">pending</span>
+                </th>
+                <td>{i.role}</td>
+                {manage && (
+                  <td>
+                    <ConfirmButton
+                      label="Revoke"
+                      name={i.email}
+                      title="Revoke invite"
+                      onConfirm={() => run(() => api.revokeInvite(g, i.email))}
+                    >
+                      Revoke the invite for {i.email}? They will not join {group.name} when they
+                      sign in.
+                    </ConfirmButton>
+                  </td>
+                )}
+              </tr>
+            ))}
           </tbody>
         </table>
       </section>
@@ -194,7 +217,10 @@ export function Members({ me, group, g }: { me: Me; group: Group; g: string }) {
             <legend>Add a member</legend>
             <label>
               Email <input name="email" type="email" required />
-              <span className="meta">They must have signed in once.</span>
+              <span className="meta">
+                Not signed in yet? They get a pending invite that takes effect at their first
+                sign-in.
+              </span>
             </label>
             <label>
               Role{" "}

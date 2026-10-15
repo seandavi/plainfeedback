@@ -35,7 +35,7 @@ De-identified event-feedback surveys for the Common Fund Data Ecosystem (CFDE) m
 
 ## Data model
 
-- `users` (`is_admin`, `disabled_at`), `sessions` (hash of the cookie only), `groups` (`archived_at`), `memberships(group, user, role: owner|creator|viewer)`
+- `users` (`is_admin`, `disabled_at`), `sessions` (hash of the cookie only), `groups` (`archived_at`), `memberships(group, user, role: owner|creator|viewer)`, `pending_invites(group, email, role)` (become memberships at verified sign-in, [ADR 0016](adr/0016-pending-invites.md))
 - `events` (belongs to a group, slug unique per group, title, description, optional `starts_on` / `ends_on` calendar dates, CHECK end >= start)
 - `surveys` (belongs to an event; slug; random `public_id` for the participant link; nullable wave label, CHECK in `pre|post|followup|other`, with a partial unique index so an event has at most one pre, one post and one followup (`other` may repeat; null = not a wave, e.g. speaker feedback); current draft markdown and ETag; `closed_at`)
 - `survey_versions` (immutable; markdown, compiled JSON model, privacy statement, open/close dates; a trigger rejects UPDATE, TRUNCATE and ad-hoc DELETE)
@@ -106,8 +106,10 @@ GET    /groups/{g}                              viewer
 PATCH  /groups/{g}                              owner: rename, archive
 DELETE /groups/{g}                              admin: only once archived; cascades
 GET    /groups/{g}/members                      viewer
-PUT    /groups/{g}/members/{user}               owner: {user} is an id or the email of an existing user
+PUT    /groups/{g}/members/{user}               owner: {user} is an id or an email; unknown email = invite (202)
 DELETE /groups/{g}/members/{user}               owner (never the last owner)
+GET    /groups/{g}/invites                      viewer: pending invites
+DELETE /groups/{g}/invites/{email}              owner: revoke an invite
 GET    /users                                   admin
 PATCH  /users/{id}                              admin: grant/revoke admin (never the last admin)
 GET    /groups/{g}/events                       viewer
@@ -145,7 +147,7 @@ GET    /api/v1/public/surveys/{publicId}        latest published version: model,
 POST   /api/v1/public/surveys/{publicId}/responses   submit {versionId, answers, ticket, hp?} (no identifier)
 ```
 
-Outside your groups everything is 404; a role too low within your group is 403 ([ADR 0009](adr/0009-group-rbac-404.md)). Members must have signed in once before they can be added; invitations come later.
+Outside your groups everything is 404; a role too low within your group is 403 ([ADR 0009](adr/0009-group-rbac-404.md)). Someone who has not signed in yet is invited by email; the invite becomes a membership at their first sign-in with a verified email ([ADR 0016](adr/0016-pending-invites.md)).
 
 Idempotent upserts by slug allow a GitOps flow. Publishing is always an explicit human action.
 

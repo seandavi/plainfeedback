@@ -29,6 +29,12 @@ curl -sS -X POST $BASE/api/v1/groups/$GROUP/tokens -H "Origin: $BASE" -b "pf_ses
 - List with `GET /api/v1/groups/{g}/tokens` (owners see all of the group's tokens, others their own) or `GET /api/v1/me/tokens`; revoke with `DELETE /api/v1/groups/{g}/tokens/{id}`.
 - Tokens cannot manage tokens, members, groups or users, and cannot log out (403). See ADR 0010.
 
+## Members and invites
+
+- `PUT /api/v1/groups/{g}/members/{user}` with `{"role": "viewer"}` (owner, session only). `{user}` is a user id or an email. A known user answers `200` with the membership.
+- An email that nobody has signed in with yet answers **`202`** with `{"email", "role", "createdAt"}`. That is a pending invite, and it takes effect at the person's first sign-in with that email, verified by the identity provider. Repeating the PUT updates the invite's role. Emails are case-insensitive.
+- `GET /api/v1/groups/{g}/invites` lists pending invites (any member). `DELETE /api/v1/groups/{g}/invites/{email}` revokes one (owner, session only). See ADR 0016.
+
 ## End to end with curl
 
 Using the session cookie from a browser login (or a bearer token, above):

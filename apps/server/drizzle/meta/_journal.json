@@ -85,6 +85,13 @@
       "when": 1792026391515,
       "tag": "0011_revoke_app_update",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792086174387,
+      "tag": "0012_pending_invites",
+      "breakpoints": true
     }
   ]
 }

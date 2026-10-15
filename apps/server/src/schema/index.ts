@@ -74,6 +74,29 @@ export const memberships = pgTable(
   (t) => [unique().on(t.groupId, t.userId), index().on(t.userId)],
 );
 
+// Invites by email for people who have not signed in yet (ADR 0016). Converted into memberships at
+// sign-in, for a verified email only (auth.ts), then deleted. No expiry: owners revoke them.
+export const pendingInvites = pgTable(
+  "pending_invites",
+  {
+    id: id(),
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    role: roleEnum("role").notNull(),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique().on(t.groupId, t.email),
+    index().on(t.email),
+    check("pending_invites_email_lower", sql`${t.email} = lower(${t.email})`),
+  ],
+);
+
 export const events = pgTable(
   "events",
   {

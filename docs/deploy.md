@@ -29,7 +29,7 @@ On a new host, with Docker, Node 22, pnpm and [`just`](https://just.systems) ins
    docker compose exec -T db psql -U plainfeedback -d plainfeedback \
      -c "update users set is_admin = true where email = 'you@gmail.com';"
    ```
-6. As admin, create a group and add its owner (members must have signed in once). Work through [Before real data](#before-real-data).
+6. As admin, create a group and add its owner by email. If they have not signed in yet, this creates a pending invite that becomes their membership at their first sign-in. Work through [Before real data](#before-real-data).
 
 ## Settings that must be right
 

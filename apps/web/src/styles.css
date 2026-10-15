@@ -328,6 +328,14 @@ a.button {
   color: var(--muted);
   font-size: 0.875rem;
 }
+.badge {
+  border: 1px solid var(--muted);
+  border-radius: 999px;
+  padding: 0 0.5em;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: normal;
+}
 .crumbs ol {
   display: flex;
   flex-wrap: wrap;

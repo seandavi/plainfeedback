@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { apiTokens, events, memberships, users } from "./schema";
+import { hashApiToken } from "./auth";
+import { apiTokens, events, memberships, pendingInvites, users } from "./schema";
 import { type U, useWorld, WHO, type World } from "./testworld";
 
 // RBAC (issue #4, ADR 0009).
@@ -47,6 +48,23 @@ const cases: Case[] = [
   {
     method: "DELETE",
     path: (w) => `/groups/${w.g.id}/members/${w.target.id}`,
+    expect: [401, 404, 403, 403, 204, 204],
+  },
+  // Invites (ADR 0016): same rules as adding and removing members.
+  {
+    method: "PUT",
+    path: (w) => `/groups/${w.g.id}/members/new-person@example.org`,
+    body: () => ({ role: "creator" }),
+    expect: [401, 404, 403, 403, 202, 202],
+  },
+  {
+    method: "GET",
+    path: (w) => `/groups/${w.g.id}/invites`,
+    expect: [401, 404, 200, 200, 200, 200],
+  },
+  {
+    method: "DELETE",
+    path: (w) => `/groups/${w.g.id}/invites/${w.invited}`,
     expect: [401, 404, 403, 403, 204, 204],
   },
   // Admin only; the admin gets 409 here because the group is not archived (see "deletion" below).
@@ -194,7 +212,7 @@ describe("group deletion (#36)", () => {
 });
 
 describe("members", () => {
-  it("adds an existing user by email (case-insensitive); unknown emails are 404", async () => {
+  it("adds an existing user by email (case-insensitive); unknown ids are 404", async () => {
     const w = await world();
     const u = await mkUser();
     const add = (who: string) =>
@@ -202,9 +220,84 @@ describe("members", () => {
     const res = await add(u.email.toUpperCase());
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ userId: u.id, email: u.email, role: "viewer" });
-    expect((await add("nobody@example.org")).status).toBe(404);
     expect((await add(crypto.randomUUID())).status).toBe(404);
     expect((await add("garbage")).status).toBe(400);
+  });
+
+  it("invites an unknown email (lowercased); re-inviting updates the role; owners revoke", async () => {
+    const w = await world();
+    const invite = (email: string, role: string) =>
+      call(w, "PUT", `/groups/${w.g.id}/members/${email}`, w.who.owner, { role });
+    const list = async () =>
+      (await (await call(w, "GET", `/groups/${w.g.id}/invites`, w.who.viewer)).json()) as {
+        email: string;
+        role: string;
+      }[];
+    const res = await invite("New.Person@Example.ORG", "viewer");
+    expect(res.status).toBe(202);
+    expect(await res.json()).toMatchObject({ email: "new.person@example.org", role: "viewer" });
+    expect((await invite("new.person@example.org", "creator")).status).toBe(202);
+    expect((await list()).map((i) => [i.email, i.role])).toEqual([
+      ["invited@example.org", "viewer"],
+      ["new.person@example.org", "creator"],
+    ]);
+    // The invite is not a member yet.
+    const members = (await (
+      await call(w, "GET", `/groups/${w.g.id}/members`, w.who.owner)
+    ).json()) as { email: string }[];
+    expect(members.map((m) => m.email)).not.toContain("new.person@example.org");
+    const revoke = (email: string) =>
+      call(w, "DELETE", `/groups/${w.g.id}/invites/${email}`, w.who.owner);
+    expect((await revoke("NEW.person@example.org")).status).toBe(204);
+    expect((await revoke("new.person@example.org")).status).toBe(404);
+    expect((await revoke("garbage")).status).toBe(400);
+    expect((await list()).map((i) => i.email)).toEqual(["invited@example.org"]);
+    // Another group's invite cannot be revoked through this group.
+    const other = await call(
+      w,
+      "DELETE",
+      `/groups/${w.other.id}/invites/${w.invited}`,
+      w.who.nonMember,
+    );
+    expect(other.status).toBe(404);
+    expect((await list()).map((i) => i.email)).toEqual(["invited@example.org"]);
+  });
+
+  it("API tokens cannot invite or revoke invites", async () => {
+    const w = await world();
+    const db = getDb();
+    const token = `pf_${"a".repeat(43)}`;
+    await db.insert(apiTokens).values({
+      userId: w.who.creator.id,
+      groupId: w.g.id,
+      name: "t",
+      role: "creator",
+      tokenHash: await hashApiToken(token),
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const bearer = { authorization: `Bearer ${token}` };
+    const put = await call(
+      w,
+      "PUT",
+      `/groups/${w.g.id}/members/x@example.org`,
+      undefined,
+      { role: "viewer" },
+      null,
+      bearer,
+    );
+    expect(put.status).toBe(403);
+    const del = await call(
+      w,
+      "DELETE",
+      `/groups/${w.g.id}/invites/${w.invited}`,
+      undefined,
+      undefined,
+      null,
+      bearer,
+    );
+    expect(del.status).toBe(403);
+    const rows = await db.select().from(pendingInvites).where(eq(pendingInvites.groupId, w.g.id));
+    expect(rows.map((r) => r.email)).toEqual([w.invited]);
   });
 
   it("owners cannot grant admin", async () => {
@@ -299,6 +392,8 @@ describe("OpenAPI registry (#18 builds the spec page on this)", () => {
       "/api/v1/groups/{g}",
       "/api/v1/groups/{g}/events",
       "/api/v1/groups/{g}/events/{e}",
+      "/api/v1/groups/{g}/invites",
+      "/api/v1/groups/{g}/invites/{email}",
       "/api/v1/groups/{g}/members",
       "/api/v1/groups/{g}/members/{user}",
       "/api/v1/groups/{g}/responses",
