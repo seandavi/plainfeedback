@@ -28,7 +28,7 @@ export function toAnswers(model: Survey, ui: Ui): Answers {
       if (c.pick !== undefined) out[q.id] = c.pick === OTHER ? c.other : c.pick;
     } else if (q.type === "multi") {
       const m = v as Multi;
-      out[q.id] = m.otherOn && m.other.trim() ? [...m.picks, m.other] : m.picks;
+      out[q.id] = m.otherOn ? [...m.picks, m.other] : m.picks; // blank Other: core says so (#67)
     } else if (q.type === "number") {
       if ((v as string).trim() !== "") out[q.id] = Number(v);
     } else out[q.id] = v;
@@ -142,6 +142,12 @@ const ErrorText = ({ id, error }: { id: string; error?: string }) =>
       {error}
     </p>
   ) : null;
+// maxLength cuts pasted text silently; say so, in a live region mounted before it fills (#77).
+const LimitNote = ({ length, max }: { length: number; max: number }) => (
+  <span className="limit" aria-live="polite">
+    {length >= max ? `Limit reached: only the first ${max} characters are kept.` : ""}
+  </span>
+);
 
 // biome-ignore lint/suspicious/noExplicitAny: each branch narrows value by question type
 function QuestionField(p: FieldProps<any>) {
@@ -160,6 +166,8 @@ function QuestionField(p: FieldProps<any>) {
     const multi = q.type === "multi";
     const v: Choice & Multi = { picks: [], otherOn: false, other: "", ...p.value };
     const otherOn = multi ? v.otherOn : v.pick === OTHER;
+    // Other picked but blank: the error is about the text box, so mark and focus that (#67).
+    const otherBlank = otherOn && !v.other.trim();
     const toggle = (o: string, on: boolean) =>
       p.onChange(
         multi
@@ -176,7 +184,7 @@ function QuestionField(p: FieldProps<any>) {
               name={p.name}
               checked={multi ? v.picks.includes(o) : v.pick === o}
               onChange={(e) => toggle(o, e.target.checked)}
-              aria-invalid={invalid}
+              aria-invalid={otherBlank ? undefined : invalid}
             />
             {o}
           </label>
@@ -191,20 +199,24 @@ function QuestionField(p: FieldProps<any>) {
                 onChange={(e) =>
                   p.onChange(multi ? { ...v, otherOn: e.target.checked } : { ...v, pick: OTHER })
                 }
-                aria-invalid={invalid}
+                aria-invalid={otherBlank ? undefined : invalid}
               />
               {q.other}
             </label>
             {otherOn && (
-              <input
-                type="text"
-                className="other"
-                aria-label={`${q.other}: please specify`}
-                maxLength={OTHER_MAXLENGTH}
-                value={v.other}
-                onChange={(e) => p.onChange({ ...v, other: e.target.value })}
-                aria-invalid={invalid}
-              />
+              <>
+                <input
+                  type="text"
+                  className="other"
+                  aria-label={`${q.other}: please specify`}
+                  maxLength={OTHER_MAXLENGTH}
+                  value={v.other}
+                  onChange={(e) => p.onChange({ ...v, other: e.target.value })}
+                  aria-invalid={invalid}
+                  aria-describedby={describedBy}
+                />
+                <LimitNote length={v.other.length} max={OTHER_MAXLENGTH} />
+              </>
             )}
           </>
         )}
@@ -226,9 +238,12 @@ function QuestionField(p: FieldProps<any>) {
             ? q.anchors.mid
             : undefined;
     const keyed = points.filter((n) => anchor(n));
+    const ends = [min, max].filter((n) => anchor(n));
     return (
       <fieldset className="question likert" aria-describedby={describedBy}>
         <legend>{prompt}</legend>
+        {/* Next to the legend, not 13 rows down (#56). */}
+        <ErrorText id={errId} error={p.error} />
         {keyed.length > 0 && (
           <p className="anchors">
             {keyed.map((n) => (
@@ -240,30 +255,49 @@ function QuestionField(p: FieldProps<any>) {
         )}
         {q.statements.map((s, i) => {
           const key = String(i + 1);
+          const rowName = `${p.name}-${key}`;
+          const unrated = invalid && v[key] === undefined;
+          // Radios are named "1".."5"; the end anchors show under every row (so they stay in view on
+          // a phone) and are announced once per row as the group's description (#66).
           return (
-            <fieldset key={key} className="statement">
+            <fieldset
+              key={key}
+              className={unrated ? "statement unrated" : "statement"}
+              aria-describedby={ends.length ? `${rowName}-ends` : undefined}
+            >
               <legend>
                 <MarkdownInline text={s} />
+                {unrated && <span className="not-rated"> (not rated)</span>}
               </legend>
-              <div className="scale">
-                {points.map((n) => (
-                  <label key={n}>
-                    <input
-                      type="radio"
-                      name={`${p.name}-${key}`}
-                      checked={v[key] === n}
-                      onChange={() => p.onChange({ ...v, [key]: n })}
-                      aria-invalid={invalid && v[key] === undefined ? true : undefined}
-                    />
-                    <span>{n}</span>
-                    {anchor(n) && <span className="sr-only"> {anchor(n)}</span>}
-                  </label>
-                ))}
+              <div className="rating">
+                <div className="scale">
+                  {points.map((n) => (
+                    <label key={n}>
+                      <input
+                        type="radio"
+                        name={rowName}
+                        checked={v[key] === n}
+                        onChange={() => p.onChange({ ...v, [key]: n })}
+                        aria-invalid={unrated || undefined}
+                        aria-describedby={unrated ? errId : undefined}
+                      />
+                      <span>{n}</span>
+                    </label>
+                  ))}
+                </div>
+                {ends.length > 0 && (
+                  <p className="ends" id={`${rowName}-ends`} aria-hidden="true">
+                    {ends.map((n) => (
+                      <span key={n}>
+                        {n} = {anchor(n)}{" "}
+                      </span>
+                    ))}
+                  </p>
+                )}
               </div>
             </fieldset>
           );
         })}
-        <ErrorText id={errId} error={p.error} />
       </fieldset>
     );
   }
@@ -287,6 +321,7 @@ function QuestionField(p: FieldProps<any>) {
         <span id={countId} className="count">
           {v.length} / {q.maxlength} characters
         </span>
+        <LimitNote length={v.length} max={q.maxlength} />
         <ErrorText id={errId} error={p.error} />
       </div>
     );

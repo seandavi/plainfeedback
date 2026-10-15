@@ -168,7 +168,14 @@ describe("Editor", () => {
     await setup();
     fireEvent.click(screen.getByRole("button", { name: "Publish…" }));
     const dialog = await screen.findByRole("dialog", { name: "Publish this survey" });
-    expect(within(dialog).getByLabelText(/Privacy statement/)).toBeTruthy();
+    const privacy = within(dialog).getByLabelText(/Privacy statement/) as HTMLTextAreaElement;
+    // First publish starts from the template and asks for contact and retention (#65).
+    expect(privacy.value).toContain("[[CONTACT EMAIL]]");
+    expect(privacy.value).toContain("[[RETENTION");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Publish" }));
+    await within(dialog).findByText(/Replace every \[\[\.\.\.\]\] in the privacy statement/);
+    expect(calls.find((c) => c.method === "POST")).toBeUndefined(); // never sent
+    fireEvent.change(privacy, { target: { value: "" } }); // empty: the server's default
     fireEvent.click(within(dialog).getByRole("button", { name: "Publish" }));
     await within(dialog).findByText(/Line 7: Unknown question type/);
     const post = calls.find((c) => c.method === "POST");
@@ -184,6 +191,8 @@ describe("Editor", () => {
     await setup();
     fireEvent.click(screen.getByRole("button", { name: "Publish…" }));
     const dialog = await screen.findByRole("dialog");
+    // First publish pre-fills the placeholder template (#65); empty means the server default.
+    fireEvent.change(within(dialog).getByLabelText(/Privacy statement/), { target: { value: "" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Publish" }));
     await within(dialog).findByText("Statement 1 moved.");
     expect(within(dialog).getByText("This survey already has responses.")).toBeTruthy();

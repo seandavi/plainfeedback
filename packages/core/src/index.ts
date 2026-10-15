@@ -4,4 +4,5 @@ export * from "./answers";
 export * from "./compat";
 export * from "./compile";
 export * from "./model";
+export * from "./privacy";
 export * from "./status";

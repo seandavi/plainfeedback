@@ -123,13 +123,14 @@ export function ParticipantPage({ publicId }: { publicId: string }) {
   return (
     <main>
       <h1>{s.title}</h1>
-      {s.intro && <Markdown text={s.intro} />}
-      <details className="privacy" open>
-        <summary>Privacy</summary>
-        <Markdown text={s.privacyStatement} />
-      </details>
+      {/* Status first and privacy collapsed, so the notice or the first question is in view (#65). */}
       {s.status === "closed" && <p role="status">This survey is closed.</p>}
       {s.status === "not_yet_open" && <p role="status">This survey is not open yet.</p>}
+      {s.intro && <Markdown text={s.intro} />}
+      <details className="privacy">
+        <summary>Privacy: what is stored and who can read your answers</summary>
+        <Markdown text={s.privacyStatement} />
+      </details>
       {s.status === "open" && (
         <>
           {notice && (

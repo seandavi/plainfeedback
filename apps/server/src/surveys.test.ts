@@ -1,9 +1,12 @@
-import { compile } from "@plainfeedback/core";
+import {
+  compile,
+  DEFAULT_PRIVACY_STATEMENT,
+  PRIVACY_STATEMENT_TEMPLATE,
+} from "@plainfeedback/core";
 import { desc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { authorize } from "./authz";
 import { events, groups, responses, surveys, surveyVersions } from "./schema";
-import { DEFAULT_PRIVACY_STATEMENT } from "./surveys";
 import { useWorld, WHO } from "./testworld";
 
 // Events and surveys (issue #6): RBAC per ADR 0009, drafts with ETags, validate, publish, versions.
@@ -506,6 +509,12 @@ describe("publish and versions", () => {
     expect((await call(w, "POST", path, as, dates)).status).toBe(400);
     expect((await call(w, "POST", path, as, { version: 7 })).status).toBe(400);
     expect((await call(w, "POST", `${ev(w)}/surveys/nope/publish`, as)).status).toBe(404);
+    // The dialog's template must never reach participants with its placeholders (#65).
+    const tpl = { privacyStatement: PRIVACY_STATEMENT_TEMPLATE };
+    const res = await call(w, "POST", path, as, tpl);
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(await res.json())).toContain("placeholder");
+    expect(DEFAULT_PRIVACY_STATEMENT).not.toContain("[[");
   });
 });
 

@@ -124,6 +124,10 @@ Answer any applicable questions:
 `required` on a grid means every statement must be rated. Without it, people
 rate the statements that apply to them.
 
+The `low` and `high` labels are repeated under every statement so they stay in
+view on a phone; keep them short (a word or two). If statements need different
+labels, use separate grids.
+
 #### Free text: `.text`
 
 ```markdown
@@ -184,11 +188,11 @@ the real CFDE Fall 2026 form.
 # 2026 Fall Meeting Feedback
 
 We want to hear your feedback so we can keep improving our logistics and content.
-Please fill this quick survey and let us know your thoughts (your answers will be
-anonymous). As a reminder, the agenda is [here](https://example.org/agenda).
+Please fill this quick survey and let us know your thoughts (we do not ask for your
+name or email). As a reminder, the agenda is [here](https://example.org/agenda).
 
 ::: {.choice #affiliation required other="Other"}
-Please specify any CFDE affiliation(s).
+What is your main CFDE affiliation?
 - CFDE Center Member
 - CFDE DCC Member
 - CFDE Program Member (not DCC affiliated)
@@ -277,6 +281,8 @@ stores the normalised object.
 | `number` | A finite number within `min`/`max`. |
 
 A missing answer, `null`, an empty or blank string, an empty array and an empty
-object all count as unanswered. Answers for ids that are not in the survey are
+object all count as unanswered, with one exception: for a question with `other`,
+a blank string (or a blank entry in a `multi` array) means "Other" was picked and
+left empty, and is rejected with a message asking to describe it. Answers for ids that are not in the survey are
 rejected. Published versions are immutable, so statement numbers and option
 texts are stable within a version.
