@@ -19,8 +19,9 @@ Internet ──TLS──> [optional CDN] ──> reverse proxy (TLS, HSTS, no IP
 | `OIDC_REDIRECT_URI` | `https://feedback.example.org/api/v1/auth/callback` | Same origin as `PUBLIC_BASE_URL`. Its origin is also the CSRF origin: staff writes from any other origin are rejected. Register it with the IdP ([deploy-auth.md](deploy-auth.md)). |
 | `COOKIE_SECURE` | unset (defaults to `true`) | `false` is for plain-http localhost only. |
 | `ALLOWED_EMAIL_DOMAINS` | your staff domain(s) | Empty means any verified email at the issuer can sign in (they see nothing until added to a group, but can still sign in). |
-| `ADMIN_EMAILS` | first admin only, then empty | Promotes on every login while set. |
-| `POSTGRES_PASSWORD` | a real secret | The compose default is for local dev. |
+| `ADMIN_EMAILS` | first admin only, then empty | Promotes on every login while set. The app refuses to start if it is set while `ALLOWED_EMAIL_DOMAINS` is empty. |
+| `POSTGRES_PASSWORD` | a real secret | The owner role, used by `just migrate` and backups. The compose default is for local dev. |
+| `APP_DB_PASSWORD` | a different real secret, URL-safe | The app's role, `plainfeedback_app`. [Database roles](#database-roles). |
 | `TRUST_PROXY` | the header your proxy overwrites, usually `x-forwarded-for` | Without it, everyone behind a local proxy looks like one client and the per-client limit is off. [Details](#client-address-and-rate-limits). |
 
 ## Client address and rate limits
@@ -178,6 +179,29 @@ If the hostname is proxied through Cloudflare (orange cloud), Cloudflare termina
 - A grey-cloud (DNS only) record avoids all of this; then only your own proxy sees traffic.
 
 ## Postgres
+
+### Database roles
+
+The app does not connect as the table owner ([#76](https://github.com/seandavi/plainfeedback/issues/76)):
+
+- `plainfeedback` (owner, `POSTGRES_PASSWORD`) owns the schema. `just migrate` and `pg_dump` use it, with `DATABASE_URL` in the deploying shell or `.env`.
+- `plainfeedback_app` (`APP_DB_PASSWORD`) may only read and write rows: no `ALTER`, `DROP`, `TRUNCATE` or `TRIGGER`. So it cannot disable the trigger that keeps published survey versions immutable. `compose.yaml` gives the app this role in its `DATABASE_URL`.
+
+On a new database volume, the postgres container creates the role on first start from `db/` (`10-app-role.sh`, then `20-app-grants.sql`; the default privileges there cover tables that later migrations add). The files must be readable by the container's `postgres` user, which they are with a normal umask.
+
+**Existing deployments** (a database created before this change): set `APP_DB_PASSWORD`, run `just migrate`, then once:
+
+```bash
+docker compose up -d --wait db   # recreates db with APP_DB_PASSWORD and the db/ mount
+docker compose exec -T db sh /docker-entrypoint-initdb.d/10-app-role.sh
+docker compose exec -T db psql -U plainfeedback -d plainfeedback -v ON_ERROR_STOP=1 \
+  -f /docker-entrypoint-initdb.d/20-app-grants.sql
+just up                          # the app now connects as plainfeedback_app
+```
+
+Both steps are safe to repeat; rerunning the first one sets a new password after a rotation. If you ever create tables as a role other than `plainfeedback`, rerun the grants as that role.
+
+### Logging
 
 - Do not set `log_statement = all` or `mod`, and leave `log_parameter_max_length_on_error` at 0: either one puts submitted answers in the Postgres log. Defaults are fine.
 - Keep the database off the public network (compose binds it to loopback).

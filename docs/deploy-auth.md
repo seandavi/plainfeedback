@@ -26,7 +26,7 @@ The production client already exists. Its id and secret are in GCP Secret Manage
 | `OIDC_ISSUER` | no | default `https://accounts.google.com`; any OIDC issuer with discovery |
 | `OIDC_PROVIDER` | no | display name, default `Google` (`GET /api/v1/auth/provider`) |
 | `ALLOWED_EMAIL_DOMAINS` | no | comma-separated, exact domain match; empty = any verified email. With Google as the issuer, the `hd` (Workspace hosted domain) claim must also be one of these, so personal Google accounts registered on an org address are refused. Other issuers have no standard equivalent: only the email is checked, so allow only domains whose accounts that issuer controls. |
-| `ADMIN_EMAILS` | no | comma-separated; these users become admin when they sign in (first-admin bootstrap; never demotes). **Empty it once the first admin exists**: while set, any login with that verified email from the issuer is promoted. |
+| `ADMIN_EMAILS` | no | comma-separated; these users become admin when they sign in (first-admin bootstrap; never demotes). **Empty it once the first admin exists**: while set, any login with that verified email from the issuer is promoted. Requires `ALLOWED_EMAIL_DOMAINS`: the app refuses to start otherwise, since without it no `hd` check stops a personal account on that address. |
 | `COOKIE_SECURE` | no | default `true`; set `false` only for plain-http localhost |
 | `SESSION_TTL_HOURS` | no | default `12`; absolute session lifetime |
 | `SESSION_IDLE_HOURS` | no | default `2`; a session unused this long ends |
@@ -45,6 +45,7 @@ Never commit the values, put them in `.env` on a shared host, or print them (no 
 export OIDC_CLIENT_ID="$(gcloud secrets versions access latest --secret=cancerdatasci-oauth-client-id --project=cdsci-infra)"
 export OIDC_CLIENT_SECRET="$(gcloud secrets versions access latest --secret=cancerdatasci-oauth-client-secret --project=cdsci-infra)"
 export OIDC_REDIRECT_URI="https://<your-host>/api/v1/auth/callback"
+export ALLOWED_EMAIL_DOMAINS="example.org"
 export ADMIN_EMAILS="you@example.org"
 just migrate        # applies the sessions table migration
 just up             # docker compose up; the variables are passed into the app container

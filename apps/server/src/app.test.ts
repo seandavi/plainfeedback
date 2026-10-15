@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { setCookie } from "hono/cookie";
 import { expect, test, vi } from "vitest";
-import { createApp, participantGuard } from "./app";
+import { createApp, MAX_API_BODY, participantGuard } from "./app";
 import { loadConfig } from "./config";
 
 const leaky = () => {
@@ -122,4 +122,22 @@ test("config requires a postgres DATABASE_URL", () => {
   expect(loadConfig(base).PUBLIC_BASE_URL).toBe("https://pf.example.org");
   expect(() => loadConfig({ ...base, PUBLIC_BASE_URL: undefined })).toThrow();
   expect(() => loadConfig({ ...base, PUBLIC_BASE_URL: "ftp://x.org" })).toThrow();
+});
+
+test("config refuses ADMIN_EMAILS without ALLOWED_EMAIL_DOMAINS", () => {
+  const base = { DATABASE_URL: "postgresql://u:p@h/d", PUBLIC_BASE_URL: "https://pf.example.org" };
+  expect(() => loadConfig({ ...base, ADMIN_EMAILS: "a@x.org" })).toThrow(/ALLOWED_EMAIL_DOMAINS/);
+  expect(
+    loadConfig({ ...base, ADMIN_EMAILS: "a@x.org", ALLOWED_EMAIL_DOMAINS: "x.org" }).ADMIN_EMAILS,
+  ).toEqual(["a@x.org"]);
+});
+
+test("API bodies over the limit get 413", async () => {
+  const app = createApp({ ping: async () => {}, log: () => {} });
+  app.put("/api/v1/x", async (c) => c.text(String((await c.req.text()).length)));
+  const put = (n: number) => app.request("/api/v1/x", { method: "PUT", body: "a".repeat(n) });
+  expect((await put(MAX_API_BODY)).status).toBe(200);
+  const big = await put(MAX_API_BODY + 1);
+  expect(big.status).toBe(413);
+  expect(await big.json()).toEqual({ error: "request too large" });
 });

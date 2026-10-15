@@ -1,5 +1,6 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import type { MiddlewareHandler } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
 import { type AuthEnv, type AuthOptions, authRoutes, requireUser, sessionAuth } from "./auth";
 import { type Db, errorLine } from "./db";
@@ -13,6 +14,8 @@ import { tokenRoutes } from "./tokens";
 // Participant routes must stay identifier-free: no cookies, no caching, minimal logs.
 export const isParticipantPath = (p: string) =>
   p.startsWith("/s/") || p.startsWith("/api/v1/public/");
+
+export const MAX_API_BODY = 512 * 1024;
 
 const STAFF_CSP =
   "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
@@ -90,6 +93,14 @@ export const createApp = ({
     }
   });
   mountDocs(app);
+  // Caps every API body before it is buffered (#76); participant submissions have a smaller limit.
+  app.use(
+    "/api/v1/*",
+    bodyLimit({
+      maxSize: MAX_API_BODY,
+      onError: (c) => c.json({ error: "request too large" }, 413),
+    }),
+  );
   if (db) app.route("/api/v1/public", publicRoutes(db, participant));
   if (auth) {
     const session = sessionAuth(auth);
