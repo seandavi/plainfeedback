@@ -150,7 +150,8 @@ How many years have you worked in this field?
 ### Writing settings
 
 - A setting with a value is `name=value`. Use quotes when the value has spaces:
-  `low="Not at all"`. Single quotes also work.
+  `low="Not at all"`. Single quotes also work. Use straight quotes: curly quotes
+  (`“ ”`), which Word and Google Docs insert, are reported as an error.
 - `required`, `multiline` and `other` can be written on their own.
 - Settings can come in any order. A misspelled setting is an error, not ignored.
 
