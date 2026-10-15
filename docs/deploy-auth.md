@@ -7,13 +7,13 @@ Staff sign in with OIDC (ADR 0005). Participants never sign in. This page covers
 1. Google Cloud Console → **APIs & Services → OAuth consent screen**. Choose **Internal** if every staff member is in one Google Workspace; otherwise choose **External** and add the scopes `openid` and `email`.
 2. **APIs & Services → Credentials → Create credentials → OAuth client ID**, application type **Web application**.
 3. Under **Authorized redirect URIs**, add the app's callback exactly:
-   - production: `https://<your-host>/api/v1/auth/callback`
+   - production or any public host: `https://<host>/api/v1/auth/callback` (for the preview instance, `https://plainfeedback.cancerdatasci.org/api/v1/auth/callback`)
    - local dev: `http://localhost:3000/api/v1/auth/callback`
 
    The URI must match `OIDC_REDIRECT_URI` exactly (scheme, host, port, path, no trailing slash), or Google returns `redirect_uri_mismatch`. A redirect URI registered on the shared client applies to every app that uses that client, so add it rather than replacing existing entries.
 4. Leave **Authorized JavaScript origins** empty; the browser never talks to Google directly.
 
-The production client already exists. Its id and secret are in GCP Secret Manager, project `cdsci-infra`: `cancerdatasci-oauth-client-id` and `cancerdatasci-oauth-client-secret`. Registering the new redirect URI on that client is the only console step.
+On the CDSCI deployment the client already exists. Its id and secret are in GCP Secret Manager, project `cdsci-infra`: `cancerdatasci-oauth-client-id` and `cancerdatasci-oauth-client-secret`. Registering the new redirect URI on that client is the only console step.
 
 ## 2. Configuration
 
@@ -37,6 +37,21 @@ Behind a reverse proxy, the app must be reachable at the origin in `OIDC_REDIREC
 
 **Off-boarding.** Disabling someone at the identity provider stops new logins only. To end their access here at once, an admin disables them under **Administration → Users** (`PATCH /api/v1/users/{id}` with `{"disabled": true}`): their sessions are deleted, their API tokens are revoked for good, and logins are refused until an admin enables them again. The last active admin cannot be disabled.
 
+## Gmail and other consumer Google accounts
+
+Consumer Google accounts (`@gmail.com`) carry no `hd` claim. When `ALLOWED_EMAIL_DOMAINS` is set and the issuer is Google, only accounts whose `hd` is on the list can sign in, so Gmail users are refused. And `ADMIN_EMAILS` needs `ALLOWED_EMAIL_DOMAINS` (the app refuses to start otherwise), so it cannot bootstrap a Gmail admin either. For a Gmail-only setup:
+
+1. Leave `ALLOWED_EMAIL_DOMAINS` and `ADMIN_EMAILS` empty. Any verified Google account can then sign in, but sees nothing until an admin or group owner adds them to a group.
+2. Sign in once, so your user row exists.
+3. Promote yourself in the database, as the owner role:
+
+```bash
+docker compose exec -T db psql -U plainfeedback -d plainfeedback \
+  -c "update users set is_admin = true where email = 'you@gmail.com';"
+```
+
+Further admins can then be granted under **Administration → Users**. Because anyone with a Google account may sign in, add people to groups deliberately.
+
 ## 3. Injecting secrets at deploy
 
 Never commit the values, put them in `.env` on a shared host, or print them (no `echo`, no `set -x`). Read them into the deploying shell's environment and let Compose pass them through (`compose.yaml` lists the variables without values):
@@ -47,8 +62,8 @@ export OIDC_CLIENT_SECRET="$(gcloud secrets versions access latest --secret=canc
 export OIDC_REDIRECT_URI="https://<your-host>/api/v1/auth/callback"
 export ALLOWED_EMAIL_DOMAINS="example.org"
 export ADMIN_EMAILS="you@example.org"
-just migrate        # applies the sessions table migration
-just up             # docker compose up; the variables are passed into the app container
+just up             # docker compose up --build; the variables are passed into the app container
+just migrate        # with DATABASE_URL set to the owner role (first-run sequence: deploy.md)
 ```
 
 The account running `gcloud` needs `roles/secretmanager.secretAccessor` on those two secrets. To rotate, add a new secret version, then redeploy with the commands above.

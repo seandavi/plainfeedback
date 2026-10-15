@@ -111,7 +111,7 @@ Checklist for the first deployment that collects real responses. Owners: the dep
 - [ ] Reverse proxy does not log IPs or user agents for this site (at least `/s/`, `/api/v1/public/` and `/assets/`), or anonymizes them; error log level checked ([deploy.md](deploy.md)).
 - [ ] If behind Cloudflare: Bot Fight Mode, Web Analytics, Rocket Loader, Zaraz and Email Obfuscation off for the zone, and Cloudflare named in the privacy statement.
 - [ ] TLS on, HSTS on, `COOKIE_SECURE` unset or `true`, `PUBLIC_BASE_URL` and `OIDC_REDIRECT_URI` on `https://`.
-- [ ] `ALLOWED_EMAIL_DOMAINS` set; `ADMIN_EMAILS` emptied after the first admin exists ([#35](https://github.com/seandavi/plainfeedback/issues/35)).
+- [ ] `ALLOWED_EMAIL_DOMAINS` set; `ADMIN_EMAILS` emptied after the first admin exists ([#35](https://github.com/seandavi/plainfeedback/issues/35)); Gmail-only setups leave both empty and bootstrap the admin in SQL ([deploy-auth.md](deploy-auth.md#gmail-and-other-consumer-google-accounts)).
 - [ ] Backups encrypted, access-restricted, with a stated retention.
 - [ ] A retention period decided and written in the privacy statement, and someone named to delete on that date ([deploy.md](deploy.md#retention-and-deletion)).
 - [ ] Each survey's privacy statement adapted from [the template](privacy-statement-template.md).
