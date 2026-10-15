@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { compile, MIN_SUBMIT_MS } from "@plainfeedback/core";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ParticipantPage } from "./ParticipantPage";
 
@@ -66,7 +66,10 @@ describe("ParticipantPage", () => {
     expect(privacy?.querySelector("strong")?.textContent).toBe("no");
     choose();
     submit();
-    expect(await screen.findByText(/Thank you/)).toBeTruthy();
+    // #68: focus moves to the thank-you heading and the tab title changes.
+    const thanks = await screen.findByRole("heading", { name: "Thank you" });
+    await waitFor(() => expect(document.activeElement).toBe(thanks));
+    expect(document.title).toBe("Thank you – Fall feedback");
     expect(calls.map((c) => [c.init?.method ?? "GET", c.url])).toEqual([
       ["GET", "/api/v1/public/surveys/abc123def456"],
       ["POST", "/api/v1/public/surveys/abc123def456/responses"],

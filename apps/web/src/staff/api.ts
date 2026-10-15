@@ -60,6 +60,14 @@ export type Survey = SurveySummary & {
   etag: string;
   latest: VersionSummary | null;
 };
+/** One line of the JSONL export. `answers` is respondent input: render it as plain text only. */
+export type ResponseRow = {
+  responseId: string;
+  seq: number;
+  surveyVersion: number;
+  submittedAt: string;
+  answers: Record<string, unknown>;
+};
 export type PublishOptions = {
   privacyStatement?: string;
   opensAt?: string | null;
@@ -124,6 +132,34 @@ async function call<T>(
   }
   return { data: json as T, etag: res.headers.get("etag") };
 }
+/** Reads the first `limit` lines of the JSONL export after `since` (exclusive seq), then cancels
+ * the stream. ponytail: reuses the export endpoint as the list API; a paged endpoint can replace
+ * it if surveys get large enough that the server-side batch (500 rows) matters. */
+async function readLines<T>(path: string, limit: number): Promise<T[]> {
+  const res = await fetch(`/api/v1${path}`, { credentials: "same-origin" }).catch(() => {
+    throw new ApiError(0, "Could not reach the server. Check your connection and try again.");
+  });
+  if (!res.ok) {
+    const j = (await res.json().catch(() => undefined)) as { error?: string } | undefined;
+    throw new ApiError(res.status, j?.error ?? `Request failed (${res.status})`);
+  }
+  const out: T[] = [];
+  if (!res.body) return out;
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    buf += dec.decode(value, { stream: !done });
+    const lines = buf.split("\n");
+    buf = lines.pop() ?? "";
+    for (const l of lines) if (l && out.length < limit) out.push(JSON.parse(l) as T);
+    if (done || out.length >= limit) break;
+  }
+  await reader.cancel().catch(() => undefined);
+  return out;
+}
+
 const get = async <T>(path: string) => (await call<T>("GET", path)).data;
 const enc = encodeURIComponent;
 const survey = (eventId: string, slug: string) => `/events/${enc(eventId)}/surveys/${enc(slug)}`;
@@ -202,6 +238,15 @@ export const api = {
       "DELETE",
       `${survey(eventId, slug)}/responses${before ? `?before=${enc(before)}` : ""}`,
     ).then((r) => r.data),
+  /** Download link for the export (session cookie, no token needed). */
+  exportUrl: (eventId: string, slug: string, format: "csv" | "jsonl") =>
+    `/api/v1${survey(eventId, slug)}/responses?format=${format}`,
+  /** Up to `limit` responses after the `since` seq, oldest first. */
+  responses: (eventId: string, slug: string, limit: number, since?: number) =>
+    readLines<ResponseRow>(
+      `${survey(eventId, slug)}/responses?format=jsonl${since === undefined ? "" : `&since=${since}`}`,
+      limit,
+    ),
   deleteResponse: (eventId: string, slug: string, id: string) =>
     call<void>("DELETE", `${survey(eventId, slug)}/responses/${enc(id)}`),
 };

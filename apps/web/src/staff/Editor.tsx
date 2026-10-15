@@ -22,7 +22,7 @@ import { ShareLink } from "../ShareLink";
 import { SurveyForm } from "../SurveyForm";
 import { ApiError, api, type Survey, type Version, type VersionSummary } from "./api";
 import { CodeEditor, type CodeEditorHandle } from "./CodeEditor";
-import { useLeaveGuard } from "./router";
+import { useLeaveGuard, usePageTitle } from "./router";
 import { ErrorNote } from "./StaffApp";
 
 const COMPILE_DELAY_MS = 300;
@@ -158,6 +158,8 @@ export function Editor({
       setDialog(undefined);
       setStatus(s.closed ? "Survey closed for responses." : "Survey reopened.");
     });
+
+  usePageTitle(survey && `Edit: ${good?.title ?? slug}`);
 
   if (loadError) return <ErrorNote error={loadError} />;
   if (!survey) return <p aria-busy="true">Loading…</p>;

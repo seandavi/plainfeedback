@@ -345,10 +345,10 @@ export function Tokens({ me, group, g }: { me: Me; group: Group; g: string }) {
   );
 }
 
-type Pending = { slug: string; id: string; before: string };
+type Pending = { slug: string; before: string };
 
-/** Owner only (#36): delete one response by its id from the export, or all of a survey's
- * responses, optionally only those submitted before a date. Always confirms first. */
+/** Owner only (#36): delete all of a survey's responses, optionally only those submitted before a
+ * date. Always confirms first. Single responses are deleted on the responses page (#50). */
 export function DeleteResponses({
   eventId,
   surveys,
@@ -366,18 +366,13 @@ export function DeleteResponses({
     const f = new FormData(ev.currentTarget);
     const v = (k: string) => String(f.get(k) ?? "").trim();
     setNote(undefined);
-    setPending({ slug: v("survey"), id: v("id"), before: v("before") });
+    setPending({ slug: v("survey"), before: v("before") });
   };
   const confirm = (p: Pending) =>
     run(async () => {
-      if (p.id) {
-        await api.deleteResponse(eventId, p.slug, p.id);
-        setNote("Deleted 1 response.");
-      } else {
-        const before = p.before ? new Date(p.before).toISOString() : undefined;
-        const r = await api.deleteResponses(eventId, p.slug, before);
-        setNote(`Deleted ${r.deleted} responses.`);
-      }
+      const before = p.before ? new Date(p.before).toISOString() : undefined;
+      const r = await api.deleteResponses(eventId, p.slug, before);
+      setNote(`Deleted ${r.deleted} responses.`);
     });
   if (!surveys.length) return null;
   return (
@@ -392,10 +387,7 @@ export function DeleteResponses({
             ))}
           </select>
         </label>
-        <label>
-          Response id <input name="id" pattern="[0-9a-fA-F\-]{36}" />
-          <span className="meta">From the export. Leave empty to delete many.</span>
-        </label>
+        <p className="meta">To delete a single response, open the survey's responses page.</p>
         <label>
           Submitted before <input name="before" type="date" />
           <span className="meta">UTC. Leave empty to delete all.</span>
@@ -407,11 +399,9 @@ export function DeleteResponses({
       {pending && (
         <Dialog title="Delete responses" onClose={() => setPending(undefined)}>
           <p>
-            {pending.id
-              ? `Permanently delete response ${pending.id} from ${pending.slug}?`
-              : pending.before
-                ? `Permanently delete all responses to ${pending.slug} submitted before ${pending.before}?`
-                : `Permanently delete all responses to ${pending.slug}?`}{" "}
+            {pending.before
+              ? `Permanently delete all responses to ${pending.slug} submitted before ${pending.before}?`
+              : `Permanently delete all responses to ${pending.slug}?`}{" "}
             This cannot be undone. Backups keep a copy until they expire.
           </p>
           <div className="actions">

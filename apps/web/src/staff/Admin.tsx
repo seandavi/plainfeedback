@@ -2,10 +2,11 @@
 import { type FormEvent, useState } from "react";
 import { ApiError, api, type Group, type Me } from "./api";
 import { ConfirmButton, useAction, when } from "./Manage";
-import { Link } from "./router";
+import { Link, usePageTitle } from "./router";
 import { ErrorNote, paths, useLoad } from "./StaffApp";
 
 export function AdminPage({ me }: { me: Me }) {
+  usePageTitle("Administration");
   if (!me.isAdmin) return <p role="alert">Only admins can open this page.</p>;
   return (
     <>

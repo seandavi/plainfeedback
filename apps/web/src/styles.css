@@ -254,7 +254,8 @@ a.button {
   cursor: pointer;
 }
 a.button {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   box-sizing: border-box;
   text-decoration: none;
   background: var(--accent);
@@ -494,4 +495,44 @@ dialog::backdrop {
 }
 .who a {
   white-space: nowrap;
+}
+
+/* Skip link (#68): hidden until focused. */
+.skip {
+  position: absolute;
+  left: -10000px;
+}
+.skip:focus {
+  position: static;
+  display: inline-block;
+  margin: 0.5rem 1rem;
+}
+main:focus,
+h1[tabindex="-1"]:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Responses page (#50). */
+.warning {
+  border-left: 4px solid var(--error);
+  padding: 0.25rem 0.75rem;
+}
+.answers {
+  margin: 0;
+  min-width: 12rem;
+}
+.answers div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.5rem;
+}
+.answers dt {
+  font-weight: 600;
+}
+.answers dt::after {
+  content: ":";
+}
+.answers dd {
+  margin: 0;
+  white-space: pre-wrap;
 }
