@@ -11,7 +11,7 @@ Live preview: <https://plainfeedback.cancerdatasci.org> (a preview instance; dat
 - **Roles and groups.** A global admin; per-group owner, creator and viewer. Anything outside your groups is 404. Events belong to groups, surveys to events.
 - **Markdown editor.** Split-pane editor with live preview and an insert menu for question blocks; errors carry line numbers. Question types: choice, multi, Likert grid, text, number ([grammar](docs/grammar.md)).
 - **Publish versions.** Publishing freezes the draft as an immutable version, and it refuses edits that would change what an existing export column means.
-- **Share.** Public link and QR code (SVG or PNG) per survey; close and reopen at any time, optional open/close dates (set when publishing, via the API).
+- **Share.** Public link and QR code (SVG or PNG) per survey; close and reopen at any time, optional open/close dates set in the publish dialog (or via the API).
 - **Waves.** Tag surveys `pre`, `post`, `followup` or `other`, and give events start and end dates.
 - **Participant page.** Keyboard and screen-reader friendly, no cookies, no IP or user-agent logging, a privacy statement per survey, in-memory rate limits.
 - **Responses page.** Counts and per-row delete in the staff UI, with a warning that free text can identify people.
