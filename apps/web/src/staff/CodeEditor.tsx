@@ -88,8 +88,16 @@ const theme = EditorView.theme({
   ".cm-gutters": { backgroundColor: "var(--panel)", color: "var(--muted)", border: "none" },
   ".cm-activeLine, .cm-activeLineGutter": { backgroundColor: "var(--panel)" },
   "&.cm-focused": { outline: "3px solid var(--accent)" },
-  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
-    backgroundColor: "var(--selection)",
+  // drawSelection() paints its own caret and selection, so caretColor alone leaves the base
+  // theme's black caret and light selection in dark mode. The focused selector must match the base
+  // theme's specificity to win.
+  ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--fg)" },
+  "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground":
+    { backgroundColor: "var(--selection)" },
+  ".cm-tooltip": {
+    color: "var(--fg)",
+    backgroundColor: "var(--panel)",
+    border: "1px solid var(--line)",
   },
 });
 
