@@ -3,7 +3,7 @@
 The reference is generated, not hand-written:
 
 - Spec: `GET /openapi.json` (OpenAPI 3.1; committed snapshot at `docs/openapi.json`, regenerate with `just openapi`).
-- Browsable docs: `/api/docs` (Swagger UI, all assets served by the app itself; no CDN or third-party requests).
+- Browsable docs: `/api/docs` (Scalar, all assets served by the app itself; no CDN or third-party requests).
 
 ## Authentication
 

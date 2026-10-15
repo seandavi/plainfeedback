@@ -28,6 +28,8 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Headless Chromium for docs-browser.test.ts (API docs make no third-party requests).
+      - run: pnpm -C apps/server exec playwright-core install --with-deps chromium-headless-shell
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test

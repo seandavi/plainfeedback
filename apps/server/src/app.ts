@@ -27,7 +27,7 @@ export const participantGuard: MiddlewareHandler = async (c, next) => {
   if (!isParticipantPath(c.req.path)) {
     // Staff SPA, API docs and JSON: a second layer if respondent text ever reaches the DOM as HTML.
     // style-src 'unsafe-inline' (styles only, never scripts) because CodeMirror injects <style>
-    // tags and Swagger UI uses style attributes; neither supports nonces for these.
+    // tags and Scalar (API docs) injects a <style> tag and style attributes; no nonces for these.
     c.res.headers.set("Content-Security-Policy", STAFF_CSP);
     return;
   }

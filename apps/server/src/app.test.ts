@@ -108,7 +108,7 @@ test("every response forbids framing; staff and docs get a strict script-src (#3
     expect(csp, path).not.toMatch(/script-src[^;]*unsafe/);
     expect(csp, path).not.toContain("unsafe-eval");
   }
-  // style-src 'unsafe-inline' is staff-only (CodeMirror, Swagger UI); participants get none.
+  // style-src 'unsafe-inline' is staff-only (CodeMirror, Scalar API docs); participants get none.
   const staff = (await app.request("/api/docs")).headers.get("content-security-policy");
   expect(staff).toContain("style-src 'self' 'unsafe-inline'");
   const pub = (await app.request("/s/abc")).headers.get("content-security-policy");
