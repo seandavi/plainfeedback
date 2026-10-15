@@ -138,7 +138,7 @@ GET    /groups/{g}/tokens                       session only: owners see all of 
 DELETE /groups/{g}/tokens/{id}                  session only: owners revoke any, others their own
 GET    /me/tokens                               your tokens
 GET    /me                                      current user
-GET    /openapi.json, /api/docs                 generated spec and Swagger UI
+GET    /openapi.json, /api/docs                 generated spec and Scalar API reference
 
 GET    /s/{publicId}                            participant page (no cookies)
 GET    /api/v1/public/surveys/{publicId}        latest published version: model, privacy statement, status
