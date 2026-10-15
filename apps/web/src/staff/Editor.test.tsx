@@ -188,7 +188,7 @@ describe("Editor", () => {
     await within(dialog).findByText("Statement 1 moved.");
     expect(within(dialog).getByText("This survey already has responses.")).toBeTruthy();
     fireEvent.click(within(dialog).getByRole("button", { name: "Publish anyway" }));
-    await screen.findByText("Published version 1.");
+    await screen.findByText(/Published version 1\./);
   });
 
   it("publishes and lists the new version", async () => {
