@@ -26,7 +26,7 @@ import { useLeaveGuard, usePageTitle } from "./router";
 import { ErrorNote } from "./StaffApp";
 
 const COMPILE_DELAY_MS = 300;
-export const GRAMMAR_URL = "/app/guide"; // docs/grammar.md, served in the app (#78)
+export const GRAMMAR_URL = "https://seandavi.github.io/plainfeedback/grammar.html"; // docs/grammar.md on the docs site
 
 // Examples from docs/grammar.md; ID is replaced with an id not yet used in the survey.
 export const SNIPPETS = {

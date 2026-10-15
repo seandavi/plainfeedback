@@ -1,0 +1,40 @@
+---
+title: "plainfeedback"
+---
+
+plainfeedback is open-source, self-hostable software for event-feedback surveys. You write a
+survey as a plain markdown file; the app turns it into an accessible participant page, a
+shareable link and QR code, and exports (CSV and JSONL) with a codebook per version. It is
+designed to avoid collecting participant identifiers: no cookies, no IP or user-agent logging,
+and a privacy statement on every survey.
+
+It was built for the NIH Common Fund Data Ecosystem (CFDE) metrics effort, and suits any
+consortium or group that runs recurring events and wants to move off one-off Google Forms and
+Qualtrics.
+
+::: {.callout-tip}
+## Try it
+
+A preview instance runs at **<https://plainfeedback.cancerdatasci.org>** (data may be wiped).
+:::
+
+## Who it is for
+
+| You are | Start with |
+|---|---|
+| A survey author writing questions | [Writing a survey in markdown](grammar.md), then the [privacy statement template](privacy-statement-template.md) |
+| Someone deploying it for a group | [Deploying plainfeedback](deploy.md) and [staff sign-in](deploy-auth.md); read the [threat model](threat-model.md) before collecting real responses |
+| Automating surveys or exports | The [API guide](api.md), the [live API reference](https://plainfeedback.cancerdatasci.org/api/docs) and the [OpenAPI spec](openapi.json) |
+| Reviewing how and why it was built | The [design](design.md), the [decision records](adr/0001-record-decisions.md) and the [phase-1 review](reviews/2026-10-14-phase-1.md) |
+
+"Designed to avoid identifiers" is not a guarantee of anonymity: free text can identify
+people, small groups can be re-identified, and proxies and CDNs can log IPs outside the app.
+The [threat model](threat-model.md) says what is and is not protected.
+
+## Quick links
+
+- Source code and issues: [github.com/seandavi/plainfeedback](https://github.com/seandavi/plainfeedback)
+- Live preview: <https://plainfeedback.cancerdatasci.org>
+- Live API reference: <https://plainfeedback.cancerdatasci.org/api/docs>
+- OpenAPI snapshot: [openapi.json](openapi.json)
+- For agents: [llms.txt](llms.txt) and [llms-full.txt](llms-full.txt)

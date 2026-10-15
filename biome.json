@@ -1,5 +1,15 @@
 {
-  "files": { "includes": ["**", "!**/dist", "!**/node_modules", "!.claude", "!docs/openapi.json"] },
+  "files": {
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/node_modules",
+      "!.claude",
+      "!docs/openapi.json",
+      "!docs/_site",
+      "!docs/.quarto"
+    ]
+  },
   "formatter": { "indentStyle": "space", "lineWidth": 100 },
   "linter": { "enabled": true }
 }

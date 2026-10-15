@@ -1,0 +1,58 @@
+# Docs site (Quarto project in docs/) -> https://seandavi.github.io/plainfeedback/
+# Pull requests render and check links only; pushes to main also deploy to GitHub Pages.
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths: ["docs/**", ".github/workflows/docs.yml"]
+  pull_request:
+    paths: ["docs/**", ".github/workflows/docs.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: quarto-dev/quarto-actions/setup@v2
+
+      # quarto render exits 0 on unresolved links, so fail on any WARN it prints.
+      - name: render
+        run: |
+          set -o pipefail
+          quarto render 2>&1 | tee render.log
+          ! grep -n WARN render.log
+
+      # Quarto never checks #anchors; pandoc's heading ids differ from GitHub's.
+      - name: check links
+        run: python3 check-links.py _site
+
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/_site
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

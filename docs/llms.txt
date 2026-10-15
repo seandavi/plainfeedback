@@ -1,0 +1,44 @@
+# plainfeedback
+
+> Open-source, self-hostable event-feedback surveys. Surveys are written in markdown, compiled to a JSON model, published as immutable versions and answered on an anonymous participant page; exports are CSV and JSONL with a codebook per version. Designed to avoid collecting participant identifiers (no cookies, no IP or user-agent logging), which is not a guarantee of anonymity. Built for the NIH Common Fund Data Ecosystem (CFDE) metrics effort. Source: https://github.com/seandavi/plainfeedback. Preview instance: https://plainfeedback.cancerdatasci.org (data may be wiped).
+
+Each link below is the page's Markdown version; the HTML page is the same path with `.html`. Everything in one file: [llms-full.txt](https://seandavi.github.io/plainfeedback/llms-full.txt). Machine-readable API: [openapi.json](https://seandavi.github.io/plainfeedback/openapi.json) (snapshot; any instance serves its own at `/openapi.json`).
+
+## Common questions
+
+- How do I write a survey, and which question types exist? → [Writing a survey in markdown](https://seandavi.github.io/plainfeedback/grammar.llms.md)
+- What should a survey's privacy statement say? → [Privacy statement template](https://seandavi.github.io/plainfeedback/privacy-statement-template.llms.md)
+- How do I deploy it (proxy, logging, database roles, backups, retention)? → [Deploying plainfeedback](https://seandavi.github.io/plainfeedback/deploy.llms.md)
+- How do staff sign in, and how is the first admin created? → [Staff sign-in (OIDC)](https://seandavi.github.io/plainfeedback/deploy-auth.llms.md)
+- How do I automate surveys and exports with the API and tokens? → [API guide](https://seandavi.github.io/plainfeedback/api.llms.md)
+- What is and is not protected? → [Threat model](https://seandavi.github.io/plainfeedback/threat-model.llms.md)
+
+## Pages
+
+- [Overview](https://seandavi.github.io/plainfeedback/index.llms.md): what plainfeedback is, who it is for, quick links.
+- [Writing a survey in markdown](https://seandavi.github.io/plainfeedback/grammar.llms.md): the survey grammar: title, intro, question blocks (choice, multi, Likert grid, text, number), ids and options.
+- [Privacy statement template](https://seandavi.github.io/plainfeedback/privacy-statement-template.llms.md): a plain-language statement for survey authors to adapt.
+- [Deploying plainfeedback](https://seandavi.github.io/plainfeedback/deploy.llms.md): first run, reverse proxy configs, Cloudflare, client address and rate limits, database roles, backups, retention and deletion.
+- [Staff sign-in (OIDC)](https://seandavi.github.io/plainfeedback/deploy-auth.llms.md): Google OAuth client, redirect URI, secrets, admin bootstrap.
+- [API guide](https://seandavi.github.io/plainfeedback/api.llms.md): authentication, API tokens, curl examples for surveys, publishing, links, exports and deletion, participant endpoints.
+- [Design](https://seandavi.github.io/plainfeedback/design.llms.md): goals, decisions, phases, data model, API overview.
+- [Threat model](https://seandavi.github.io/plainfeedback/threat-model.llms.md): assets, adversaries, mitigations with file paths, residual risks.
+- [Phase-1 review, 2026-10-14](https://seandavi.github.io/plainfeedback/reviews/2026-10-14-phase-1.llms.md): independent review of the phase-1 code and the deployment checklist.
+
+## Decisions (ADRs)
+
+- [0001](https://seandavi.github.io/plainfeedback/adr/0001-record-decisions.llms.md): record decisions as ADRs.
+- [0002](https://seandavi.github.io/plainfeedback/adr/0002-build-thin-app.llms.md): build a thin app instead of adopting a platform.
+- [0003](https://seandavi.github.io/plainfeedback/adr/0003-markdown-source-json-model.llms.md): markdown is the source; a JSON model is derived.
+- [0004](https://seandavi.github.io/plainfeedback/adr/0004-anonymous-link-only-v1.llms.md): v1 uses a shared anonymous link; no participant tokens.
+- [0005](https://seandavi.github.io/plainfeedback/adr/0005-pluggable-oidc.llms.md): pluggable OIDC for staff authentication.
+- [0006](https://seandavi.github.io/plainfeedback/adr/0006-docker-compose.llms.md): Docker Compose for deployment.
+- [0007](https://seandavi.github.io/plainfeedback/adr/0007-typescript-everywhere.llms.md): TypeScript across server, shared core and web.
+- [0008](https://seandavi.github.io/plainfeedback/adr/0008-hand-written-survey-parser.llms.md): hand-written line parser for the survey grammar.
+- [0009](https://seandavi.github.io/plainfeedback/adr/0009-group-rbac-404.llms.md): group role-based access: one check, 404 outside your groups.
+- [0010](https://seandavi.github.io/plainfeedback/adr/0010-api-tokens.llms.md): per-user API tokens scoped to one group.
+- [0011](https://seandavi.github.io/plainfeedback/adr/0011-participant-page.llms.md): participant page: random public id and a hand-rolled markdown renderer.
+- [0012](https://seandavi.github.io/plainfeedback/adr/0012-deletion-and-coarse-time.llms.md): hard deletion through cascades; submission time to the hour.
+- [0013](https://seandavi.github.io/plainfeedback/adr/0013-transient-client-rate-limit.llms.md): per-client submission limit on a transient, keyed hash of the IP. Amended by 0014.
+- [0014](https://seandavi.github.io/plainfeedback/adr/0014-single-use-tickets-and-crowd-sized-limit.llms.md): single-use submission tickets and a crowd-sized per-client limit.
+- [0015](https://seandavi.github.io/plainfeedback/adr/0015-export-column-stability.llms.md): export columns keep their meaning across versions, checked at publish.

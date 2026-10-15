@@ -3,3 +3,5 @@
 .git
 .claude
 .env
+docs/_site
+docs/.quarto
