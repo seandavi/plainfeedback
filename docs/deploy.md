@@ -185,7 +185,7 @@ If the hostname is proxied through Cloudflare (orange cloud), Cloudflare termina
 The app does not connect as the table owner ([#76](https://github.com/seandavi/plainfeedback/issues/76)):
 
 - `plainfeedback` (owner, `POSTGRES_PASSWORD`) owns the schema. `just migrate` and `pg_dump` use it, with `DATABASE_URL` in the deploying shell or `.env`.
-- `plainfeedback_app` (`APP_DB_PASSWORD`) may only read and write rows: no `ALTER`, `DROP`, `TRUNCATE` or `TRIGGER`. So it cannot disable the trigger that keeps published survey versions immutable. `compose.yaml` gives the app this role in its `DATABASE_URL`.
+- `plainfeedback_app` (`APP_DB_PASSWORD`) may only read and write rows: no `ALTER`, `DROP`, `TRUNCATE` or `TRIGGER`, and no `UPDATE` on `responses` or `survey_versions` (append-only; deletion is `DELETE`). So it cannot disable the trigger that keeps published survey versions immutable. `compose.yaml` gives the app this role in its `DATABASE_URL`.
 
 On a new database volume, the postgres container creates the role on first start from `db/` (`10-app-role.sh`, then `20-app-grants.sql`; the default privileges there cover tables that later migrations add). The files must be readable by the container's `postgres` user, which they are with a normal umask.
 
@@ -199,7 +199,7 @@ docker compose exec -T db psql -U plainfeedback -d plainfeedback -v ON_ERROR_STO
 just up                          # the app now connects as plainfeedback_app
 ```
 
-Both steps are safe to repeat; rerunning the first one sets a new password after a rotation. If you ever create tables as a role other than `plainfeedback`, rerun the grants as that role.
+The second step also revokes `UPDATE` on `responses` and `survey_versions` from the app role ([#100](https://github.com/seandavi/plainfeedback/issues/100)), so deployments that ran it before must rerun it. Both steps are safe to repeat; rerunning the first one sets a new password after a rotation. If you ever create tables as a role other than `plainfeedback`, rerun the grants as that role.
 
 ### Logging
 
