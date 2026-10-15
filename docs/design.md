@@ -19,26 +19,29 @@ De-identified event-feedback surveys for the Common Fund Data Ecosystem (CFDE) m
 | Authoring | Markdown is the source of truth. It compiles to a JSON survey model; the JSON is what is stored, rendered, validated and exported. |
 | Renderer | Small custom React renderer in the web app, driven by the compiled JSON model. SurveyJS is not used. |
 | Auth | Pluggable OIDC. Google is the default for development; the client id and secret are in GCP Secret Manager (`cdsci-infra`: `cancerdatasci-oauth-client-id`, `cancerdatasci-oauth-client-secret`). |
-| Participants | v1: shared anonymous link and QR code, no tokens, no email ([ADR 0004](adr/0004-anonymous-link-only-v1.md)). |
-| Deployment | Docker Compose ([ADR 0006](adr/0006-docker-compose.md)). |
-| Chat layer | Edits the markdown, never the JSON. Phase 2. |
-| Conditionals, pages | Phase 3. The JSON model has the slots from phase 1. |
+| Participants | v1: shared anonymous link and QR code, no tokens, no email ([ADR 0004](adr/0004-anonymous-link-only-v1.md)). Built: `/s/{publicId}` page, one single-use ticket per response and in-memory rate limits ([ADR 0011](adr/0011-participant-page.md), [0013](adr/0013-transient-client-rate-limit.md), [0014](adr/0014-single-use-tickets-and-crowd-sized-limit.md)). |
+| Permissions | Group roles owner, creator, viewer plus a global admin; anything outside your groups is 404 ([ADR 0009](adr/0009-group-rbac-404.md)). Per-user API tokens scoped to one group, never above the owner's rights ([ADR 0010](adr/0010-api-tokens.md)). |
+| Time and deletion | Submission time is stored to the hour. Deletion is real and cascades; nothing deletes on a schedule ([ADR 0012](adr/0012-deletion-and-coarse-time.md)). |
+| Export | JSONL (lossless) and wide CSV, streamed, for a survey, an event, a group (and the whole deployment for admins). Every row names its event, survey and wave, and publishing refuses changes that would change what an existing column means ([ADR 0015](adr/0015-export-column-stability.md)). Parquet is deferred. |
+| Deployment | Docker Compose ([ADR 0006](adr/0006-docker-compose.md)). The app image holds production dependencies only; it connects to Postgres as a role without `ALTER`, `TRUNCATE` or `UPDATE` on responses and versions ([deploy guide](deploy.md#database-roles)). |
+| Chat layer | Edits the markdown, never the JSON. Phase 2, not started. |
+| Conditionals, pages | Phase 3, not started. The JSON model has the slots from phase 1 (`pages[]`, reserved `visibleIf`). |
 
 ## Phases
 
-1. **Core**: groups and roles, API, markdown to JSON, single-page renderer, web markdown editor with live preview, publish with shareable link and QR code, export.
-2. **Chat**: markdown-editing assistant with live preview, blank-page start with suggested prompts, intake from pasted text or uploaded documents.
-3. **Conditionals and multiple pages**: grammar and renderer extensions; update the chat's grammar spec and examples.
+1. **Core** (built; the [phase-1 review](reviews/2026-10-14-phase-1.md) lists what remains): groups and roles, API and API tokens, markdown to JSON, single-page renderer, web markdown editor with live preview, publish with shareable link and QR code, response viewer, export, deletion, staff UI for groups, events and surveys.
+2. **Chat** (not started, [#13](https://github.com/seandavi/plainfeedback/issues/13)): markdown-editing assistant with live preview, blank-page start with suggested prompts, intake from pasted text or uploaded documents.
+3. **Conditionals and multiple pages** (not started, [#14](https://github.com/seandavi/plainfeedback/issues/14)): grammar and renderer extensions; update the chat's grammar spec and examples.
 
 ## Data model
 
-- `users` (`is_admin`), `groups`, `memberships(group, user, role: owner|creator|viewer)`
+- `users` (`is_admin`, `disabled_at`), `sessions` (hash of the cookie only), `groups` (`archived_at`), `memberships(group, user, role: owner|creator|viewer)`
 - `events` (belongs to a group, slug unique per group, title, description, optional `starts_on` / `ends_on` calendar dates, CHECK end >= start)
-- `surveys` (belongs to an event; slug; nullable wave label, CHECK in `pre|post|followup|other`, with a partial unique index so an event has at most one pre, one post and one followup (`other` may repeat; null = not a wave, e.g. speaker feedback); current draft markdown and ETag; `closed_at`)
-- `survey_versions` (immutable; markdown, compiled JSON model, privacy statement, open/close dates)
-- `tokens` (deferred; event, hash of the code only)
-- `responses` (survey_version, optional token hash, answers JSONB, submitted_at to the hour, seq for export order)
-- `api_tokens` (user, group, role, hash, expiry)
+- `surveys` (belongs to an event; slug; random `public_id` for the participant link; nullable wave label, CHECK in `pre|post|followup|other`, with a partial unique index so an event has at most one pre, one post and one followup (`other` may repeat; null = not a wave, e.g. speaker feedback); current draft markdown and ETag; `closed_at`)
+- `survey_versions` (immutable; markdown, compiled JSON model, privacy statement, open/close dates; a trigger rejects UPDATE, TRUNCATE and ad-hoc DELETE)
+- `responses` (survey_version, answers JSONB, `submitted_at` to the hour (CHECK), `seq` global identity for export order; no identifier column)
+- `api_tokens` (user, group, role, hash, expiry, `revoked_at`, `last_used_at`)
+- participant tokens for within-person linking are deferred and have no table
 
 ## Survey JSON model
 
@@ -120,9 +123,20 @@ GET    /events/{e}/surveys/{s}/versions         viewer
 GET    /events/{e}/surveys/{s}/versions/{n}     viewer
 GET    /events/{e}/surveys/{s}/link             viewer: public URL + published flag
 GET    /events/{e}/surveys/{s}/link/qr.svg|png  viewer: QR code of that URL (png: ?size=)
-GET    /events/{e}/surveys/{s}/responses?format=jsonl|csv&since=<seq|ISO>   viewer
+GET    /events/{e}/surveys/{s}/responses?format=jsonl|csv&since=<seq|ISO>&version=   viewer
+GET    /events/{e}/responses                    viewer: every survey of the event (same query, no version)
+GET    /groups/{g}/responses                    viewer: every survey of the group
+GET    /responses                               admin, session only: the whole deployment, JSONL
+GET    /events/{e}/surveys/{s}/versions/{n}/codebook   viewer: questions and CSV columns of that version
 DELETE /events/{e}/surveys/{s}/responses?before=  owner: returns the count
 DELETE /events/{e}/surveys/{s}/responses/{id}     owner
+
+POST   /groups/{g}/tokens                       any member, session only: create an API token for yourself (secret shown once)
+GET    /groups/{g}/tokens                       session only: owners see all of the group's, others their own
+DELETE /groups/{g}/tokens/{id}                  session only: owners revoke any, others their own
+GET    /me/tokens                               your tokens
+GET    /me                                      current user
+GET    /openapi.json, /api/docs                 generated spec and Swagger UI
 
 GET    /s/{publicId}                            participant page (no cookies)
 GET    /api/v1/public/surveys/{publicId}        latest published version: model, privacy statement, status
@@ -160,9 +174,9 @@ OIDC (authorization code + PKCE, `openid-client`), configured by issuer, client 
 
 ## Security notes
 
-Permission tests (cross-group access, token handling, viewer rights) come first, then a threat model and a second review of auth before real data. The participant endpoint needs coarse rate limiting without IP logging.
+Permission tests (cross-group access, token handling, viewer rights) came first, then the threat model and an independent review of auth ([#33](https://github.com/seandavi/plainfeedback/issues/33), [review](reviews/2026-10-14-phase-1.md)). The participant endpoint has coarse rate limiting without IP logging (in memory, per process).
 
-Threat model and residual risks: [`threat-model.md`](threat-model.md). Privacy statement template for authors: [`privacy-statement-template.md`](privacy-statement-template.md). Reverse proxy, CDN, backups and retention: [`deploy.md`](deploy.md). The independent auth review is #33.
+Threat model and residual risks: [`threat-model.md`](threat-model.md). Privacy statement template for authors: [`privacy-statement-template.md`](privacy-statement-template.md). Reverse proxy, CDN, backups and retention: [`deploy.md`](deploy.md). The review's deployment checklist is in [the review](reviews/2026-10-14-phase-1.md#deployment-checklist).
 
 ## Open questions
 
