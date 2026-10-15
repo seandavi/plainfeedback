@@ -3955,6 +3955,120 @@
         }
       }
     },
+    "/api/v1/responses": {
+      "get": {
+        "tags": [
+          "responses"
+        ],
+        "summary": "Export every response in the deployment as JSONL, streamed (admin)",
+        "description": "Ordered by `seq`. `since` is a `seq` (exclusive; resume cursor) or an ISO time with offset (coarse filter: that whole hour and later). Any other `since` is 400. `seq` is assigned at insert, so a row can become visible after a higher one: resume with an overlap (`since` = last seq - 1000) and dedupe on `responseId`. Every row carries event, survey, wave and version fields. `submittedAt` is to the hour. CSV is for spreadsheets: text cells starting with = + - @ (also fullwidth, or after whitespace) get a leading single quote. JSONL is lossless; use it for analysis. If the stream fails midway the transfer is aborted, never ended cleanly. JSONL only. File name: `all-responses.jsonl`.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "jsonl"
+              ],
+              "default": "jsonl"
+            },
+            "required": false,
+            "name": "format",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{1,18}$"
+                },
+                {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              ],
+              "description": "The `seq` of the last row received (exclusive; resume cursor), or an ISO time with offset (coarse filter: rows submitted in that hour or later)"
+            },
+            "required": false,
+            "description": "The `seq` of the last row received (exclusive; resume cursor), or an ISO time with offset (coarse filter: rows submitted in that hour or later)",
+            "name": "since",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stream of responses (Content-Disposition attachment)",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in but not allowed (role too low, or admin only)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not visible to you",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict, e.g. removing the last owner or admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/events/{e}/surveys/{s}/responses/{id}": {
       "delete": {
         "tags": [

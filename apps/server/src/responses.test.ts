@@ -478,3 +478,24 @@ describe("event and group export (#62)", () => {
     expect(csv.split("\r\n")[0]?.split(",").at(-1)).toBe("submittedAt");
   });
 });
+
+describe("deployment-wide export (#62)", () => {
+  it("admin only (403 otherwise), JSONL only, rows of every group", async () => {
+    const a = await world();
+    const b = await world();
+    await a.add(a.v1, { age: 1 }, "2026-01-01T00:00:00Z");
+    await b.add(b.v2, { extra: "y" }, "2026-01-01T00:00:00Z");
+    const got = [];
+    for (const k of WHO) got.push((await call(a, "GET", "/responses", a.who[k])).status);
+    expect(got).toEqual([401, 403, 403, 403, 403, 200]);
+    expect((await call(a, "GET", "/responses?format=csv", a.who.admin)).status).toBe(400);
+    expect((await call(a, "GET", "/responses?since=junk", a.who.admin)).status).toBe(400);
+    const res = await call(a, "GET", "/responses", a.who.admin);
+    expect(res.headers.get("content-disposition")).toBe(
+      'attachment; filename="all-responses.jsonl"',
+    );
+    const ids = lines(await res.text()).map((r) => r.eventId);
+    expect(ids).toContain(a.event.id);
+    expect(ids).toContain(b.event.id);
+  });
+});

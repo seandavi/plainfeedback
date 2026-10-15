@@ -13,6 +13,7 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { columnsFor, type Question, type Survey } from "@plainfeedback/core";
 import { and, asc, eq, inArray, lt, type SQL, sql } from "drizzle-orm";
+import { requireAdmin } from "./auth";
 import {
   type AuthzEnv,
   notArchived,
@@ -22,7 +23,7 @@ import {
   UUID,
 } from "./authz";
 import { type Db, errorLine } from "./db";
-import { err, errors, json } from "./groups";
+import { err, errors, json, sessionCookieOnly } from "./groups";
 import { events, responses, surveys, surveyVersions, WAVE_LABELS } from "./schema";
 
 type Answers = Record<string, unknown>;
@@ -339,7 +340,7 @@ export const responseRoutes = (db: Db, log: (line: string) => void = () => {}) =
   );
 
   // #62: every event of a group, for cross-event reporting. Group-scoped API tokens can use it
-  // (tokens are never admins). A deployment-wide export is deferred (#98).
+  // (tokens are never admins; a cross-group token needs an ADR, #98).
   r.openapi(
     createRoute({
       method: "get",
@@ -358,6 +359,29 @@ export const responseRoutes = (db: Db, log: (line: string) => void = () => {}) =
       const { g } = c.req.valid("param");
       const { format, since } = c.req.valid("query");
       return exportOf(await versionsWhere(eq(events.groupId, g)), format, since, g);
+    },
+  );
+
+  // #62: the whole deployment, admin only (session; tokens are never admins). Admins already pass
+  // every group check, so this exposes nothing new. JSONL only: a CSV union over every survey
+  // ever published is not a useful spreadsheet.
+  r.openapi(
+    createRoute({
+      method: "get",
+      path: "/responses",
+      tags: ["responses"],
+      summary: "Export every response in the deployment as JSONL, streamed (admin)",
+      description: `${EXPORT_DESCRIPTION} JSONL only. File name: \`all-responses.jsonl\`.`,
+      middleware: [requireAdmin],
+      security: sessionCookieOnly,
+      request: {
+        query: z.object({ format: z.literal("jsonl").default("jsonl"), since: Query.shape.since }),
+      },
+      responses: streamed,
+    }),
+    async (c) => {
+      const { since } = c.req.valid("query");
+      return exportOf(await versionsWhere(undefined), "jsonl", since, "all");
     },
   );
 
