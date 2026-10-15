@@ -92,7 +92,8 @@ Please specify your CFDE affiliation.
 #### Multiple choice: `.multi`
 
 Same as `.choice`, but people may tick several options (or none, unless
-`required`). `other` works the same way.
+`required`). `other` works the same way. Options and the `other` label can't
+contain `;`, because the CSV export joins the ticked options with `;`.
 
 #### Rating grid: `.likert`
 
