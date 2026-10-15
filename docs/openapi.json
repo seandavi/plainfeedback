@@ -188,6 +188,26 @@
           "role"
         ]
       },
+      "Invite": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "role",
+          "createdAt"
+        ],
+        "description": "Pending: becomes a membership when someone signs in with this verified email"
+      },
       "User": {
         "type": "object",
         "properties": {
@@ -1305,7 +1325,7 @@
           "groups"
         ],
         "summary": "Add a member or change their role (owner)",
-        "description": "`user` is a user id or the email of a user who has already signed in. The last owner cannot be demoted.",
+        "description": "`user` is a user id or an email. An email nobody has signed in with yet creates or updates a pending invite (202): it becomes a membership at that person's first sign-in with a verified email. The last owner cannot be demoted.",
         "security": [
           {
             "sessionCookie": []
@@ -1332,10 +1352,10 @@
                   "format": "email"
                 }
               ],
-              "description": "User id, or email of an existing user"
+              "description": "User id, or an email (invited when no user has that email yet)"
             },
             "required": true,
-            "description": "User id, or email of an existing user",
+            "description": "User id, or an email (invited when no user has that email yet)",
             "name": "user",
             "in": "path"
           }
@@ -1366,6 +1386,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Member"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Invited: takes effect at the person's first sign-in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Invite"
                 }
               }
             }
@@ -1454,10 +1484,10 @@
                   "format": "email"
                 }
               ],
-              "description": "User id, or email of an existing user"
+              "description": "User id, or an email (invited when no user has that email yet)"
             },
             "required": true,
-            "description": "User id, or email of an existing user",
+            "description": "User id, or an email (invited when no user has that email yet)",
             "name": "user",
             "in": "path"
           }
@@ -1465,6 +1495,176 @@
         "responses": {
           "204": {
             "description": "Removed"
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in but not allowed (role too low, or admin only)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not visible to you",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict, e.g. removing the last owner or admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/{g}/invites": {
+      "get": {
+        "tags": [
+          "groups"
+        ],
+        "summary": "List pending invites (member)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "g",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Invite"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in but not allowed (role too low, or admin only)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or not visible to you",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict, e.g. removing the last owner or admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/{g}/invites/{email}": {
+      "delete": {
+        "tags": [
+          "groups"
+        ],
+        "summary": "Revoke a pending invite (owner)",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "g",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "email"
+            },
+            "required": true,
+            "name": "email",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Revoked"
           },
           "400": {
             "description": "Invalid request",

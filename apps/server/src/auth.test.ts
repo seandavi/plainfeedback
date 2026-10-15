@@ -3,7 +3,7 @@ import * as oidc from "openid-client";
 import { describe, expect, it } from "vitest";
 import { createApp } from "./app";
 import { type AuthOptions, hashSessionId, requireAdmin, requireUser } from "./auth";
-import { sessions, users } from "./schema";
+import { groups, memberships, pendingInvites, sessions, users } from "./schema";
 import { useTestDb } from "./testdb";
 
 // The real openid-client flow runs against a fake IdP: static metadata (no discovery) and a
@@ -183,6 +183,86 @@ describe("staff auth", () => {
       (await login(setup(claims(), { allowedDomains }))).status,
       "other issuers: email check only",
     ).toBe(302);
+  });
+
+  describe("pending invites (ADR 0016)", () => {
+    const seed = async (email: string) => {
+      const db = getDb();
+      const [inviter] = await db
+        .insert(users)
+        .values({ email: "owner@example.org", oidcIssuer: ISS, oidcSubject: crypto.randomUUID() })
+        .returning();
+      const [g1, g2] = await db
+        .insert(groups)
+        .values([{ name: "A" }, { name: "B" }])
+        .returning();
+      const ids = [g1?.id, g2?.id] as string[];
+      await db.insert(pendingInvites).values([
+        { groupId: ids[0] as string, email, role: "creator", createdBy: inviter?.id as string },
+        { groupId: ids[1] as string, email, role: "viewer", createdBy: inviter?.id as string },
+      ]);
+      return ids;
+    };
+    const as =
+      (email: string, verified: unknown = true) =>
+      (nonce: string) => ({
+        nonce,
+        email,
+        email_verified: verified,
+        sub: `sub-${email.toLowerCase()}`,
+      });
+    const rolesOf = async (email: string) =>
+      (
+        await getDb()
+          .select({ groupId: memberships.groupId, role: memberships.role })
+          .from(memberships)
+          .innerJoin(users, eq(users.id, memberships.userId))
+          .where(eq(users.email, email))
+      ).sort((a, b) => a.role.localeCompare(b.role));
+    const invitesFor = (email: string) =>
+      getDb().select().from(pendingInvites).where(eq(pendingInvites.email, email));
+
+    it("converts invites into memberships at sign-in, matching the email case-insensitively", async () => {
+      const [a, b] = await seed("carol@example.org");
+      expect((await login(setup(as("Carol@Example.ORG")))).status).toBe(302);
+      expect(await rolesOf("carol@example.org")).toEqual([
+        { groupId: a, role: "creator" },
+        { groupId: b, role: "viewer" },
+      ]);
+      expect(await invitesFor("carol@example.org")).toEqual([]);
+    });
+
+    it("does not convert for an unverified email", async () => {
+      await seed("dave@example.org");
+      for (const v of [false, "true", null]) {
+        expect((await login(setup(as("dave@example.org", v)))).status).toBe(403);
+      }
+      expect(await rolesOf("dave@example.org")).toEqual([]);
+      expect(await invitesFor("dave@example.org")).toHaveLength(2);
+    });
+
+    it("does not convert for a disabled user, and never changes an existing membership", async () => {
+      const claims = as("erin@example.org");
+      await sid(setup(claims));
+      const [a] = await seed("erin@example.org");
+      const [erin] = await getDb().select().from(users).where(eq(users.email, "erin@example.org"));
+      await getDb()
+        .insert(memberships)
+        .values({ groupId: a as string, userId: erin?.id as string, role: "owner" });
+      await getDb()
+        .update(users)
+        .set({ disabledAt: new Date() })
+        .where(eq(users.id, erin?.id as string));
+      expect((await login(setup(claims))).status).toBe(403);
+      expect(await invitesFor("erin@example.org")).toHaveLength(2);
+      await getDb()
+        .update(users)
+        .set({ disabledAt: null })
+        .where(eq(users.id, erin?.id as string));
+      expect((await login(setup(claims))).status).toBe(302);
+      expect((await rolesOf("erin@example.org")).map((m) => m.role)).toEqual(["owner", "viewer"]);
+      expect(await invitesFor("erin@example.org")).toEqual([]);
+    });
   });
 
   it("refuses disabled users (#38)", async () => {

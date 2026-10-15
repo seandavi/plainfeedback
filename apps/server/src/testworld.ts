@@ -2,7 +2,7 @@
 // flow is covered in auth.test.ts. Call useWorld() at the top level of a test file.
 import { createApp } from "./app";
 import { hashSessionId } from "./auth";
-import { groups, memberships, sessions, users } from "./schema";
+import { groups, memberships, pendingInvites, sessions, users } from "./schema";
 import { useTestDb } from "./testdb";
 
 export const ORIGIN = "https://pf.test";
@@ -80,7 +80,12 @@ export const useWorld = () => {
     await join(g.id, who.creator, "creator");
     await join(g.id, who.owner, "owner");
     await join(g.id, target, "viewer");
-    return { app: makeApp(), g, other, who, target };
+    // A pending invite in g (ADR 0016), so revoking it can succeed.
+    const invited = "invited@example.org";
+    await getDb()
+      .insert(pendingInvites)
+      .values({ groupId: g.id, email: invited, role: "viewer", createdBy: who.owner.id });
+    return { app: makeApp(), g, other, who, target, invited };
   };
 
   // JSON bodies are serialized; string bodies are sent as text/markdown.

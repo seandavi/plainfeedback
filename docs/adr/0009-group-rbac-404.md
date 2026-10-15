@@ -1,6 +1,6 @@
 # 0009. Group role-based access: one check, 404 outside your groups
 
-- Status: accepted
+- Status: accepted (invitations amended by [0016](0016-pending-invites.md))
 - Date: 2026-10-14
 
 ## Context

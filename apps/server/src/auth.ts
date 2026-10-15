@@ -5,7 +5,7 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import * as oidc from "openid-client";
 import type { Db } from "./db";
-import { apiTokens, memberships, sessions, users } from "./schema";
+import { apiTokens, memberships, pendingInvites, sessions, users } from "./schema";
 
 // `token` is set when the request authenticated with an API token (#11, ADR 0010): the user then
 // acts only in token.groupId, at most at token.role (capped by the current membership in authorize),
@@ -258,15 +258,34 @@ export const authRoutes = (opts: AuthOptions) => {
       .where(and(eq(users.oidcIssuer, claims.iss), eq(users.oidcSubject, claims.sub)));
     if (known?.disabledAt) return c.json({ error: "this account is disabled" }, 403);
     const admin = opts.adminEmails.includes(email); // bootstrap: promote only, never demote
-    const [user] = await db
-      .insert(users)
-      .values({ email, oidcIssuer: claims.iss, oidcSubject: claims.sub, isAdmin: admin })
-      .onConflictDoUpdate({
-        target: [users.oidcIssuer, users.oidcSubject],
-        set: admin ? { email, isAdmin: true } : { email },
-      })
-      .returning();
-    if ((user as User).disabledAt) return c.json({ error: "this account is disabled" }, 403);
+    const iss = claims.iss;
+    const sub = claims.sub;
+    const user = await db.transaction(async (tx) => {
+      const [u] = (await tx
+        .insert(users)
+        .values({ email, oidcIssuer: iss, oidcSubject: sub, isAdmin: admin })
+        .onConflictDoUpdate({
+          target: [users.oidcIssuer, users.oidcSubject],
+          set: admin ? { email, isAdmin: true } : { email },
+        })
+        .returning()) as [User];
+      if (u.disabledAt) return u;
+      // Pending invites (ADR 0016) go to the verified email checked above, and never change an
+      // existing membership. Every sign-in, not only the first: an invite made while this user was
+      // signing in for the first time is picked up at their next login.
+      const invites = await tx
+        .delete(pendingInvites)
+        .where(eq(pendingInvites.email, email))
+        .returning({ groupId: pendingInvites.groupId, role: pendingInvites.role });
+      if (invites.length) {
+        await tx
+          .insert(memberships)
+          .values(invites.map((i) => ({ ...i, userId: u.id })))
+          .onConflictDoNothing({ target: [memberships.groupId, memberships.userId] });
+      }
+      return u;
+    });
+    if (user.disabledAt) return c.json({ error: "this account is disabled" }, 403);
     // ponytail: expired sessions are purged at each login, not on a timer; enough at staff scale.
     await db.delete(sessions).where(lte(sessions.expiresAt, new Date()));
     const sid = b64u(crypto.getRandomValues(new Uint8Array(32)));

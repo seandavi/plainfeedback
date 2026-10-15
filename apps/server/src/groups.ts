@@ -15,7 +15,7 @@ import {
   UUID,
 } from "./authz";
 import type { Db } from "./db";
-import { apiTokens, groups, memberships, sessions, users } from "./schema";
+import { apiTokens, groups, memberships, pendingInvites, sessions, users } from "./schema";
 
 const ErrorSchema = z.object({ error: z.string() }).openapi("Error");
 export const err = (description: string) => ({
@@ -48,6 +48,11 @@ const Group = z
     description: "role is the caller's role; null for an admin who is not a member",
   });
 const Member = z.object({ userId: z.uuid(), email: z.string(), role: Role }).openapi("Member");
+const Invite = z
+  .object({ email: z.string(), role: Role, createdAt: z.string() })
+  .openapi("Invite", {
+    description: "Pending: becomes a membership when someone signs in with this verified email",
+  });
 const User = z
   .object({
     id: z.uuid(),
@@ -64,8 +69,11 @@ const GroupParams = z.object({ g: z.string().openapi({ param: { name: "g", in: "
 const MemberParams = GroupParams.extend({
   user: z.union([z.uuid(), z.email()]).openapi({
     param: { name: "user", in: "path" },
-    description: "User id, or email of an existing user",
+    description: "User id, or an email (invited when no user has that email yet)",
   }),
+});
+const InviteParams = GroupParams.extend({
+  email: z.email().openapi({ param: { name: "email", in: "path" } }),
 });
 
 type GroupRow = { id: string; name: string; archivedAt: Date | null };
@@ -224,8 +232,8 @@ export const groupRoutes = (db: Db) => {
     },
   );
 
-  // Users must already exist (they sign in once first); unknown ids or emails are 404.
-  // Invitations come later. Roles are owner|creator|viewer only: admin is never grantable here.
+  // Unknown ids are 404; an unknown email becomes a pending invite (ADR 0016), converted at that
+  // person's sign-in (auth.ts). Roles are owner|creator|viewer only: admin is never grantable here.
   r.openapi(
     createRoute({
       method: "put",
@@ -233,17 +241,40 @@ export const groupRoutes = (db: Db) => {
       tags: ["groups"],
       summary: "Add a member or change their role (owner)",
       description:
-        "`user` is a user id or the email of a user who has already signed in. The last owner cannot be demoted.",
+        "`user` is a user id or an email. An email nobody has signed in with yet creates or updates " +
+        "a pending invite (202): it becomes a membership at that person's first sign-in with a " +
+        "verified email. The last owner cannot be demoted.",
       middleware: [sessionOnly, owner],
       security: sessionCookieOnly,
       request: { params: MemberParams, body: body(z.strictObject({ role: Role })) },
-      responses: { 200: json(Member), ...errors },
+      responses: {
+        200: json(Member),
+        202: json(Invite, "Invited: takes effect at the person's first sign-in"),
+        ...errors,
+      },
     }),
     async (c) => {
       const { groupId } = c.get("access") as Access;
       const { role } = c.req.valid("json");
+      const ref = c.req.valid("param").user;
       return db.transaction(async (tx) => {
-        const u = await findUser(tx, c.req.valid("param").user);
+        const u = await findUser(tx, ref);
+        if (!u && ref.includes("@")) {
+          const [inv] = await tx
+            .insert(pendingInvites)
+            .values({
+              groupId,
+              email: ref.toLowerCase(),
+              role,
+              createdBy: (c.get("user") as UserRow).id,
+            })
+            .onConflictDoUpdate({
+              target: [pendingInvites.groupId, pendingInvites.email],
+              set: { role },
+            })
+            .returning();
+          return c.json(toInvite(inv as typeof pendingInvites.$inferSelect), 202);
+        }
         if (!u) throw notFound();
         if ("ambiguous" in u) throw fail(409, "email matches several users; use the id");
         if (role !== "owner" && (await isLastOwner(tx, groupId, u.id))) {
@@ -298,6 +329,52 @@ export const groupRoutes = (db: Db) => {
           );
         return c.body(null, 204);
       });
+    },
+  );
+
+  r.openapi(
+    createRoute({
+      method: "get",
+      path: "/groups/{g}/invites",
+      tags: ["groups"],
+      summary: "List pending invites (member)",
+      middleware: [member],
+      request: { params: GroupParams },
+      responses: { 200: json(z.array(Invite)), ...errors },
+    }),
+    async (c) => {
+      const rows = await db
+        .select()
+        .from(pendingInvites)
+        .where(eq(pendingInvites.groupId, (c.get("access") as Access).groupId))
+        .orderBy(asc(pendingInvites.email));
+      return c.json(rows.map(toInvite), 200);
+    },
+  );
+
+  r.openapi(
+    createRoute({
+      method: "delete",
+      path: "/groups/{g}/invites/{email}",
+      tags: ["groups"],
+      summary: "Revoke a pending invite (owner)",
+      middleware: [sessionOnly, owner],
+      security: sessionCookieOnly,
+      request: { params: InviteParams },
+      responses: { 204: { description: "Revoked" }, ...errors },
+    }),
+    async (c) => {
+      const gone = await db
+        .delete(pendingInvites)
+        .where(
+          and(
+            eq(pendingInvites.groupId, (c.get("access") as Access).groupId),
+            eq(pendingInvites.email, c.req.valid("param").email.toLowerCase()),
+          ),
+        )
+        .returning({ id: pendingInvites.id });
+      if (!gone.length) throw notFound();
+      return c.body(null, 204);
     },
   );
 
@@ -383,6 +460,12 @@ const toUser = (u: typeof users.$inferSelect) => ({
   isAdmin: u.isAdmin,
   disabled: u.disabledAt !== null,
   createdAt: u.createdAt.toISOString(),
+});
+
+const toInvite = (i: typeof pendingInvites.$inferSelect) => ({
+  email: i.email,
+  role: i.role,
+  createdAt: i.createdAt.toISOString(),
 });
 
 // Emails are stored lowercase (auth.ts). Email is not unique across issuers, hence `ambiguous`.

@@ -42,3 +42,4 @@ Each link below is the page's Markdown version; the HTML page is the same path w
 - [0013](https://seandavi.github.io/plainfeedback/adr/0013-transient-client-rate-limit.llms.md): per-client submission limit on a transient, keyed hash of the IP. Amended by 0014.
 - [0014](https://seandavi.github.io/plainfeedback/adr/0014-single-use-tickets-and-crowd-sized-limit.llms.md): single-use submission tickets and a crowd-sized per-client limit.
 - [0015](https://seandavi.github.io/plainfeedback/adr/0015-export-column-stability.llms.md): export columns keep their meaning across versions, checked at publish.
+- [0016](https://seandavi.github.io/plainfeedback/adr/0016-pending-invites.llms.md): owners can add members by email before first sign-in; invites convert on verified-email sign-in.
