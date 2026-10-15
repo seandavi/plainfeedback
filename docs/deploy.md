@@ -235,3 +235,13 @@ Deletion is real: there is no soft delete or undo, and the data stays in backups
 ## Before real data
 
 Work through the checklist at the end of [threat-model.md](threat-model.md#before-real-data). In particular, the independent review of auth and permission code ([#33](https://github.com/seandavi/plainfeedback/issues/33)) is still required.
+
+## onclappc02 (reference deployment)
+
+`plainfeedback.cancerdatasci.org` runs from a checkout of this repo on onclappc02 with
+`COMPOSE_FILE=compose.yaml:deploy/onclappc02/compose.override.yaml` in `.env`. The override joins
+the shared Traefik `proxy` network, uses Cloudflare's orange cloud (Traefik serves the CF Origin
+Cert), and sets `observability.accessLogs=false` on the router so Traefik's access log (shipped to
+ClickHouse with client IP and user agent) never records this app. Set `TRUST_PROXY=cf-connecting-ip`.
+DNS and the uptime check are OpenTofu in `monode/infrastructure/terraform/apps/plainfeedback/`.
+Cloudflare's edge still sees participant IPs; say so in the privacy statement.

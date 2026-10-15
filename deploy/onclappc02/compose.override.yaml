@@ -1,0 +1,21 @@
+# onclappc02 public deployment: plainfeedback.cancerdatasci.org behind Traefik + Cloudflare (orange
+# cloud, CF Origin Cert). Use with the root compose.yaml, e.g. in .env:
+#   COMPOSE_FILE=compose.yaml:deploy/onclappc02/compose.override.yaml
+# DNS and uptime check live in monode/infrastructure/terraform/apps/plainfeedback/.
+services:
+  app:
+    networks: [default, proxy]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.plainfeedback.rule=Host(`plainfeedback.cancerdatasci.org`)"
+      - "traefik.http.routers.plainfeedback.entrypoints=websecure"
+      - "traefik.http.routers.plainfeedback.tls=true"
+      # No certresolver: orange cloud uses Traefik's default *.cancerdatasci.org Origin Cert.
+      # Traefik's access log (shipped to ClickHouse with client IP and UA) must not record this
+      # app; the app logs method/path/status only (docs/deploy.md, docs/threat-model.md).
+      - "traefik.http.routers.plainfeedback.observability.accessLogs=false"
+      - "traefik.http.services.plainfeedback.loadbalancer.server.port=3000"
+networks:
+  proxy:
+    external: true
