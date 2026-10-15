@@ -191,6 +191,8 @@ describe("Editor", () => {
     await setup();
     fireEvent.click(screen.getByRole("button", { name: "Publish…" }));
     const dialog = await screen.findByRole("dialog");
+    // First publish pre-fills the placeholder template (#65); empty means the server default.
+    fireEvent.change(within(dialog).getByLabelText(/Privacy statement/), { target: { value: "" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Publish" }));
     await within(dialog).findByText("Statement 1 moved.");
     expect(within(dialog).getByText("This survey already has responses.")).toBeTruthy();
