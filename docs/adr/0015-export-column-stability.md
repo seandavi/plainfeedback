@@ -19,7 +19,11 @@ Option 3. `exportChanges(earlier, next)` in `packages/core` lists, in plain lang
 
 - a Likert statement at a position that exists in an earlier version has different text (reordered, inserted, removed in the middle, or reworded);
 - a reused question id has a different type;
-- an option of an earlier version is missing (removed or renamed).
+- an option of an earlier version is missing (removed or renamed);
+- the Other label of a reused choice/multi question changed: the label is the category written in the main column for Other answers, so renaming it splits that category like an option rename (#95; adding or removing Other stays free);
+- a column name of an earlier version is now produced by a different question (v1 has grid `#r`, so `r_1`; v2 has a question `#r_1`) (#95).
+
+Within one version the compiler refuses such collisions outright (an id equal to another question's `<id>_<n>` or `<id>_other`, or `seq`).
 
 Appending statements, adding options and adding or removing questions are free. Changes the latest version already has are not reported again, since they were accepted (forced) when it was published.
 
@@ -28,6 +32,6 @@ Appending statements, adding options and adding or removing questions are free. 
 ## Consequences
 
 - A typo fix in a Likert statement after responses exist needs one extra click. That is deliberate: the server cannot tell a typo from a different question.
-- After a forced change the CSV still merges by name; docs/api.md tells analysts to check per-version codebooks or export one version at a time. Self-describing exports (#53) can carry the per-version mapping later.
+- After a forced change the CSV still merges by name; docs/api.md tells analysts to check per-version codebooks or export one version at a time. Since #53 every row names its event, survey, wave and version, and the codebook carries the same fields.
 - Statement keys (option 1) stay possible as an additive `statementIds?` if authors need to reorder freely; the check would then compare keys instead of positions.
 - The phase-2 chat editor (#13) gets the same guard for free, since it publishes through the same route.

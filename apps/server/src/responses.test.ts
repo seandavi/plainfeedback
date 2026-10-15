@@ -36,7 +36,7 @@ Say.
 Age?
 :::
 `;
-const V2 = `# T
+const V2 = `# T2
 
 ::: {.text #comment}
 Say.
@@ -52,20 +52,26 @@ const world = async () => {
   const db = getDb();
   const [ev] = await db
     .insert(events)
-    .values({ groupId: w.g.id, slug: "fall-2026", title: "Fall" })
+    .values({ groupId: w.g.id, slug: "fall-2026", title: "Fall", startsOn: "2026-10-01" })
     .returning();
   const event = ev as { id: string };
   const [sv] = await db
     .insert(surveys)
-    .values({ eventId: event.id, slug: "post", draftMarkdown: V1, draftEtag: "e" })
+    .values({
+      eventId: event.id,
+      slug: "post",
+      waveLabel: "post",
+      draftMarkdown: V1,
+      draftEtag: "e",
+    })
     .returning();
   const survey = sv as { id: string };
-  const mk = async (version: number, md: string) =>
+  const mk = async (version: number, md: string, surveyId = survey.id) =>
     (
       (await db
         .insert(surveyVersions)
         .values({
-          surveyId: survey.id,
+          surveyId,
           version,
           markdown: md,
           model: compile(md).model,
@@ -82,7 +88,7 @@ const world = async () => {
       submittedAt: new Date(at),
       ...(id && { id }),
     });
-  return { ...w, event, v1, v2, add, base: `/events/${event.id}/surveys/post` };
+  return { ...w, event, survey, v1, v2, add, mk, base: `/events/${event.id}/surveys/post` };
 };
 
 const text = async (r: Response | Promise<Response>) => (await r).text();
@@ -123,10 +129,22 @@ describe("JSONL", () => {
     expect(res.headers.get("content-type")).toContain("ndjson");
     const rows = lines(await res.text());
     expect(rows.map((r) => r.surveyVersion)).toEqual([1, 1, 2]);
+    expect(rows.map((r) => r.surveyTitle)).toEqual(["T", "T", "T2"]); // per version
     expect(rows.map((r) => r.answers.affiliation)).toEqual(["A", "B", undefined]); // insert order
+    expect(res.headers.get("content-disposition")).toBe(
+      'attachment; filename="fall-2026-post-responses.jsonl"',
+    );
     expect(rows[1]).toEqual({
       responseId: "00000000-0000-4000-8000-000000000001",
       seq: rows[0].seq + 1,
+      eventId: w.event.id,
+      eventSlug: "fall-2026",
+      eventTitle: "Fall",
+      eventStartsOn: "2026-10-01",
+      surveyId: w.survey.id,
+      surveySlug: "post",
+      surveyTitle: "T",
+      waveLabel: "post",
       surveyVersion: 1,
       submittedAt: "2026-01-01T00:00:00Z", // to the hour (#37)
       answers: { affiliation: "B" },
@@ -223,11 +241,14 @@ describe("CSV", () => {
     await w.add(w.v2, { comment: "@home", extra: "ünï" }, "2026-01-03T00:00:00Z");
     const res = await call(w, "GET", `${w.base}/responses?format=csv`, w.who.viewer);
     expect(res.headers.get("content-type")).toBe("text/csv; charset=utf-8");
+    expect(res.headers.get("content-disposition")).toBe(
+      'attachment; filename="fall-2026-post-responses.csv"',
+    );
     const csv = await res.text();
     const [head, r1, r2, r3, ...rest] = csv.split("\r\n");
     expect(rest).toEqual([""]);
     expect(head).toBe(
-      "responseId,seq,surveyVersion,submittedAt,affiliation,affiliation_other,tools,tools_other,ratings_1,ratings_2,comment,age,extra",
+      "responseId,seq,eventId,eventSlug,eventTitle,eventStartsOn,surveyId,surveySlug,surveyTitle,waveLabel,surveyVersion,submittedAt,affiliation,affiliation_other,tools,tools_other,ratings_1,ratings_2,comment,age,extra",
     );
     // r1 spans a quoted newline, so rebuild from the raw text instead of splitting by line.
     expect(csv).toContain(
@@ -235,8 +256,9 @@ describe("CSV", () => {
     );
     expect(csv).toContain(",5,3,'+1 great,-4,"); // formula guard on text; numbers untouched
     expect(r1).toBeDefined();
-    expect(r2).toContain(",1,2026-01-02T00:00:00Z,A,,y,,,1,,,");
-    expect(r3).toContain(",2,2026-01-03T00:00:00Z,,,,,,,'@home,,ünï");
+    const meta = `${w.event.id},fall-2026,Fall,2026-10-01,${w.survey.id},post`;
+    expect(r2).toContain(`,${meta},T,post,1,2026-01-02T00:00:00Z,A,,y,,,1,,,`);
+    expect(r3).toContain(`,${meta},T2,post,2,2026-01-03T00:00:00Z,,,,,,,'@home,,ünï`);
   });
 
   it("csvCell basics", () => {
@@ -245,6 +267,7 @@ describe("CSV", () => {
     expect(csvCell("-1")).toBe("'-1");
     expect(csvCell(-1)).toBe("-1");
     expect(csvCell(undefined)).toBe("");
+    expect(csvCell(null)).toBe("");
   });
 
   it("guards formulas after leading whitespace and in fullwidth form (#63)", () => {
@@ -339,6 +362,17 @@ describe("codebook", () => {
     ).json();
     // biome-ignore lint/suspicious/noExplicitAny: response JSON
     const q = (id: string) => cb.questions.find((x: any) => x.id === id);
+    expect(cb).toMatchObject({
+      eventId: w.event.id,
+      eventSlug: "fall-2026",
+      eventTitle: "Fall",
+      eventStartsOn: "2026-10-01",
+      surveyId: w.survey.id,
+      surveySlug: "post",
+      surveyTitle: "T",
+      waveLabel: "post",
+      version: 1,
+    });
     expect(q("ratings").statements).toEqual({ "1": "First thing", "2": "Second thing" });
     expect(q("ratings").scale).toEqual({ min: 1, max: 5 });
     expect(q("ratings").anchors).toMatchObject({ low: "Bad", high: "Good" });
@@ -350,5 +384,118 @@ describe("codebook", () => {
     const names = cb.csvColumns.map((c: any) => c.name);
     expect(names).toContain("ratings_2");
     expect(names).toContain("affiliation_other");
+  });
+});
+
+describe("event and group export (#62)", () => {
+  // A second survey without a wave label, with an id shared with `post` and one of its own.
+  const two = async () => {
+    const w = await world();
+    const [sp] = await getDb()
+      .insert(surveys)
+      .values({ eventId: w.event.id, slug: "speaker", draftMarkdown: "", draftEtag: "e" })
+      .returning();
+    const s2 = (sp as { id: string }).id;
+    const sv = await w.mk(
+      1,
+      "# Talk\n\n::: {.text #comment}\nSay.\n:::\n\n::: {.number #score}\nScore?\n:::\n",
+      s2,
+    );
+    await w.add(w.v1, { age: 30 }, "2026-01-01T00:00:00Z");
+    await w.add(sv, { comment: "hi", score: 4 }, "2026-01-01T00:00:00Z");
+    await w.add(w.v2, { extra: "x" }, "2026-01-01T00:00:00Z");
+    return { ...w, s2, ev: `/events/${w.event.id}/responses`, grp: `/groups/${w.g.id}/responses` };
+  };
+
+  it("viewer or higher, on the event and the group; others 404/401", async () => {
+    const w = await two();
+    for (const path of [w.ev, w.grp]) {
+      const got = [];
+      for (const k of WHO) got.push((await call(w, "GET", path, w.who[k])).status);
+      expect(got).toEqual([401, 404, 200, 200, 200, 200]);
+      expect((await call(w, "GET", `${path}?since=junk`, w.who.viewer)).status).toBe(400);
+    }
+    expect(
+      (await call(w, "GET", `/events/${crypto.randomUUID()}/responses`, w.who.viewer)).status,
+    ).toBe(404);
+  });
+
+  it("JSONL: every survey in seq order, each row tagged; since is the same seq cursor", async () => {
+    const w = await two();
+    for (const path of [w.ev, w.grp]) {
+      const res = await call(w, "GET", path, w.who.viewer);
+      const rows = lines(await res.text());
+      expect(rows.map((r) => [r.surveySlug, r.waveLabel, r.surveyVersion, r.surveyTitle])).toEqual([
+        ["post", "post", 1, "T"],
+        ["speaker", null, 1, "Talk"],
+        ["post", "post", 2, "T2"],
+      ]);
+      expect(rows[1].surveyId).toBe(w.s2);
+      const next = lines(await text(call(w, "GET", `${path}?since=${rows[0].seq}`, w.who.viewer)));
+      expect(next.map((r) => r.surveySlug)).toEqual(["speaker", "post"]);
+    }
+    const ev = await call(w, "GET", w.ev, w.who.viewer);
+    expect(ev.headers.get("content-disposition")).toBe(
+      'attachment; filename="fall-2026-responses.jsonl"',
+    );
+    const grp = await call(w, "GET", `${w.grp}?format=csv`, w.who.viewer);
+    expect(grp.headers.get("content-disposition")).toBe(
+      `attachment; filename="${w.g.id}-responses.csv"`,
+    );
+  });
+
+  it("CSV: one header with the union of every survey's columns; empty wave is an empty cell", async () => {
+    const w = await two();
+    const csv = await text(call(w, "GET", `${w.ev}?format=csv`, w.who.viewer));
+    const [head, r1, r2, r3, ...rest] = csv.split("\r\n");
+    expect(rest).toEqual([""]);
+    expect(head?.split(",").slice(12)).toEqual([
+      "affiliation",
+      "affiliation_other",
+      "tools",
+      "tools_other",
+      "ratings_1",
+      "ratings_2",
+      "comment",
+      "age",
+      "extra",
+      "score",
+    ]);
+    expect(r1).toMatch(/,post,T,post,1,2026-01-01T00:00:00Z,,,,,,,,30,,$/);
+    expect(r2).toMatch(/,speaker,Talk,,1,2026-01-01T00:00:00Z,,,,,,,hi,,,4$/);
+    expect(r3).toMatch(/,post,T2,post,2,2026-01-01T00:00:00Z,,,,,,,,,x,$/);
+  });
+
+  it("an event with no published surveys exports nothing (CSV: just the header)", async () => {
+    const w = await two();
+    const [other] = await getDb()
+      .insert(events)
+      .values({ groupId: w.g.id, slug: "empty", title: "E" })
+      .returning();
+    const empty = `/events/${(other as { id: string }).id}/responses`;
+    expect(await text(call(w, "GET", empty, w.who.viewer))).toBe("");
+    const csv = await text(call(w, "GET", `${empty}?format=csv`, w.who.viewer));
+    expect(csv.split("\r\n")[0]?.split(",").at(-1)).toBe("submittedAt");
+  });
+});
+
+describe("deployment-wide export (#62)", () => {
+  it("admin only (403 otherwise), JSONL only, rows of every group", async () => {
+    const a = await world();
+    const b = await world();
+    await a.add(a.v1, { age: 1 }, "2026-01-01T00:00:00Z");
+    await b.add(b.v2, { extra: "y" }, "2026-01-01T00:00:00Z");
+    const got = [];
+    for (const k of WHO) got.push((await call(a, "GET", "/responses", a.who[k])).status);
+    expect(got).toEqual([401, 403, 403, 403, 403, 200]);
+    expect((await call(a, "GET", "/responses?format=csv", a.who.admin)).status).toBe(400);
+    expect((await call(a, "GET", "/responses?since=junk", a.who.admin)).status).toBe(400);
+    const res = await call(a, "GET", "/responses", a.who.admin);
+    expect(res.headers.get("content-disposition")).toBe(
+      'attachment; filename="all-responses.jsonl"',
+    );
+    const ids = lines(await res.text()).map((r) => r.eventId);
+    expect(ids).toContain(a.event.id);
+    expect(ids).toContain(b.event.id);
   });
 });

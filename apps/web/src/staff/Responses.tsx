@@ -88,14 +88,10 @@ export function Responses({
         survey does not ask for them. Handle what you see and download as confidential.
       </p>
       <p className="actions">
-        <a className="button" href={api.exportUrl(eventId, slug, "csv")} download={`${slug}.csv`}>
+        <a className="button" href={api.exportUrl(eventId, slug, "csv")} download>
           Download CSV
         </a>
-        <a
-          className="button"
-          href={api.exportUrl(eventId, slug, "jsonl")}
-          download={`${slug}.jsonl`}
-        >
+        <a className="button" href={api.exportUrl(eventId, slug, "jsonl")} download>
           Download JSON lines
         </a>
       </p>

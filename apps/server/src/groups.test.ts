@@ -282,6 +282,7 @@ describe("OpenAPI registry (#18 builds the spec page on this)", () => {
       info: { title: "t", version: "0" },
     });
     expect(Object.keys(doc.paths ?? {}).sort()).toEqual([
+      "/api/v1/events/{e}/responses",
       "/api/v1/events/{e}/surveys",
       "/api/v1/events/{e}/surveys/{s}",
       "/api/v1/events/{e}/surveys/{s}/link",
@@ -300,11 +301,13 @@ describe("OpenAPI registry (#18 builds the spec page on this)", () => {
       "/api/v1/groups/{g}/events/{e}",
       "/api/v1/groups/{g}/members",
       "/api/v1/groups/{g}/members/{user}",
+      "/api/v1/groups/{g}/responses",
       "/api/v1/groups/{g}/tokens",
       "/api/v1/groups/{g}/tokens/{id}",
       "/api/v1/me/tokens",
       "/api/v1/public/surveys/{publicId}",
       "/api/v1/public/surveys/{publicId}/responses",
+      "/api/v1/responses",
       "/api/v1/users",
       "/api/v1/users/{id}",
     ]);
