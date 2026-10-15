@@ -373,6 +373,62 @@ a.button {
   gap: 0.5rem;
   margin-top: 1rem;
 }
+/* Editor toolbar and share panel (#51, #69); colours come from the shared tokens. */
+.staff button.primary {
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+.staff button.danger {
+  color: var(--error);
+  border-color: var(--error);
+}
+.menu {
+  position: relative;
+}
+.menu [role="menu"] {
+  position: absolute;
+  z-index: 10;
+  margin: 0.25rem 0 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  min-width: 14rem;
+}
+.staff .menu [role="menuitem"] {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+}
+.share {
+  margin: 0.75rem 0;
+}
+.share-url {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.share-url input {
+  flex: 1 1 20rem;
+  min-width: 0;
+}
+.share-downloads {
+  display: flex;
+  gap: 1.5rem;
+  list-style: none;
+  padding: 0;
+}
+.compare {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--line);
+  padding: 0.5rem;
+  font-size: 0.875rem;
+}
 dialog {
   color: var(--fg);
   background: var(--bg);

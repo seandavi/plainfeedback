@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { validateAnswers } from "./answers";
+import { normalizeAnswers, validateAnswers } from "./answers";
 import { compile } from "./compile";
 import type { Survey } from "./model";
 
@@ -118,5 +118,36 @@ describe("validateAnswers", () => {
     expect(check({ ...valid, nope: "x" })).toEqual({
       nope: "This is not a question in this survey.",
     });
+  });
+});
+
+describe("normalizeAnswers (#75)", () => {
+  test("trims, drops empties and unrated statements, keeps real answers", () => {
+    expect(
+      normalizeAnswers({
+        aff: "  Center ",
+        langs: ["R", " ", "Python "],
+        rate: { 1: null, 2: 4 },
+        must: { 1: null },
+        why: "   ",
+        years: 0,
+        a: null,
+        b: "",
+        c: [],
+        d: {},
+      }),
+    ).toEqual({ aff: "Center", langs: ["R", "Python"], rate: { 2: 4 }, years: 0 });
+  });
+
+  test("validating the normalised form catches an Other text that duplicates an option", () => {
+    const m = compile(`# T\n\n::: {.multi #x other="Other"}\nQ\n- A\n- B\n:::\n`).model as Survey;
+    expect(validateAnswers(m, normalizeAnswers({ x: ["A", " A "] }))).toEqual({
+      x: "An option is chosen twice.",
+    });
+  });
+
+  test("a __proto__ key stays an own key", () => {
+    const n = normalizeAnswers(JSON.parse('{"__proto__": "x"}'));
+    expect(Object.keys(n)).toEqual(["__proto__"]);
   });
 });

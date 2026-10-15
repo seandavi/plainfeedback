@@ -2,7 +2,7 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import type { MiddlewareHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { type AuthEnv, type AuthOptions, authRoutes, requireUser, sessionAuth } from "./auth";
-import type { Db } from "./db";
+import { type Db, errorLine } from "./db";
 import { groupRoutes } from "./groups";
 import { mountDocs } from "./openapi";
 import { type PublicOptions, publicRoutes } from "./public";
@@ -73,12 +73,10 @@ export const createApp = ({
         return c.json({ error: "invalid request", issues: result.error.issues }, 400);
     },
   });
-  // Hono's default handler console.errors the whole error, and a failed query's message carries its
-  // parameters (e.g. a participant's answers), so log only the error class and SQLSTATE.
+  // Hono's default handler console.errors the whole error, query parameters included (errorLine).
   app.onError((err, c) => {
     if (err instanceof HTTPException) return err.getResponse();
-    const code = (err.cause as { code?: unknown } | undefined)?.code;
-    log(JSON.stringify({ error: err.name, ...(typeof code === "string" ? { code } : {}) }));
+    log(errorLine(err));
     return c.json({ error: "internal error" }, 500);
   });
   app.use(accessLog(log));
@@ -104,7 +102,7 @@ export const createApp = ({
     });
     app.route("/api/v1", groupRoutes(auth.db));
     app.route("/api/v1", surveyRoutes(auth.db, publicBaseUrl ?? new URL(auth.redirectUri).origin));
-    app.route("/api/v1", responseRoutes(auth.db));
+    app.route("/api/v1", responseRoutes(auth.db, log));
     app.route("/api/v1", tokenRoutes(auth.db));
   }
   return app;

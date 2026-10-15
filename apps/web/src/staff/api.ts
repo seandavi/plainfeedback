@@ -32,6 +32,7 @@ export type SurveySummary = {
   opensAt?: string | null;
   closesAt?: string | null;
   responseCount?: number;
+  title?: string | null;
 };
 export type User = {
   id: string;
@@ -63,6 +64,7 @@ export type PublishOptions = {
   privacyStatement?: string;
   opensAt?: string | null;
   closesAt?: string | null;
+  force?: boolean; // publish even if export columns would change meaning (409 with `changes`)
 };
 
 export type ErrorKind =
@@ -89,6 +91,7 @@ export class ApiError extends Error {
     readonly status: number,
     message: string,
     readonly compileErrors?: CompileError[],
+    readonly changes?: string[], // 409 on publish: what would change meaning in the export (#52)
   ) {
     super(message);
     this.kind = KINDS[status] ?? "other";
@@ -115,8 +118,9 @@ async function call<T>(
   }
   const json = res.status === 204 ? undefined : await res.json().catch(() => undefined);
   if (!res.ok) {
-    const j = json as { error?: string; errors?: CompileError[] } | undefined;
-    throw new ApiError(res.status, j?.error ?? `Request failed (${res.status})`, j?.errors);
+    const j = json as { error?: string; errors?: CompileError[]; changes?: string[] } | undefined;
+    const msg = j?.error ?? `Request failed (${res.status})`;
+    throw new ApiError(res.status, msg, j?.errors, j?.changes);
   }
   return { data: json as T, etag: res.headers.get("etag") };
 }

@@ -2,8 +2,14 @@
 // groups.ts. {g} is a group id, {e} is an event id under /events and a slug under /groups/{g}/events,
 // {s} is a survey slug (unique per event). Markdown is the source; versions are immutable (ADR 0003).
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
-import { compile, DEFAULT_PRIVACY_STATEMENT, hasPlaceholder } from "@plainfeedback/core";
-import { and, asc, desc, eq, getTableColumns, sql } from "drizzle-orm";
+import {
+  compile,
+  DEFAULT_PRIVACY_STATEMENT,
+  exportChanges,
+  hasPlaceholder,
+  type Survey as Model,
+} from "@plainfeedback/core";
+import { and, asc, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import {
   type Access,
   type AuthzEnv,
@@ -16,7 +22,7 @@ import {
 import type { Db } from "./db";
 import { body, err, errors, json } from "./groups";
 import { qrPng, qrSvg } from "./qr";
-import { events, surveys, surveyVersions, WAVE_LABELS } from "./schema";
+import { events, responses, surveys, surveyVersions, WAVE_LABELS } from "./schema";
 
 const MAX_MARKDOWN = 200_000;
 const Slug = z
@@ -91,6 +97,10 @@ const SurveyListItem = SurveySummary.extend({
   opensAt: z.string().nullable().openapi({ description: "Of the latest published version" }),
   closesAt: z.string().nullable().openapi({ description: "Of the latest published version" }),
   responseCount: z.number().openapi({ description: "Submitted responses, all versions" }),
+  title: z
+    .string()
+    .nullable()
+    .openapi({ description: "The draft's '# ' title line, if it has one" }),
 }).openapi("SurveyListItem");
 const Survey = SurveySummary.extend({
   publicId: z.string().openapi({ description: "Participant page: /s/{publicId}" }),
@@ -134,6 +144,8 @@ const waveTaken = (x: unknown): never => {
   throw x;
 };
 const iso = (d: Date | null) => d?.toISOString() ?? null;
+// ponytail: the first "# " line of the draft, not a full compile; lists only need a label.
+const draftTitle = (md: string) => md.match(/^#[ \t]+(.+?)[ \t#]*$/m)?.[1] ?? null;
 const toEvent = (e: typeof events.$inferSelect) => ({
   id: e.id,
   slug: e.slug,
@@ -321,6 +333,7 @@ export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
           opensAt: iso(opensAt && new Date(opensAt)),
           closesAt: iso(closesAt && new Date(closesAt)),
           responseCount,
+          title: draftTitle(s.draftMarkdown),
         })),
         200,
       );
@@ -540,7 +553,10 @@ export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
       summary: "Publish the stored draft as a new immutable version (creator)",
       description:
         "Fields left out are inherited from the latest version (privacy statement defaults to a " +
-        "template). Publishing an unchanged draft with unchanged settings returns the latest version (200).",
+        "template). Publishing an unchanged draft with unchanged settings returns the latest version (200). " +
+        "Once the survey has responses, a draft that would change what an existing export column means " +
+        "(reordered, inserted or reworded Likert statements, a reused id with a new type, a removed or " +
+        "renamed option) is refused with 409 and `changes`, unless `force` is true (ADR 0015).",
       middleware: [creator, notArchived],
       request: {
         params: SurveyParams,
@@ -558,6 +574,9 @@ export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
                   .optional(),
                 opensAt: z.iso.datetime({ offset: true }).nullable().optional(),
                 closesAt: z.iso.datetime({ offset: true }).nullable().optional(),
+                force: z.boolean().optional().openapi({
+                  description: "Publish even if export columns would change meaning",
+                }),
               }),
             },
           },
@@ -571,6 +590,11 @@ export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
           content: { "application/json": { schema: z.object({ errors: CompileErrors }) } },
         },
         ...allErrors,
+        409: json(
+          z.object({ error: z.string(), changes: z.array(z.string()).optional() }),
+          "The group is archived, or (with `changes`) the draft would change what existing export " +
+            "columns mean; publish with `force` to accept",
+        ),
       },
     }),
     async (c) => {
@@ -611,6 +635,41 @@ export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
           iso(latest.closesAt) === iso(next.closesAt)
         ) {
           return c.json(toVersion(latest), 200);
+        }
+        if (latest && !opts.force) {
+          const earlier = await tx
+            .select({ id: surveyVersions.id, model: surveyVersions.model })
+            .from(surveyVersions)
+            .where(eq(surveyVersions.surveyId, sv.id))
+            .orderBy(asc(surveyVersions.version));
+          const changes = exportChanges(
+            earlier.map((x) => x.model as Model),
+            result.model,
+          );
+          const [answered] = changes.length
+            ? await tx
+                .select({ id: responses.id })
+                .from(responses)
+                .where(
+                  inArray(
+                    responses.surveyVersionId,
+                    earlier.map((x) => x.id),
+                  ),
+                )
+                .limit(1)
+            : [];
+          if (answered)
+            return c.json(
+              {
+                error:
+                  "This survey already has responses, and these changes would put different " +
+                  "answers under the same export column. Keep existing statements and options " +
+                  "in place and add new ones at the end, or give a changed question a new id. " +
+                  "If you only fixed a typo, publish anyway.",
+                changes,
+              },
+              409,
+            );
         }
         const [v] = await tx
           .insert(surveyVersions)
