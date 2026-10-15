@@ -41,5 +41,13 @@ const schema = z.object({
 });
 
 export type Config = z.infer<typeof schema>;
-export const loadConfig = (env: Record<string, string | undefined> = process.env) =>
-  schema.parse(env);
+export const loadConfig = (env: Record<string, string | undefined> = process.env) => {
+  const config = schema.parse(env);
+  // Without a domain allow-list there is no hd check, so a consumer account on an admin's address
+  // (e.g. a former employee's) would be promoted (#76).
+  if (config.ADMIN_EMAILS.length > 0 && config.ALLOWED_EMAIL_DOMAINS.length === 0)
+    throw new Error(
+      "ADMIN_EMAILS is set but ALLOWED_EMAIL_DOMAINS is empty: set the staff domain(s)",
+    );
+  return config;
+};

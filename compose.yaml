@@ -5,8 +5,9 @@ services:
       # Loopback by default: production traffic must come through the TLS reverse proxy (docs/deploy.md).
       - "${APP_BIND:-127.0.0.1}:${APP_PORT:-3000}:3000"
     environment:
-      # POSTGRES_PASSWORD default is for local dev only; set a real one via .env or the environment.
-      DATABASE_URL: postgresql://plainfeedback:${POSTGRES_PASSWORD:-plainfeedback-dev-only}@db:5432/plainfeedback
+      # The app connects as plainfeedback_app (rows only); `just migrate` uses the owner role
+      # (docs/deploy.md#database-roles). Defaults are for local dev only; set real passwords.
+      DATABASE_URL: postgresql://plainfeedback_app:${APP_DB_PASSWORD:-plainfeedback-app-dev-only}@db:5432/plainfeedback
       # Staff auth (docs/deploy-auth.md). Passed through from the deploy shell; unset = auth disabled.
       OIDC_PROVIDER:
       OIDC_ISSUER:
@@ -35,10 +36,13 @@ services:
       POSTGRES_USER: plainfeedback
       POSTGRES_DB: plainfeedback
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-plainfeedback-dev-only}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-plainfeedback-app-dev-only}
     ports:
       - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # Run on first init only: creates the app role and its grants.
+      - ./db:/docker-entrypoint-initdb.d:ro,z # z: SELinux relabel
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U plainfeedback -d plainfeedback"]
       interval: 5s
