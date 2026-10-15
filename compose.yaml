@@ -31,7 +31,9 @@ services:
         condition: service_healthy
     restart: unless-stopped
   db:
-    image: postgres:17-alpine
+    # Built from ./db so the init scripts are copied in with fixed permissions; a bind mount breaks
+    # under a strict host umask (#103).
+    build: ./db
     environment:
       POSTGRES_USER: plainfeedback
       POSTGRES_DB: plainfeedback
@@ -41,8 +43,6 @@ services:
       - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # Run on first init only: creates the app role and its grants.
-      - ./db:/docker-entrypoint-initdb.d:ro,z # z: SELinux relabel
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U plainfeedback -d plainfeedback"]
       interval: 5s

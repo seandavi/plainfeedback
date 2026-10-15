@@ -4,8 +4,13 @@
 GRANT USAGE ON SCHEMA public TO plainfeedback_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO plainfeedback_app;
 -- Stored answers and published versions are append-only for the app (#100): it INSERTs and
--- DELETEs (deletion) but never UPDATEs them, so a compromised app cannot silently alter them.
-REVOKE UPDATE ON responses, survey_versions FROM plainfeedback_app;
+-- DELETEs (deletion) but never UPDATEs them. On a new database these tables do not exist yet, so
+-- migration 0011 does the revoke there (#103); this keeps a rerun on an existing database correct.
+DO $$ BEGIN
+  IF to_regclass('public.responses') IS NOT NULL AND to_regclass('public.survey_versions') IS NOT NULL THEN
+    REVOKE UPDATE ON responses, survey_versions FROM plainfeedback_app;
+  END IF;
+END $$;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO plainfeedback_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO plainfeedback_app;

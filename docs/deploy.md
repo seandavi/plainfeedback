@@ -187,19 +187,21 @@ The app does not connect as the table owner ([#76](https://github.com/seandavi/p
 - `plainfeedback` (owner, `POSTGRES_PASSWORD`) owns the schema. `just migrate` and `pg_dump` use it, with `DATABASE_URL` in the deploying shell or `.env`.
 - `plainfeedback_app` (`APP_DB_PASSWORD`) may only read and write rows: no `ALTER`, `DROP`, `TRUNCATE` or `TRIGGER`, and no `UPDATE` on `responses` or `survey_versions` (append-only; deletion is `DELETE`). So it cannot disable the trigger that keeps published survey versions immutable. `compose.yaml` gives the app this role in its `DATABASE_URL`.
 
-On a new database volume, the postgres container creates the role on first start from `db/` (`10-app-role.sh`, then `20-app-grants.sql`; the default privileges there cover tables that later migrations add). The files must be readable by the container's `postgres` user, which they are with a normal umask.
+On a new database volume, the postgres container creates the role on first start from `db/` (`10-app-role.sh`, then `20-app-grants.sql`; the default privileges there cover tables that later migrations add). The scripts run before any table exists, so the `REVOKE UPDATE` on `responses` and `survey_versions` is a migration (`0011_revoke_app_update`), applied by `just migrate` once the role exists ([#103](https://github.com/seandavi/plainfeedback/issues/103)). Run `just migrate` after the first `docker compose up`; the app is not append-only before that.
+
+The `db` service is built from `db/Dockerfile`, which copies the scripts into the image with fixed permissions, so a strict host umask (e.g. 027) cannot make them unreadable to the container's `postgres` user. After editing `db/`, run `docker compose up -d --build db`.
 
 **Existing deployments** (a database created before this change): set `APP_DB_PASSWORD`, run `just migrate`, then once:
 
 ```bash
-docker compose up -d --wait db   # recreates db with APP_DB_PASSWORD and the db/ mount
+docker compose up -d --build --wait db   # recreates db with APP_DB_PASSWORD and the db/ scripts
 docker compose exec -T db sh /docker-entrypoint-initdb.d/10-app-role.sh
 docker compose exec -T db psql -U plainfeedback -d plainfeedback -v ON_ERROR_STOP=1 \
   -f /docker-entrypoint-initdb.d/20-app-grants.sql
 just up                          # the app now connects as plainfeedback_app
 ```
 
-The second step also revokes `UPDATE` on `responses` and `survey_versions` from the app role ([#100](https://github.com/seandavi/plainfeedback/issues/100)), so deployments that ran it before must rerun it. Both steps are safe to repeat; rerunning the first one sets a new password after a rotation. If you ever create tables as a role other than `plainfeedback`, rerun the grants as that role.
+The second step also revokes `UPDATE` on `responses` and `survey_versions` from the app role ([#100](https://github.com/seandavi/plainfeedback/issues/100)) when the tables exist, so deployments that ran it before must rerun it. If you created the role after running `just migrate`, rerunning the grants fixes that too. Both steps are safe to repeat; rerunning the first one sets a new password after a rotation. If you ever create tables as a role other than `plainfeedback`, rerun the grants as that role.
 
 ### Logging
 
