@@ -1,6 +1,6 @@
 # plainfeedback: design
 
-De-identified event-feedback surveys for the Common Fund Data Ecosystem (CFDE) metrics grant. Open source, MIT licensed. Decisions are recorded in [`adr/`](adr/). Platform survey and rationale: [`research/platform-survey.md`](../research/platform-survey.md).
+De-identified event-feedback surveys for the Common Fund Data Ecosystem (CFDE) metrics grant. Open source, MIT licensed. Decisions are recorded in [`adr/`](adr/0001-record-decisions.md). Platform survey and rationale: [`research/platform-survey.md`](https://github.com/seandavi/plainfeedback/blob/main/research/platform-survey.md).
 
 ## Goals
 

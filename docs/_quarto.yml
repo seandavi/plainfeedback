@@ -1,0 +1,100 @@
+# Docs site: https://seandavi.github.io/plainfeedback/ (built by .github/workflows/docs.yml).
+# The project lives in docs/ so the .md files here render in place at the site root
+# (grammar.md -> grammar.html) and nothing outside docs/ is seen by Quarto.
+project:
+  type: website
+  output-dir: _site
+  # Replaces the generated llms.txt with the hand-written one; builds llms-full.txt.
+  post-render: ./llms-post-render.sh
+  render:
+    - index.qmd
+    - "*.md"
+    - "adr/*.md"
+    - "reviews/*.md"
+    - "!adr/0000-template.md"
+  # Served for download; the live spec is at /openapi.json on any instance.
+  resources:
+    - openapi.json
+
+website:
+  site-url: "https://seandavi.github.io/plainfeedback/"
+  llms-txt: true
+  title: "plainfeedback"
+  google-analytics: "G-KLLV1GCF4E"
+  description: "Self-hostable event-feedback surveys written in markdown, designed to avoid collecting participant identifiers"
+  repo-url: https://github.com/seandavi/plainfeedback
+  repo-subdir: docs
+  repo-branch: main
+  repo-actions: [edit, source, issue]
+  navbar:
+    right:
+      - icon: github
+        href: https://github.com/seandavi/plainfeedback
+        aria-label: GitHub repository
+    left:
+      - href: index.qmd
+        text: Overview
+      - href: grammar.md
+        text: Writing Surveys
+      - href: deploy.md
+        text: Deploying
+      - href: api.md
+        text: API
+      - href: https://plainfeedback.cancerdatasci.org
+        text: Live Preview
+  sidebar:
+    style: docked
+    contents:
+      - href: index.qmd
+        text: Overview
+      - section: Writing surveys
+        contents:
+          - href: grammar.md
+            text: Survey Markdown
+          - href: privacy-statement-template.md
+            text: Privacy Statement Template
+      - section: Running it
+        contents:
+          - href: deploy.md
+            text: Deploying
+          - href: deploy-auth.md
+            text: Staff Sign-in (OIDC)
+      - section: API
+        contents:
+          - href: api.md
+            text: API Guide
+          - href: https://plainfeedback.cancerdatasci.org/api/docs
+            text: Live API Reference
+          - href: openapi.json
+            text: OpenAPI Spec (JSON)
+      - section: Design
+        contents:
+          - href: design.md
+            text: Design
+          - href: threat-model.md
+            text: Threat Model
+          - href: reviews/2026-10-14-phase-1.md
+            text: Phase-1 Review
+          - section: Decisions (ADRs)
+            contents:
+              - auto: "adr/*.md"
+
+format:
+  html:
+    # GitHub-flavoured docs: no ~sub~, ^sup^ or $math$ (shell snippets use $VAR).
+    from: markdown-subscript-superscript-tex_math_dollars
+    filters:
+      - h1-title.lua
+    # Archify-derived theme (from seandavi/bioc-infrastructure) on top of Bootstrap.
+    theme:
+      light: [cosmo, theme/archify.scss, theme/archify-light.scss]
+      dark: [cosmo, theme/archify.scss, theme/archify-dark.scss]
+    # Follow the reader's OS light/dark preference until they use the toggle.
+    respect-user-color-scheme: true
+    grid:
+      sidebar-width: 270px
+      body-width: 860px
+      margin-width: 240px
+      gutter-width: 2rem
+    toc: true
+    number-sections: false

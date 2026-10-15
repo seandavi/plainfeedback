@@ -245,7 +245,7 @@ What would you like to see included in the Spring 2027 meeting?
 ```
 
 It compiles to the model in
-[`packages/core/src/fixtures/cfde-fall-2026.json`](../packages/core/src/fixtures/cfde-fall-2026.json).
+[`packages/core/src/fixtures/cfde-fall-2026.json`](https://github.com/seandavi/plainfeedback/blob/main/packages/core/src/fixtures/cfde-fall-2026.json).
 
 ---
 

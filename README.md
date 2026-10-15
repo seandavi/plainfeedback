@@ -2,7 +2,7 @@
 
 Open-source, self-hostable event-feedback surveys, written in markdown and designed to avoid collecting participant identifiers. Built for the NIH Common Fund Data Ecosystem (CFDE) metrics effort; usable by any consortium that wants to move off one-off Google Forms and Qualtrics.
 
-Live preview: <https://plainfeedback.cancerdatasci.org> (a preview instance; data may be wiped).
+Live preview: <https://plainfeedback.cancerdatasci.org> (a preview instance; data may be wiped). Documentation: <https://seandavi.github.io/plainfeedback/>.
 
 "Designed to avoid identifiers" is not a guarantee of anonymity: free text can identify people, small groups can be re-identified, and proxies and CDNs can log IPs outside the app. Read the [threat model](docs/threat-model.md) and the [deploy guide](docs/deploy.md) before collecting real responses.
 
@@ -63,6 +63,8 @@ Phase 1 (core) is built, deployed on the preview instance and had an independent
 Not built: within-person linking across waves (each wave is its own survey), Parquet export, email invitations.
 
 ## Documentation
+
+The docs below are published at <https://seandavi.github.io/plainfeedback/> (Quarto project in `docs/`; `quarto preview docs` to preview locally).
 
 | Doc | What |
 |---|---|
