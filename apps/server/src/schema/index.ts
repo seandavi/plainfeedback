@@ -2,6 +2,8 @@ import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
+  check,
+  date,
   index,
   integer,
   jsonb,
@@ -10,6 +12,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { newPublicId } from "../publicid";
@@ -17,6 +20,8 @@ import { newPublicId } from "../publicid";
 const id = () => uuid("id").primaryKey().default(sql`gen_random_uuid()`);
 const ts = (name: string) => timestamp(name, { withTimezone: true });
 const createdAt = () => ts("created_at").notNull().defaultNow();
+
+export const WAVE_LABELS = ["pre", "post", "followup", "other"] as const;
 
 export const roleEnum = pgEnum("role", ["owner", "creator", "viewer"]);
 
@@ -79,9 +84,14 @@ export const events = pgTable(
     slug: text("slug").notNull(),
     title: text("title").notNull(),
     description: text("description").notNull().default(""),
+    startsOn: date("starts_on"), // calendar dates (no time of day), 'YYYY-MM-DD'
+    endsOn: date("ends_on"),
     createdAt: createdAt(),
   },
-  (t) => [unique().on(t.groupId, t.slug)],
+  (t) => [
+    unique().on(t.groupId, t.slug),
+    check("events_dates_ordered", sql`${t.endsOn} is null or ${t.startsOn} <= ${t.endsOn}`),
+  ],
 );
 
 export const surveys = pgTable(
@@ -94,14 +104,22 @@ export const surveys = pgTable(
     slug: text("slug").notNull(),
     // Unguessable id in the participant URL /s/{publicId}; slugs are neither global nor secret.
     publicId: text("public_id").notNull().unique().$defaultFn(newPublicId),
-    waveLabel: text("wave_label"), // e.g. pre, post, followup
+    // Null = not a wave (e.g. speaker feedback). One survey per pre/post/followup per event; "other"
+    // may repeat. Constraint and index below; the list is WAVE_LABELS.
+    waveLabel: text("wave_label", { enum: WAVE_LABELS }),
     draftMarkdown: text("draft_markdown").notNull().default(""),
     draftEtag: text("draft_etag").notNull().default(""),
     closedAt: ts("closed_at"), // set = not accepting responses (applies to every version)
     createdAt: createdAt(),
     updatedAt: ts("updated_at").notNull().defaultNow(),
   },
-  (t) => [unique().on(t.eventId, t.slug)],
+  (t) => [
+    unique().on(t.eventId, t.slug),
+    check("surveys_wave_label", sql`${t.waveLabel} in ('pre', 'post', 'followup', 'other')`),
+    uniqueIndex("surveys_event_wave")
+      .on(t.eventId, t.waveLabel)
+      .where(sql`${t.waveLabel} <> 'other'`),
+  ],
 );
 
 // Immutable: a trigger (see migrations) rejects UPDATE, TRUNCATE and DELETE, except a DELETE

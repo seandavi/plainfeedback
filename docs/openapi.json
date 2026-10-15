@@ -62,7 +62,7 @@
           },
           "ticket": {
             "type": "string",
-            "description": "Signed load time; send it back with the answers"
+            "description": "Signed load time; send it back with the answers. Single use, valid 24 h"
           }
         },
         "required": [
@@ -234,6 +234,20 @@
           "description": {
             "type": "string"
           },
+          "startsOn": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "endsOn": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
           "createdAt": {
             "type": "string"
           }
@@ -243,6 +257,8 @@
           "slug",
           "title",
           "description",
+          "startsOn",
+          "endsOn",
           "createdAt"
         ]
       },
@@ -293,7 +309,15 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "enum": [
+              "pre",
+              "post",
+              "followup",
+              "other",
+              null
+            ],
+            "description": "pre, post or followup: at most one survey per event for each. other: any number. null on a survey means it is not a wave (e.g. speaker feedback)."
           },
           "closed": {
             "type": "boolean"
@@ -626,7 +650,7 @@
         ],
         "security": [],
         "summary": "Submit answers (no identifier is stored)",
-        "description": "403: not open yet. 409: versionId is not the latest version, or the ticket is invalid (reload). 410: closed. 413: body over 65536 bytes. 429: too many responses to this survey right now, from everyone or from one network. Submissions with a non-empty `hp`, or sent less than 3s after the ticket was issued, get 201 and are not stored.",
+        "description": "403: not open yet. 409: versionId is not the latest version, or the ticket is invalid, older than 24 h or already used (each ticket stores one response; fetch the survey again for a new one). 410: closed. 413: body over 65536 bytes. 429: too many responses to this survey right now, from everyone or from one network. Submissions with a non-empty `hp`, or sent less than 3s after the ticket was issued, get 201 and are not stored.",
         "parameters": [
           {
             "schema": {
@@ -750,7 +774,7 @@
             }
           },
           "429": {
-            "description": "Rate limited",
+            "description": "Rate limited; see the Retry-After header (seconds)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1395,6 +1419,7 @@
           "groups"
         ],
         "summary": "Remove a member (owner)",
+        "description": "Also revokes the member's API tokens for this group; re-adding them does not revive those tokens.",
         "security": [
           {
             "sessionCookie": []
@@ -1847,7 +1872,7 @@
           "events"
         ],
         "summary": "Create or replace an event by slug (creator)",
-        "description": "Idempotent upsert. The response `id` is the `{e}` used under `/events/{e}`.",
+        "description": "Idempotent upsert; omitted fields are reset (replace semantics). The response `id` is the `{e}` used under `/events/{e}`. `startsOn` / `endsOn` are optional calendar dates (`YYYY-MM-DD`, no time); `endsOn` must not precede `startsOn`.",
         "parameters": [
           {
             "schema": {
@@ -1883,6 +1908,20 @@
                   "description": {
                     "type": "string",
                     "maxLength": 5000
+                  },
+                  "startsOn": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date"
+                  },
+                  "endsOn": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date"
                   }
                 },
                 "required": [
@@ -2265,7 +2304,7 @@
           "surveys"
         ],
         "summary": "Create or update a survey draft (creator)",
-        "description": "Body: raw `text/markdown`, or JSON `{markdown, waveLabel?}`. Creating needs no If-Match; updating needs `If-Match` with the current ETag (or `*`). Invalid drafts are saved; the response includes the compile result.",
+        "description": "Body: raw `text/markdown`, or JSON `{markdown, waveLabel?}` (`waveLabel`: pre, post, followup, other or null; a second survey with the same pre/post/followup in one event is a 409). Creating needs no If-Match; updating needs `If-Match` with the current ETag (or `*`). Invalid drafts are saved; the response includes the compile result.",
         "parameters": [
           {
             "schema": {
@@ -2302,8 +2341,14 @@
                       "string",
                       "null"
                     ],
-                    "minLength": 1,
-                    "maxLength": 64
+                    "enum": [
+                      "pre",
+                      "post",
+                      "followup",
+                      "other",
+                      null
+                    ],
+                    "description": "pre, post or followup: at most one survey per event for each. other: any number. null on a survey means it is not a wave (e.g. speaker feedback)."
                   }
                 },
                 "required": [
@@ -2417,7 +2462,7 @@
         "tags": [
           "surveys"
         ],
-        "summary": "Close or reopen a survey for responses (creator)",
+        "summary": "Close or reopen a survey, or set its wave (creator)",
         "parameters": [
           {
             "schema": {
@@ -2447,11 +2492,22 @@
                 "properties": {
                   "closed": {
                     "type": "boolean"
+                  },
+                  "waveLabel": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "pre",
+                      "post",
+                      "followup",
+                      "other",
+                      null
+                    ],
+                    "description": "pre, post or followup: at most one survey per event for each. other: any number. null on a survey means it is not a wave (e.g. speaker feedback)."
                   }
                 },
-                "required": [
-                  "closed"
-                ],
                 "additionalProperties": false
               }
             }
@@ -2765,7 +2821,7 @@
           "surveys"
         ],
         "summary": "Publish the stored draft as a new immutable version (creator)",
-        "description": "Fields left out are inherited from the latest version (privacy statement defaults to a template). Publishing an unchanged draft with unchanged settings returns the latest version (200).",
+        "description": "Fields left out are inherited from the latest version (privacy statement defaults to a template). Publishing an unchanged draft with unchanged settings returns the latest version (200). Once the survey has responses, a draft that would change what an existing export column means (reordered, inserted or reworded Likert statements, a reused id with a new type, a removed or renamed option) is refused with 409 and `changes`, unless `force` is true (ADR 0015).",
         "parameters": [
           {
             "schema": {
@@ -2811,6 +2867,10 @@
                       "null"
                     ],
                     "format": "date-time"
+                  },
+                  "force": {
+                    "type": "boolean",
+                    "description": "Publish even if export columns would change meaning"
                   }
                 },
                 "additionalProperties": false
@@ -2880,11 +2940,25 @@
             }
           },
           "409": {
-            "description": "Conflict, e.g. the group is archived",
+            "description": "The group is archived, or (with `changes`) the draft would change what existing export columns mean; publish with `force` to accept",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "changes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
                 }
               }
             }
@@ -3412,7 +3486,7 @@
           "responses"
         ],
         "summary": "Export responses as JSONL or CSV, streamed (viewer)",
-        "description": "Ordered by `seq`. `since` is exclusive: the `seq` of the last row received (resume), or an ISO time (coarse filter). `submittedAt` is to the hour. CSV cells starting with = + - @ are prefixed with a single quote.",
+        "description": "Ordered by `seq`. `since` is a `seq` (exclusive; resume cursor) or an ISO time with offset (coarse filter: that whole hour and later). Any other `since` is 400. `seq` is assigned at insert, so a row can become visible after a higher one: resume with an overlap (`since` = last seq - 1000) and dedupe on `responseId`. `submittedAt` is to the hour. CSV is for spreadsheets: text cells starting with = + - @ (also fullwidth, or after whitespace) get a leading single quote. JSONL is lossless; use it for analysis. If the stream fails midway the transfer is aborted, never ended cleanly.",
         "parameters": [
           {
             "schema": {
@@ -3445,12 +3519,20 @@
           },
           {
             "schema": {
-              "type": "string",
-              "maxLength": 100,
-              "description": "Exclusive: the `seq` of the last row received, or an ISO time"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{1,18}$"
+                },
+                {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              ],
+              "description": "The `seq` of the last row received (exclusive; resume cursor), or an ISO time with offset (coarse filter: rows submitted in that hour or later)"
             },
             "required": false,
-            "description": "Exclusive: the `seq` of the last row received, or an ISO time",
+            "description": "The `seq` of the last row received (exclusive; resume cursor), or an ISO time with offset (coarse filter: rows submitted in that hour or later)",
             "name": "since",
             "in": "query"
           },

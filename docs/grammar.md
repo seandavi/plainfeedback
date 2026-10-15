@@ -58,6 +58,12 @@ edit the wording. Ids use lowercase letters, digits, `-` and `_`, start with a
 letter, and must be different for each question in the survey. Good:
 `#affiliation`, `#years-in-field`, `#q3`.
 
+Once a survey has responses, publishing asks you to confirm changes that would
+mix different answers in one export column: reordering, inserting or rewording
+rating-grid statements (add new ones at the end instead), reusing an id for a
+different question type (use a new id), or removing or renaming an option.
+Adding questions, options and statements at the end needs no confirmation.
+
 ### Settings for every question
 
 | Setting | Meaning |
@@ -92,7 +98,8 @@ Please specify your CFDE affiliation.
 #### Multiple choice: `.multi`
 
 Same as `.choice`, but people may tick several options (or none, unless
-`required`). `other` works the same way.
+`required`). `other` works the same way. Options and the `other` label can't
+contain `;`, because the CSV export joins the ticked options with `;`.
 
 #### Rating grid: `.likert`
 
@@ -257,7 +264,9 @@ rendering. Errors are `{ line, column?, message }` with 1-based lines.
 
 A response is an object keyed by question id. `validateAnswers(model, answers)`
 returns `{ [questionId]: message }`, empty when valid. The browser and server
-use the same function.
+use the same function. The server first applies `normalizeAnswers` (trim
+strings, drop unrated Likert statements and empty answers), then validates and
+stores the normalised object.
 
 | Type | Answer |
 |---|---|

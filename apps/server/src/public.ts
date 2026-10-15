@@ -5,6 +5,7 @@ import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import {
   MIN_SUBMIT_MS,
   type Survey as Model,
+  normalizeAnswers,
   surveyStatus,
   validateAnswers,
 } from "@plainfeedback/core";
@@ -29,8 +30,9 @@ export type PublicOptions = {
 // ponytail: in-memory buckets and keys, so every limit is per process and resets on restart. Move
 // them to Postgres or Redis if the app ever runs as several instances.
 export const DEFAULT_RATE: RateLimit = { burst: 1000, perSecond: 10 };
-// Generous because a whole conference often shares one Wi-Fi address.
-export const DEFAULT_CLIENT_RATE = { max: 30, windowMs: 10 * 60_000 };
+// Generous because a whole conference often shares one Wi-Fi address (#55); single-use tickets
+// (#60) mean each response still costs a page load and the 3 s wait.
+export const DEFAULT_CLIENT_RATE = { max: 300, windowMs: 10 * 60_000 };
 const DAY = 86_400_000;
 const MAX_KEYS = 50_000;
 
@@ -56,6 +58,12 @@ const tokenBucket = ({ burst, perSecond }: RateLimit) => {
       b.tokens -= 1;
       return true;
     },
+    // Whole seconds until the next token, for Retry-After; capped for a bucket that never refills.
+    retryAfter: (key: string) => {
+      const b = m.get(key);
+      const s = Math.ceil((1 - (b?.tokens ?? 0)) / perSecond);
+      return String(Number.isFinite(s) ? Math.max(1, Math.min(s, 3600)) : 3600);
+    },
   };
 };
 
@@ -66,7 +74,8 @@ const sign = async (key: ReturnType<typeof hmacKey>, data: string) =>
   b64u(new Uint8Array(await crypto.subtle.sign("HMAC", await key, utf8(data))));
 const unb64u = (s: string) =>
   Uint8Array.from(atob(s.replaceAll("-", "+").replaceAll("_", "/")), (ch) => ch.charCodeAt(0));
-const TICKET = /^(\d{1,15})\.([A-Za-z0-9_-]{43})$/;
+const TICKET = /^(\d{1,15})\.([A-Za-z0-9_-]{16})\.([A-Za-z0-9_-]{43})$/;
+export const TICKET_MAX_AGE_MS = DAY;
 
 const PublicParams = z.object({
   publicId: z.string().openapi({ param: { name: "publicId", in: "path" } }),
@@ -80,7 +89,9 @@ const PublicSurvey = z
     model: z.unknown(),
     privacyStatement: z.string(),
     status: Status,
-    ticket: z.string().openapi({ description: "Signed load time; send it back with the answers" }),
+    ticket: z.string().openapi({
+      description: "Signed load time; send it back with the answers. Single use, valid 24 h",
+    }),
   })
   .openapi("PublicSurvey");
 const Submission = z
@@ -122,6 +133,13 @@ const error = <S extends 403 | 404 | 409 | 410 | 413 | 415 | 429>(
   status: S,
   message: string,
 ) => c.json({ error: message }, status);
+// The page shows these after fetching a fresh ticket; the answers stay on the page.
+const STALE =
+  "This page was open for a long time, so it has been refreshed. Please check your answers and " +
+  "submit again.";
+const USED =
+  "This page has already sent its answers. If you meant to send another response, check your " +
+  "answers and submit again.";
 
 // No cookies are read here, so there is nothing to forge cross-site; JSON-only still blocks
 // form posts and keeps the parser honest.
@@ -156,21 +174,38 @@ export const publicRoutes = (db: Db, opts: PublicOptions = {}) => {
     }
     return sign(salt.key, address);
   };
-  // Ticket = page load time signed with a per-process key. A restart invalidates open pages'
-  // tickets; they get 409 and reload, which keeps the answers typed so far.
+  // Ticket = page load time and a random nonce, signed with a per-process key. A restart
+  // invalidates open pages' tickets; they get 409 and a fresh ticket, keeping the answers typed so far.
   const ticketKey = hmacKey();
-  const issueTicket = async (publicId: string, t: number) =>
-    `${t}.${await sign(ticketKey, `${publicId}.${t}`)}`;
-  const ticketAge = async (publicId: string, ticket: string, t: number) => {
+  const issueTicket = async (publicId: string, t: number) => {
+    const nonce = b64u(crypto.getRandomValues(new Uint8Array(12)));
+    return `${t}.${nonce}.${await sign(ticketKey, `${publicId}.${t}.${nonce}`)}`;
+  };
+  // Signature -> verified ticket, or undefined if forged, foreign or malformed.
+  const verifyTicket = async (publicId: string, ticket: string) => {
     const m = TICKET.exec(ticket);
     if (!m) return undefined;
+    const [, at, nonce, sig] = m as unknown as [string, string, string, string];
     const ok = await crypto.subtle.verify(
       "HMAC",
       await ticketKey,
-      unb64u(m[2] as string),
-      utf8(`${publicId}.${m[1]}`),
+      unb64u(sig),
+      utf8(`${publicId}.${at}.${nonce}`),
     );
-    return ok ? t - Number(m[1]) : undefined;
+    return ok ? { at: Number(at), id: sig } : undefined;
+  };
+  // Single use (#60): signature -> time it was used. An entry can go once it is older than the max
+  // age, because the ticket was issued before it was used and so already fails the age check. Map
+  // order is insertion order, so the sweep stops at the first live entry.
+  // ponytail: in memory, so single process only; size is bounded by accepted responses in 24 h
+  // (at most the per-survey rate x 24 h per survey). A restart clears it but also replaces
+  // ticketKey, so no old ticket becomes valid again. Several instances need a used_tickets table.
+  const used = new Map<string, number>();
+  const sweepUsed = (t: number) => {
+    for (const [k, at] of used) {
+      if (t - at <= TICKET_MAX_AGE_MS) break;
+      used.delete(k);
+    }
   };
 
   r.openapi(
@@ -210,8 +245,9 @@ export const publicRoutes = (db: Db, opts: PublicOptions = {}) => {
       security: [],
       summary: "Submit answers (no identifier is stored)",
       description:
-        "403: not open yet. 409: versionId is not the latest version, or the ticket is invalid " +
-        `(reload). 410: closed. 413: body over ${MAX_BODY} bytes. 429: too many responses to this ` +
+        "403: not open yet. 409: versionId is not the latest version, or the ticket is invalid, " +
+        "older than 24 h or already used (each ticket stores one response; fetch the survey again " +
+        `for a new one). 410: closed. 413: body over ${MAX_BODY} bytes. 429: too many responses to this ` +
         "survey right now, from everyone or from one network. Submissions with a non-empty `hp`, " +
         `or sent less than ${MIN_SUBMIT_MS / 1000}s after the ticket was issued, get 201 and are not stored.`,
       middleware: [
@@ -232,7 +268,7 @@ export const publicRoutes = (db: Db, opts: PublicOptions = {}) => {
         413: err("Body too large"),
         415: err("Not application/json"),
         422: json(AnswerErrors, "Answers do not validate"),
-        429: err("Rate limited"),
+        429: err("Rate limited; see the Retry-After header (seconds)"),
       },
     }),
     async (c) => {
@@ -242,33 +278,54 @@ export const publicRoutes = (db: Db, opts: PublicOptions = {}) => {
       // Per-client limit, then bot checks, then the shared bucket: neither a noisy client nor a
       // dropped bot can use up the survey's shared budget.
       const address = clientAddress?.(c);
-      if (address && !clientBucket.take(`${row.s.id}.${await clientKey(address, t)}`, t))
+      const ck = address && `${row.s.id}.${await clientKey(address, t)}`;
+      if (ck && !clientBucket.take(ck, t)) {
+        c.header("Retry-After", clientBucket.retryAfter(ck));
         return error(
           c,
           429,
           "A lot of answers have come from your network in the last few minutes. If you share " +
-            "Wi-Fi with others, that can happen. Please wait a few minutes and submit again; your " +
+            "Wi-Fi with others, that can happen. Please wait a moment and submit again; your " +
             "answers are still here.",
         );
+      }
       const { versionId, answers, ticket, hp } = c.req.valid("json");
-      const age = await ticketAge(row.s.publicId, ticket, t);
-      if (age === undefined) return error(c, 409, "this page has expired; reload it");
+      const tk = await verifyTicket(row.s.publicId, ticket);
+      // No await from here to the claim below, so two requests with one ticket cannot both pass.
+      if (!tk || t - tk.at > TICKET_MAX_AGE_MS) return error(c, 409, STALE);
+      if (used.has(tk.id)) return error(c, 409, USED);
       // Bot deterrents: look accepted, store nothing.
-      if (hp || age < minSubmitMs) return c.json({ ok: true as const }, 201);
-      if (!surveyBucket.take(row.s.id, t))
+      if (hp || t - tk.at < minSubmitMs) return c.json({ ok: true as const }, 201);
+      if (!surveyBucket.take(row.s.id, t)) {
+        c.header("Retry-After", surveyBucket.retryAfter(row.s.id));
         return error(
           c,
           429,
-          "Many people are answering right now. Please wait a minute and submit again.",
+          "Many people are answering right now. Please wait a moment and submit again.",
         );
+      }
       const status = statusOf(row.s, row.v);
       if (status === "closed") return error(c, 410, "this survey is closed");
       if (status === "not_yet_open") return error(c, 403, "this survey is not open yet");
-      if (versionId !== row.v.id) return error(c, 409, "the survey has changed; reload it");
-      const errors = validateAnswers(row.v.model as Model, answers);
+      if (versionId !== row.v.id)
+        return error(
+          c,
+          409,
+          "This survey was just updated. Please check your answers and submit again.",
+        );
+      const clean = normalizeAnswers(answers);
+      const errors = validateAnswers(row.v.model as Model, clean);
       if (Object.keys(errors).length)
         return c.json({ error: "invalid answers", errors: { ...errors } }, 422);
-      await db.insert(responses).values({ surveyVersionId: row.v.id, answers });
+      // Claimed only when storing, so a 422 or 429 leaves the ticket usable for the resubmit.
+      sweepUsed(t);
+      used.set(tk.id, t);
+      try {
+        await db.insert(responses).values({ surveyVersionId: row.v.id, answers: clean });
+      } catch (e) {
+        used.delete(tk.id); // nothing stored: let the participant retry with the same page
+        throw e;
+      }
       return c.json({ ok: true as const }, 201);
     },
   );

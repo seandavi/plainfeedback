@@ -2,8 +2,8 @@
 // groups.ts. {g} is a group id, {e} is an event id under /events and a slug under /groups/{g}/events,
 // {s} is a survey slug (unique per event). Markdown is the source; versions are immutable (ADR 0003).
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
-import { compile } from "@plainfeedback/core";
-import { and, asc, desc, eq, getTableColumns, sql } from "drizzle-orm";
+import { compile, exportChanges, type Survey as Model } from "@plainfeedback/core";
+import { and, asc, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import {
   type Access,
   type AuthzEnv,
@@ -16,7 +16,7 @@ import {
 import type { Db } from "./db";
 import { body, err, errors, json } from "./groups";
 import { qrPng, qrSvg } from "./qr";
-import { events, surveys, surveyVersions } from "./schema";
+import { events, responses, surveys, surveyVersions, WAVE_LABELS } from "./schema";
 
 // Keep in line with docs/privacy-statement-template.md. Claims only what the software does; the
 // host's own logs and the author's use of the data are for the author to add.
@@ -53,12 +53,21 @@ const allErrors = {
   428: err("If-Match is required to change an existing draft"),
 } as const;
 
+const Wave = z.enum(WAVE_LABELS).openapi({
+  description:
+    "pre, post or followup: at most one survey per event for each. other: any number. " +
+    "null on a survey means it is not a wave (e.g. speaker feedback).",
+});
+// Calendar date, no time of day; z.iso.date() rejects impossible dates such as 2026-02-31.
+const DateOnly = z.iso.date();
 const Event = z
   .object({
     id: z.uuid(),
     slug: Slug,
     title: z.string(),
     description: z.string(),
+    startsOn: DateOnly.nullable(),
+    endsOn: DateOnly.nullable(),
     createdAt: z.string(),
   })
   .openapi("Event");
@@ -84,7 +93,7 @@ const Version = VersionSummary.extend({
 const SurveySummary = z
   .object({
     slug: Slug,
-    waveLabel: z.string().nullable(),
+    waveLabel: Wave.nullable(),
     closed: z.boolean(),
     updatedAt: z.string(),
     latestVersion: z.number().nullable(),
@@ -129,12 +138,21 @@ const markdownOf = async (c: {
   return md;
 };
 
+// Unique index surveys_event_wave: two surveys of one event claiming the same pre/post/followup.
+const waveTaken = (x: unknown): never => {
+  const cause = (x as { cause?: { code?: string; constraint?: string } }).cause;
+  if (cause?.code === "23505" && cause.constraint === "surveys_event_wave")
+    throw fail(409, "another survey in this event already has that wave");
+  throw x;
+};
 const iso = (d: Date | null) => d?.toISOString() ?? null;
 const toEvent = (e: typeof events.$inferSelect) => ({
   id: e.id,
   slug: e.slug,
   title: e.title,
   description: e.description,
+  startsOn: e.startsOn,
+  endsOn: e.endsOn,
   createdAt: e.createdAt.toISOString(),
 });
 const toSummary = (v: typeof surveyVersions.$inferSelect) => ({
@@ -246,26 +264,37 @@ export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
       path: "/groups/{g}/events/{e}",
       tags: ["events"],
       summary: "Create or replace an event by slug (creator)",
-      description: "Idempotent upsert. The response `id` is the `{e}` used under `/events/{e}`.",
+      description:
+        "Idempotent upsert; omitted fields are reset (replace semantics). The response `id` is the " +
+        "`{e}` used under `/events/{e}`. `startsOn` / `endsOn` are optional calendar dates " +
+        "(`YYYY-MM-DD`, no time); `endsOn` must not precede `startsOn`.",
       middleware: [groupCreator, notArchived],
       request: {
         params: GroupEventParams,
         body: body(
-          z.strictObject({
-            title: z.string().trim().min(1).max(200),
-            description: z.string().max(5000).optional(),
-          }),
+          z
+            .strictObject({
+              title: z.string().trim().min(1).max(200),
+              description: z.string().max(5000).optional(),
+              startsOn: DateOnly.nullable().optional(),
+              endsOn: DateOnly.nullable().optional(),
+            })
+            .refine((v) => !v.startsOn || !v.endsOn || v.startsOn <= v.endsOn, {
+              message: "endsOn must not be before startsOn",
+              path: ["endsOn"],
+            }),
         ),
       },
       responses: { 200: json(Event), 201: json(Event, "Created"), ...allErrors },
     }),
     async (c) => {
       const { groupId } = c.get("access") as Access;
-      const { title, description = "" } = c.req.valid("json");
+      const { title, description = "", startsOn = null, endsOn = null } = c.req.valid("json");
+      const set = { title, description, startsOn, endsOn };
       const [row] = await db
         .insert(events)
-        .values({ groupId, slug: c.req.valid("param").e, title, description })
-        .onConflictDoUpdate({ target: [events.groupId, events.slug], set: { title, description } })
+        .values({ groupId, slug: c.req.valid("param").e, ...set })
+        .onConflictDoUpdate({ target: [events.groupId, events.slug], set })
         .returning({ ...getTableColumns(events), created: sql<boolean>`(xmax = 0)` });
       const { created, ...e } = row as typeof events.$inferSelect & { created: boolean };
       return created ? c.json(toEvent(e), 201) : c.json(toEvent(e), 200);
@@ -335,7 +364,7 @@ export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
       tags: ["surveys"],
       summary: "Create or update a survey draft (creator)",
       description:
-        "Body: raw `text/markdown`, or JSON `{markdown, waveLabel?}`. Creating needs no If-Match; " +
+        "Body: raw `text/markdown`, or JSON `{markdown, waveLabel?}` (`waveLabel`: pre, post, followup, other or null; a second survey with the same pre/post/followup in one event is a 409). Creating needs no If-Match; " +
         "updating needs `If-Match` with the current ETag (or `*`). Invalid drafts are saved; the " +
         "response includes the compile result.",
       middleware: [creator, notArchived],
@@ -344,7 +373,7 @@ export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
         body: markdownBody(
           z.strictObject({
             markdown: Markdown,
-            waveLabel: z.string().trim().min(1).max(64).nullable().optional(),
+            waveLabel: Wave.nullable().optional(),
           }),
         ),
       },
@@ -352,7 +381,10 @@ export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
     }),
     async (c) => {
       const { e, s } = c.req.valid("param");
-      const j = c.req.valid("json") as { markdown?: string; waveLabel?: string | null };
+      const j = c.req.valid("json") as {
+        markdown?: string;
+        waveLabel?: (typeof WAVE_LABELS)[number] | null;
+      };
       const markdown = (await markdownOf(c)) ?? j.markdown;
       if (markdown === undefined) throw fail(400, "markdown is required");
       const waveLabel = j.waveLabel;
@@ -363,8 +395,9 @@ export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
         const rows = await db
           .insert(surveys)
           .values({ eventId: e, slug: s, draftMarkdown: markdown, draftEtag, waveLabel })
-          .onConflictDoNothing()
-          .returning({ id: surveys.id });
+          .onConflictDoNothing({ target: [surveys.eventId, surveys.slug] })
+          .returning({ id: surveys.id })
+          .catch(waveTaken);
         if (!rows.length) throw fail(428, "If-Match is required to update an existing draft");
         created = true;
       } else {
@@ -378,7 +411,8 @@ export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
             ...(waveLabel !== undefined && { waveLabel }),
           })
           .where(and(surveyWhere(e, s), match))
-          .returning({ id: surveys.id });
+          .returning({ id: surveys.id })
+          .catch(waveTaken);
         if (!rows.length) throw fail(412, "draft changed; reload and retry");
       }
       const v = await loadSurvey(e, s);
@@ -393,19 +427,34 @@ export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
       method: "patch",
       path: "/events/{e}/surveys/{s}",
       tags: ["surveys"],
-      summary: "Close or reopen a survey for responses (creator)",
+      summary: "Close or reopen a survey, or set its wave (creator)",
       middleware: [creator, notArchived],
-      request: { params: SurveyParams, body: body(z.strictObject({ closed: z.boolean() })) },
+      request: {
+        params: SurveyParams,
+        body: body(
+          z
+            .strictObject({ closed: z.boolean().optional(), waveLabel: Wave.nullable().optional() })
+            .refine((v) => v.closed !== undefined || v.waveLabel !== undefined, {
+              message: "give closed and/or waveLabel",
+            }),
+        ),
+      },
       responses: { 200: json(Survey), ...allErrors },
     }),
     async (c) => {
       const { e, s } = c.req.valid("param");
-      const { closed } = c.req.valid("json");
+      const { closed, waveLabel } = c.req.valid("json");
       const rows = await db
         .update(surveys)
-        .set({ closedAt: closed ? sql`coalesce(${surveys.closedAt}, now())` : null })
+        .set({
+          ...(closed !== undefined && {
+            closedAt: closed ? sql`coalesce(${surveys.closedAt}, now())` : null,
+          }),
+          ...(waveLabel !== undefined && { waveLabel }),
+        })
         .where(surveyWhere(e, s))
-        .returning({ id: surveys.id });
+        .returning({ id: surveys.id })
+        .catch(waveTaken);
       if (!rows.length) throw notFound();
       const v = await loadSurvey(e, s);
       c.header("ETag", v.etag);
@@ -503,7 +552,10 @@ export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
       summary: "Publish the stored draft as a new immutable version (creator)",
       description:
         "Fields left out are inherited from the latest version (privacy statement defaults to a " +
-        "template). Publishing an unchanged draft with unchanged settings returns the latest version (200).",
+        "template). Publishing an unchanged draft with unchanged settings returns the latest version (200). " +
+        "Once the survey has responses, a draft that would change what an existing export column means " +
+        "(reordered, inserted or reworded Likert statements, a reused id with a new type, a removed or " +
+        "renamed option) is refused with 409 and `changes`, unless `force` is true (ADR 0015).",
       middleware: [creator, notArchived],
       request: {
         params: SurveyParams,
@@ -515,6 +567,9 @@ export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
                 privacyStatement: z.string().trim().min(1).max(20_000).optional(),
                 opensAt: z.iso.datetime({ offset: true }).nullable().optional(),
                 closesAt: z.iso.datetime({ offset: true }).nullable().optional(),
+                force: z.boolean().optional().openapi({
+                  description: "Publish even if export columns would change meaning",
+                }),
               }),
             },
           },
@@ -528,6 +583,11 @@ export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
           content: { "application/json": { schema: z.object({ errors: CompileErrors }) } },
         },
         ...allErrors,
+        409: json(
+          z.object({ error: z.string(), changes: z.array(z.string()).optional() }),
+          "The group is archived, or (with `changes`) the draft would change what existing export " +
+            "columns mean; publish with `force` to accept",
+        ),
       },
     }),
     async (c) => {
@@ -568,6 +628,41 @@ export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
           iso(latest.closesAt) === iso(next.closesAt)
         ) {
           return c.json(toVersion(latest), 200);
+        }
+        if (latest && !opts.force) {
+          const earlier = await tx
+            .select({ id: surveyVersions.id, model: surveyVersions.model })
+            .from(surveyVersions)
+            .where(eq(surveyVersions.surveyId, sv.id))
+            .orderBy(asc(surveyVersions.version));
+          const changes = exportChanges(
+            earlier.map((x) => x.model as Model),
+            result.model,
+          );
+          const [answered] = changes.length
+            ? await tx
+                .select({ id: responses.id })
+                .from(responses)
+                .where(
+                  inArray(
+                    responses.surveyVersionId,
+                    earlier.map((x) => x.id),
+                  ),
+                )
+                .limit(1)
+            : [];
+          if (answered)
+            return c.json(
+              {
+                error:
+                  "This survey already has responses, and these changes would put different " +
+                  "answers under the same export column. Keep existing statements and options " +
+                  "in place and add new ones at the end, or give a changed question a new id. " +
+                  "If you only fixed a typo, publish anyway.",
+                changes,
+              },
+              409,
+            );
         }
         const [v] = await tx
           .insert(surveyVersions)

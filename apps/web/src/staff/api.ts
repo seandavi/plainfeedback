@@ -6,7 +6,15 @@ import type { CompileError, Survey as Model } from "@plainfeedback/core";
 export type Role = "viewer" | "creator" | "owner";
 export type Me = { id: string; email: string; isAdmin: boolean };
 export type Group = { id: string; name: string; archived: boolean; role: Role | null };
-export type Event = { id: string; slug: string; title: string; description: string };
+export type Event = {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  startsOn: string | null; // YYYY-MM-DD
+  endsOn: string | null;
+};
+export type Wave = "pre" | "post" | "followup" | "other";
 export type VersionSummary = {
   version: number;
   publishedAt: string;
@@ -16,7 +24,7 @@ export type VersionSummary = {
 export type Version = VersionSummary & { markdown: string; model: Model; privacyStatement: string };
 export type SurveySummary = {
   slug: string;
-  waveLabel: string | null;
+  waveLabel: Wave | null;
   closed: boolean;
   updatedAt: string;
   latestVersion: number | null;
@@ -55,6 +63,7 @@ export type PublishOptions = {
   privacyStatement?: string;
   opensAt?: string | null;
   closesAt?: string | null;
+  force?: boolean; // publish even if export columns would change meaning (409 with `changes`)
 };
 
 export type ErrorKind =
@@ -81,6 +90,7 @@ export class ApiError extends Error {
     readonly status: number,
     message: string,
     readonly compileErrors?: CompileError[],
+    readonly changes?: string[], // 409 on publish: what would change meaning in the export (#52)
   ) {
     super(message);
     this.kind = KINDS[status] ?? "other";
@@ -107,8 +117,9 @@ async function call<T>(
   }
   const json = res.status === 204 ? undefined : await res.json().catch(() => undefined);
   if (!res.ok) {
-    const j = json as { error?: string; errors?: CompileError[] } | undefined;
-    throw new ApiError(res.status, j?.error ?? `Request failed (${res.status})`, j?.errors);
+    const j = json as { error?: string; errors?: CompileError[]; changes?: string[] } | undefined;
+    const msg = j?.error ?? `Request failed (${res.status})`;
+    throw new ApiError(res.status, msg, j?.errors, j?.changes);
   }
   return { data: json as T, etag: res.headers.get("etag") };
 }
@@ -144,20 +155,33 @@ export const api = {
   group: (g: string) => get<Group>(`/groups/${enc(g)}`),
   events: (g: string) => get<Event[]>(`/groups/${enc(g)}/events`),
   event: (g: string, slug: string) => get<Event>(`/groups/${enc(g)}/events/${enc(slug)}`),
-  putEvent: async (g: string, slug: string, title: string) =>
-    (await call<Event>("PUT", `/groups/${enc(g)}/events/${enc(slug)}`, { title })).data,
+  putEvent: async (
+    g: string,
+    slug: string,
+    title: string,
+    dates: { startsOn: string | null; endsOn: string | null } = { startsOn: null, endsOn: null },
+  ) =>
+    (await call<Event>("PUT", `/groups/${enc(g)}/events/${enc(slug)}`, { title, ...dates })).data,
   surveys: (eventId: string) => get<SurveySummary[]>(`/events/${enc(eventId)}/surveys`),
   survey: (eventId: string, slug: string) => get<Survey>(survey(eventId, slug)),
   /** Create (etag undefined) or update a draft. A stale etag throws kind "stale" (412). */
-  saveDraft: async (eventId: string, slug: string, markdown: string, etag?: string) =>
+  saveDraft: async (
+    eventId: string,
+    slug: string,
+    markdown: string,
+    etag?: string,
+    waveLabel?: Wave | null, // omitted = leave as is
+  ) =>
     (
       await call<Survey>(
         "PUT",
         survey(eventId, slug),
-        { markdown },
+        { markdown, ...(waveLabel !== undefined && { waveLabel }) },
         etag ? { "if-match": etag } : {},
       )
     ).data,
+  setWave: (eventId: string, slug: string, waveLabel: Wave | null) =>
+    call<Survey>("PATCH", survey(eventId, slug), { waveLabel }).then((r) => r.data),
   setClosed: (eventId: string, slug: string, closed: boolean) =>
     call<Survey>("PATCH", survey(eventId, slug), { closed }).then((r) => r.data),
   publish: (eventId: string, slug: string, opts: PublishOptions) =>

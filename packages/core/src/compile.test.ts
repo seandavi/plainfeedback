@@ -135,6 +135,13 @@ describe("errors carry line numbers", () => {
       5,
       /repeats the one on line 4/,
     ],
+    ["';' in multi option", "# T\n::: {.multi #a}\nQ\n- x\n- a; b\n:::\n", 5, /can't contain ';'/],
+    [
+      "';' in multi other",
+      '# T\n::: {.multi #a other="x; y"}\nQ\n- x\n- y\n:::\n',
+      2,
+      /can't contain ';'/,
+    ],
     [
       "bad scale",
       '# T\n::: {.likert #a scale="five"}\nQ\n- s\n:::\n',

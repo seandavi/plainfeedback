@@ -161,6 +161,20 @@ describe("public survey API", () => {
     expect((rows[0]?.submittedAt.getTime() ?? 1) % 3_600_000).toBe(0); // to the hour (#37)
   });
 
+  it("stores answers normalised: trimmed, empty answers dropped (#75)", async () => {
+    const w = await world();
+    const answers = { role: "  Visiting scholar ", years: null };
+    expect((await w.submit({ versionId: w.versionId, answers })).status).toBe(201);
+    const [row] = await getDb()
+      .select()
+      .from(responses)
+      .where(eq(responses.surveyVersionId, w.versionId));
+    expect(row?.answers).toEqual({ role: "Visiting scholar" });
+    // Whitespace-only counts as not answered, so a required question still fails.
+    const res = await w.submit({ versionId: w.versionId, answers: { role: "   " } });
+    expect(res.status).toBe(422);
+  });
+
   it("rejects an outdated version with 409", async () => {
     const w = await world({ versions: 2 });
     const res = await w.submit({ versionId: w.ids[0], answers: { role: "Staff" } });
@@ -246,7 +260,72 @@ describe("public survey API", () => {
   it("rate limits per survey across all clients", async () => {
     const w = await world();
     const { submit } = limited(w, { surveyRate: { burst: 2, perSecond: 0 } });
-    expect(await statuses(3, () => submit())).toEqual([201, 201, 429]);
+    expect(await statuses(2, () => submit())).toEqual([201, 201]);
+    const res = await submit();
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after"), "never refills: capped").toBe("3600");
+    expect(await count(w.versionId)).toBe(2);
+  });
+
+  it("sends Retry-After with the time until the next slot, and the same ticket works then (#55)", async () => {
+    const w = await world();
+    let clock = 1_000_000;
+    const { submit, ticket } = limited(w, {
+      now: () => clock,
+      clientRate: { max: 2, windowMs: 60_000 }, // one slot per 30 s
+    });
+    expect(await statuses(2, () => submit("203.0.113.7"))).toEqual([201, 201]);
+    const t = await ticket();
+    const res = await submit("203.0.113.7", { ticket: t });
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("30");
+    clock += 30_000;
+    expect(
+      (await submit("203.0.113.7", { ticket: t })).status,
+      "429 did not use up the ticket",
+    ).toBe(201);
+    expect(await count(w.versionId)).toBe(3);
+  });
+
+  it("defaults to a few hundred submissions per 10 min from one address (#55)", async () => {
+    const w = await world();
+    const { submit } = limited(w, { now: () => 1_000_000 }); // fixed clock: no refill mid-test
+    expect(new Set(await statuses(300, () => submit("203.0.113.7")))).toEqual(new Set([201]));
+    expect((await submit("203.0.113.7")).status).toBe(429);
+  });
+
+  it("accepts each ticket once, after a 422 too, and gives a reused ticket 409 (#60)", async () => {
+    const w = await world();
+    const { submit, ticket } = limited(w);
+    const t = await ticket();
+    expect((await submit(undefined, { ticket: t, answers: { years: 99 } })).status).toBe(422);
+    expect((await submit(undefined, { ticket: t })).status, "fixed answers, same page").toBe(201);
+    const again = await submit(undefined, { ticket: t });
+    expect(again.status).toBe(409);
+    expect((await read(again)).error).toMatch(/already sent/);
+    // Concurrent replays: exactly one is stored.
+    const t2 = await ticket();
+    const both = await Promise.all([
+      submit(undefined, { ticket: t2 }),
+      submit(undefined, { ticket: t2 }),
+    ]);
+    expect(both.map((r) => r.status).sort()).toEqual([201, 409]);
+    expect(await count(w.versionId)).toBe(2);
+  });
+
+  it("issues distinct tickets in the same millisecond and rejects tickets older than 24 h (#60)", async () => {
+    const w = await world();
+    let clock = 1_000_000;
+    const { submit, ticket } = limited(w, { now: () => clock });
+    const [a, b] = [await ticket(), await ticket()];
+    expect(a).not.toBe(b);
+    const old = await ticket();
+    expect((await submit(undefined, { ticket: a })).status).toBe(201);
+    expect((await submit(undefined, { ticket: b })).status).toBe(201);
+    clock += 24 * 3600_000 + 1;
+    const res = await submit(undefined, { ticket: old });
+    expect(res.status).toBe(409);
+    expect((await read(res)).error).toMatch(/submit again/);
     expect(await count(w.versionId)).toBe(2);
   });
 
@@ -259,6 +338,7 @@ describe("public survey API", () => {
     expect(await statuses(4, () => submit("203.0.113.7"))).toEqual([201, 201, 429, 429]);
     const res = await submit("203.0.113.7");
     expect((await read(res)).error).toMatch(/your network.*Wi-Fi/s);
+    expect(res.headers.get("retry-after"), "2 per 10 min: next slot in 300 s").toBe("300");
     // The per-client rejections used none of the survey's budget: one left for someone else.
     expect((await submit("198.51.100.1")).status).toBe(201);
     expect((await submit("198.51.100.2")).status).toBe(429);
@@ -284,10 +364,11 @@ describe("public survey API", () => {
     const w = await world();
     const other = await world();
     const { submit, ticket } = limited(w);
-    const [ms, sig] = (await ticket()).split(".");
+    const [ms, nonce, sig] = (await ticket()).split(".");
     for (const t of [
       "x",
-      `${Number(ms) - 60_000}.${sig}`, // older time, same signature
+      `${Number(ms) - 60_000}.${nonce}.${sig}`, // older time, same signature
+      `${ms}.AAAAAAAAAAAAAAAA.${sig}`, // other nonce, same signature
       await limited(other).ticket(), // another survey, another process's key
     ]) {
       expect((await submit(undefined, { ticket: t })).status).toBe(409);

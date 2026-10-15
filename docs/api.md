@@ -24,7 +24,7 @@ curl -sS -X POST $BASE/api/v1/groups/$GROUP/tokens -H "Origin: $BASE" -b "pf_ses
   -H "Content-Type: application/json" -d '{"name":"ci","role":"creator","expiresInDays":90}' | jq -r .token
 ```
 
-- Scoped to one group; `role` is `creator` or `viewer`, at most your own. The effective role is min(token role, your current role), so it never exceeds what you can do; it stops working when you leave the group, it expires (default 90 days, max 365) or it is revoked. Other groups answer 404.
+- Scoped to one group; `role` is `creator` or `viewer`, at most your own. The effective role is min(token role, your current role), so it never exceeds what you can do; removing you from the group revokes it for good (re-adding you does not revive it); it also stops when it expires (default 90 days, max 365) or it is revoked. Other groups answer 404.
 - Then send `-H "Authorization: Bearer $PF_TOKEN"` instead of the cookie and `Origin` in the steps below.
 - List with `GET /api/v1/groups/{g}/tokens` (owners see all of the group's tokens, others their own) or `GET /api/v1/me/tokens`; revoke with `DELETE /api/v1/groups/{g}/tokens/{id}`.
 - Tokens cannot manage tokens, members, groups or users, and cannot log out (403). See ADR 0010.
@@ -42,8 +42,10 @@ BASE=https://feedback.example.org   # PF_SESSION = value of the pf_session cooki
 ```sh
 EVENT=$(curl -sS -X PUT $BASE/api/v1/groups/my-group/events/spring-2026 \
   -H "Origin: $BASE" -H "Content-Type: application/json" -b "pf_session=$PF_SESSION" \
-  -d '{"title":"Spring workshop"}' | jq -r .id)
+  -d '{"title":"Spring workshop","startsOn":"2026-04-10","endsOn":"2026-04-11"}' | jq -r .id)
 ```
+
+`startsOn` and `endsOn` are optional calendar dates (`YYYY-MM-DD`, no time of day); `endsOn` may not precede `startsOn`. The PUT replaces the event, so omitting a field clears it.
 
 2. Create the survey draft (no `If-Match` needed on create; the `ETag` response header is the draft version).
 
@@ -52,6 +54,8 @@ curl -sS -i -X PUT $BASE/api/v1/events/$EVENT/surveys/feedback \
   -H "Origin: $BASE" -H "Content-Type: text/markdown" -b "pf_session=$PF_SESSION" \
   --data-binary @survey.md      # note the ETag header in the response
 ```
+
+   To tag the survey as a wave, send JSON instead: `{"markdown": "...", "waveLabel": "pre"}`. `waveLabel` is one of `pre`, `post`, `followup`, `other`, or `null` (not a wave, the default, e.g. speaker feedback). An event may have at most one survey each of `pre`, `post` and `followup` (a second gets `409`); `other` can be used any number of times. Change it later with `PATCH /events/{e}/surveys/{s}` and `{"waveLabel": "post"}` (no `If-Match` needed). The markdown-only form leaves an existing wave unchanged.
 
 3. Update the draft: `If-Match` must carry the current ETag (`*` to overwrite blindly). A stale ETag gives 412; a missing one on an existing draft gives 428.
 
@@ -74,6 +78,8 @@ curl -sS -X POST $BASE/api/v1/events/$EVENT/surveys/feedback/validate \
 curl -sS -X POST $BASE/api/v1/events/$EVENT/surveys/feedback/publish \
   -H "Origin: $BASE" -b "pf_session=$PF_SESSION"
 ```
+
+   Once the survey has responses, publish answers 409 with a `changes` list when the draft would change what an existing export column means: a Likert statement reordered, inserted or reworded (anything but adding at the end), a question id reused with another type, or an option removed or renamed. Adding statements at the end, adding options and adding or removing questions are free. Send `{"force": true}` to publish anyway, for example after fixing a typo ([ADR 0015](adr/0015-export-column-stability.md)).
 
 6. List published versions (newest first), or fetch one.
 
@@ -101,7 +107,7 @@ curl -sS "$BASE/api/v1/events/$EVENT/surveys/feedback/responses?format=csv" -b "
 curl -sS "$BASE/api/v1/events/$EVENT/surveys/feedback/versions/1/codebook" -b "pf_session=$PF_SESSION"
 ```
 
-Viewer role or higher. `format=jsonl` (default) or `csv`; `version=<n>` limits to one version; rows are ordered by `seq`; `since` is exclusive and is the `seq` of the last row you received (to resume) or an ISO time (a coarse filter: `submittedAt` is recorded to the hour only, [#37](https://github.com/seandavi/plainfeedback/issues/37)). CSV is wide (multi answers joined with `;`, Likert as `<id>_<statement number>`, Other text in `<id>_other`, `seq` and `surveyVersion` columns, union of columns across versions). Cells starting with `=`, `+`, `-` or `@` get a leading single quote (formula-injection guard). The codebook maps Likert statement numbers to text and lists scale anchors and free-text questions. Parquet is deferred: DuckDB and polars read these files directly.
+Viewer role or higher. `format=jsonl` (default) or `csv`; `version=<n>` limits to one version; rows are ordered by `seq`. `since` is either the `seq` of the last row you received (exclusive; this is the resume cursor) or an ISO time with an offset such as `2026-10-14T22:00:00Z`. An ISO `since` is a coarse filter, not a cursor: `submittedAt` is recorded to the hour only ([#37](https://github.com/seandavi/plainfeedback/issues/37)), so it returns everything from the start of that hour on, and `since=22:30Z` includes the 22:00 rows. Any other `since` is a 400. `seq` is assigned when a response is inserted, not when it commits, so a slow submission can become visible after a higher `seq` you already exported. To resume without losing rows, ask with an overlap (`since` = the highest `seq` you have minus 1000) and drop rows whose `responseId` you already have. If the export fails part way, the transfer is aborted rather than ended cleanly, so a truncated download shows up as a network error, not a short file. CSV is wide (multi answers joined with `;`, Likert as `<id>_<statement number>`, Other text in `<id>_other`, `seq` and `surveyVersion` columns, union of columns across versions). Publishing keeps a column's meaning stable across versions unless an author forced a change (see publish above), so before aggregating a column across versions, check each version's codebook or export one `version` at a time. CSV is meant for spreadsheets: text cells that start with `=`, `+`, `-` or `@` (or their fullwidth forms `＝＋－＠`, also after leading whitespace), or with a tab or carriage return, get a leading single quote so a spreadsheet shows text instead of running a formula. That also changes legitimate text such as `-- nothing to add`. JSONL is the lossless format: answers exactly as stored, multi answers as arrays. Use it for analysis and text coding. Multi option labels never contain `;` (the compiler rejects it), so the CSV `;` join splits back exactly. Answers are stored normalised: strings trimmed, unrated Likert statements removed, and empty answers (`null`, `""`, `[]`, `{}`) left out, so a key present in JSONL means the same "answered" as a filled CSV cell. The codebook maps Likert statement numbers to text and lists scale anchors; `freeText: true` marks every question that can hold respondent-written text, including choice and multi questions with an Other box (the text is in `<id>_other`). Free text can identify people: treat it accordingly. Parquet is deferred: DuckDB and polars read these files directly.
 
 ## Coming
 

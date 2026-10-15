@@ -270,6 +270,14 @@ function finish(
       if (other === "") e("'other' needs a label, like other=\"Other\", or write just 'other'.");
       else if (other !== undefined && items.includes(other))
         e(`The 'other' label "${other}" is also a listed option. Remove one of them.`);
+      // The CSV export joins multi answers with ';' (#64), so a label containing one can't be split.
+      if (type === "multi") {
+        for (const it of b.items)
+          if (it.text.includes(";"))
+            err(it.line, `A .multi option can't contain ';'. Use a comma or 'and' instead.`);
+        if (typeof other === "string" && other.includes(";"))
+          e(`The 'other' label "${other}" can't contain ';' in a .multi question.`);
+      }
       q = { ...common, type, options: items, ...(other !== undefined ? { other } : {}) };
       break;
     }
