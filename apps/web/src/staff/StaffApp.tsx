@@ -76,7 +76,7 @@ export function ErrorNote({ error }: { error: unknown }) {
             ? error.message
             : "Something went wrong.";
   return (
-    <p role="alert" className="form-message">
+    <p role="alert" className="empty error-note">
       {text} {e?.kind === "unauthenticated" && <a href={LOGIN_URL}>Sign in</a>}
     </p>
   );
@@ -159,7 +159,7 @@ function route(path: string, me: Me): ReactNode {
   if (g && e && s) return <EditorPage key={path} me={me} g={g} e={e} s={s} />;
   if (g && e) return <EventPage key={path} me={me} g={g} e={e} />;
   if (g) return <GroupPage key={path} me={me} g={g} />;
-  if (/^\/app\/?$/.test(path)) return <Dashboard />;
+  if (/^\/app\/?$/.test(path)) return <Dashboard me={me} />;
   return <p role="alert">Page not found.</p>;
 }
 

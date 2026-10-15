@@ -377,4 +377,13 @@ describe("StaffApp", () => {
     expect(screen.getByText("a@b.org")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
   });
+
+  it("explains an empty group list with a copyable email", async () => {
+    routes["GET /api/v1/me"] = () => [200, { id: "u", email: "a@b.org", isAdmin: false }];
+    routes["GET /api/v1/groups"] = () => [200, []];
+    history.replaceState(null, "", "/app");
+    render(<StaffApp />);
+    expect(await screen.findByText("You're signed in as a@b.org.")).toBeTruthy();
+    expect(screen.getByText("a@b.org", { selector: "code" })).toBeTruthy();
+  });
 });

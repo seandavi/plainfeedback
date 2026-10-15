@@ -1,6 +1,6 @@
 // Dashboard (#19): my groups with my role; per group its events and surveys with status and counts.
 import { surveyStatus as coreStatus } from "@plainfeedback/core";
-import { api, type Group, type SurveySummary } from "./api";
+import { api, type Group, type Me, type SurveySummary } from "./api";
 import { Link, usePageTitle } from "./router";
 import { ErrorNote, paths, useLoad } from "./StaffApp";
 
@@ -39,7 +39,7 @@ async function load(groups: Group[]) {
   );
 }
 
-export function Dashboard() {
+export function Dashboard({ me }: { me: Me }) {
   const data = useLoad(async () => load(await api.groups()), "dashboard");
   usePageTitle("Your groups");
   return (
@@ -50,7 +50,18 @@ export function Dashboard() {
       ) : !data.data ? (
         <p aria-busy="true">Loading…</p>
       ) : data.data.length === 0 ? (
-        <p>You are not in any group yet. Ask a group owner or an admin to add you.</p>
+        me.isAdmin ? (
+          <p>There are no groups yet.</p>
+        ) : (
+          <section className="empty" aria-labelledby="empty-h">
+            <h2 id="empty-h">You're signed in as {me.email}.</h2>
+            <p>
+              You aren't a member of any group yet. Ask a group owner to add{" "}
+              <code className="copy">{me.email}</code>.
+            </p>
+            <p className="meta">Wrong account? Use Sign out at the top right.</p>
+          </section>
+        )
       ) : (
         data.data.map(([g, rows]) => (
           <section key={g.id} aria-labelledby={`g-${g.id}`}>
