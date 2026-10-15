@@ -36,12 +36,17 @@ describe("ShareLink", () => {
     expect(screen.getByText("Download SVG").getAttribute("href")).toBe(`${base}/qr.svg`);
     expect(screen.getByText("Download PNG").getAttribute("href")).toBe(`${base}/qr.png?size=1024`);
     expect(screen.queryByText(/Not published/)).toBeNull();
+    expect(screen.getByRole("link", { name: "Open link" }).getAttribute("href")).toBe(url);
   });
 
   it("warns when unpublished and reports load failures", async () => {
     stub({ ok: true, body: { url: "https://x.org/s/a", published: false } });
     render(<ShareLink eventId="e" survey="s" />);
     expect(await screen.findByText(/Not published yet/)).toBeTruthy();
+    // #69: no QR, downloads or Open link until published.
+    expect(screen.queryByRole("img")).toBeNull();
+    expect(screen.queryByText("Download PNG")).toBeNull();
+    expect(screen.queryByRole("link", { name: "Open link" })).toBeNull();
     cleanup();
     stub({ ok: false });
     render(<ShareLink eventId="e" survey="s" />);

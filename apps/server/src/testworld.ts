@@ -11,11 +11,11 @@ export const WHO = ["anonymous", "nonMember", "viewer", "creator", "owner", "adm
 export const useWorld = () => {
   const getDb = useTestDb();
 
-  const makeApp = () =>
+  const makeApp = (log: (line: string) => void = () => {}) =>
     createApp({
       publicBaseUrl: "https://pf.example.org",
       ping: async () => {},
-      log: () => {},
+      log,
       participant: { minSubmitMs: 0 }, // bot timing check is tested in public.test.ts
       auth: {
         db: getDb(),
