@@ -1,6 +1,6 @@
 // Admin area (#19): users, groups, group owners. Shown to admins only, but the API is the check.
 import { type FormEvent, useState } from "react";
-import { ApiError, api, type Group, type Me } from "./api";
+import { api, type Group, type Me } from "./api";
 import { ConfirmButton, useAction, when } from "./Manage";
 import { Link, usePageTitle } from "./router";
 import { ErrorNote, paths, useLoad } from "./StaffApp";
@@ -110,6 +110,7 @@ function Groups() {
   const groups = useLoad(api.groups, "groups");
   const { error, setError, run } = useAction(groups.reload);
   const [renaming, setRenaming] = useState<string>();
+  const [note, setNote] = useState("");
   if (groups.error) return <ErrorNote error={groups.error} />;
   if (!groups.data) return <p aria-busy="true">Loading groups…</p>;
   const list = groups.data;
@@ -136,14 +137,14 @@ function Groups() {
     const form = ev.currentTarget;
     const f = new FormData(form);
     const email = String(f.get("email")).trim();
+    setNote("");
     return run(async () => {
-      try {
-        await api.setMember(String(f.get("group")), email, "owner");
-      } catch (x) {
-        if (x instanceof ApiError && x.kind === "notFound")
-          throw new Error(`No user with the email ${email}. Ask them to sign in once first.`);
-        throw x;
-      }
+      const r = await api.setMember(String(f.get("group")), email, "owner");
+      setNote(
+        "userId" in r
+          ? `${r.email} is now an owner.`
+          : `Invited ${r.email} as owner. It takes effect when they first sign in.`,
+      );
       form.reset();
     });
   };
@@ -233,6 +234,9 @@ function Groups() {
           </tbody>
         </table>
       </section>
+      <p role="status" className="status">
+        {note}
+      </p>
       {error !== undefined && <ErrorNote error={error} />}
       <form className="create" onSubmit={create} onChange={() => setError(undefined)}>
         <fieldset>
@@ -259,7 +263,10 @@ function Groups() {
             </label>
             <label>
               Owner email <input name="email" type="email" required />
-              <span className="meta">They must have signed in once.</span>
+              <span className="meta">
+                Not signed in yet? They get a pending invite that takes effect at their first
+                sign-in.
+              </span>
             </label>
             <button type="submit">Make owner</button>
           </fieldset>

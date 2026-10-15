@@ -198,9 +198,12 @@ describe("admin", () => {
     );
   });
 
-  it("assigns an owner by email and explains an unknown user", async () => {
+  it("assigns an owner by email and explains an invite for an unknown user", async () => {
     adminRoutes();
-    routes[`PUT /api/v1/groups/${G}/members/new%40x.org`] = () => [404, { error: "not found" }];
+    routes[`PUT /api/v1/groups/${G}/members/new%40x.org`] = () => [
+      202,
+      { email: "new@x.org", role: "owner", createdAt: "2026-10-01T00:00:00Z" },
+    ];
     routes[`PUT /api/v1/groups/${G}/members/bob%40x.org`] = () => [
       200,
       { userId: "u2", email: "bob@x.org", role: "owner" },
@@ -210,7 +213,7 @@ describe("admin", () => {
     const email = screen.getByLabelText(/Owner email/);
     fireEvent.change(email, { target: { value: "new@x.org" } });
     fireEvent.click(screen.getByRole("button", { name: "Make owner" }));
-    expect(await screen.findByText(/Ask them to sign in once first/)).toBeTruthy();
+    expect(await screen.findByText(/Invited new@x.org as owner\. .*first sign in/)).toBeTruthy();
     fireEvent.change(email, { target: { value: "bob@x.org" } });
     fireEvent.click(screen.getByRole("button", { name: "Make owner" }));
     await waitFor(() =>
