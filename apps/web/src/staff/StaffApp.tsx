@@ -434,7 +434,13 @@ function Duplicate({
             </label>
             <label>
               Short name of the copy
-              <input name="slug" required pattern={SLUG.source} maxLength={64} defaultValue={slug} />
+              <input
+                name="slug"
+                required
+                pattern={SLUG.source}
+                maxLength={64}
+                defaultValue={slug}
+              />
             </label>
             {error !== undefined && <ErrorNote error={error} />}
             <div className="actions">

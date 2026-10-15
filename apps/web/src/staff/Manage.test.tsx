@@ -640,7 +640,9 @@ describe("duplicate and templates (#74)", () => {
     fireEvent.change(await screen.findByLabelText("Title"), {
       target: { value: "Spring check-in" },
     });
-    fireEvent.change(screen.getByLabelText(/Short name \(used in exports/), { target: { value: "cfde" } });
+    fireEvent.change(screen.getByLabelText(/Short name \(used in exports/), {
+      target: { value: "cfde" },
+    });
     fireEvent.change(screen.getByLabelText(/Start from/), { target: { value: "cfde" } });
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(() => expect(called("PUT", "/api/v1/events/ev1/surveys/cfde")).toHaveLength(1));
