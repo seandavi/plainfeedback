@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
+import { scalarConfig } from "./openapi";
 import { generateSpec, SNAPSHOT, specApp } from "./openapi-gen";
 
 // biome-ignore lint/suspicious/noExplicitAny: test-only view of the JSON spec
@@ -59,7 +60,16 @@ test("docs page loads only same-origin assets, all of which are served", async (
   }
   const init = await (await app.request("/api/docs/init.js")).text();
   expect(init).not.toMatch(/https?:\/\/|\/\/[a-z]/);
-  expect(init).toContain("validatorUrl: null");
+  // The settings that keep Scalar from calling out; docs-browser.test.ts checks them at runtime.
+  expect(scalarConfig).toMatchObject({
+    url: "/openapi.json",
+    withDefaultFonts: false,
+    proxyUrl: "",
+    telemetry: false,
+    agent: { disabled: true },
+    mcp: { disabled: true },
+  });
+  expect(init).toContain(JSON.stringify(scalarConfig));
 });
 
 test("docs page has no inline script, so it works under script-src self", async () => {

@@ -16,7 +16,7 @@ Live preview: <https://plainfeedback.cancerdatasci.org> (a preview instance; dat
 - **Participant page.** Keyboard and screen-reader friendly, no cookies, no IP or user-agent logging, a privacy statement per survey, in-memory rate limits.
 - **Responses page.** Counts and per-row delete in the staff UI, with a warning that free text can identify people.
 - **Export.** CSV (wide) and JSONL for a survey, an event or a group, and the whole deployment for admins. Every row names its event, survey and wave, and each version has a codebook.
-- **API.** Per-user API tokens scoped to one group; OpenAPI spec at `/openapi.json`, Swagger UI at `/api/docs` ([API guide](docs/api.md)).
+- **API.** Per-user API tokens scoped to one group; OpenAPI spec at `/openapi.json`, Scalar API reference at `/api/docs` ([API guide](docs/api.md)).
 - **Deletion.** Real, cascading deletes for responses, surveys, events and groups. Nothing is deleted on a schedule.
 
 ## How it works
