@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { Text } from "@codemirror/state";
+import { compile } from "@plainfeedback/core";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useImperativeHandle } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { toDiagnostics } from "./CodeEditor";
-import { Editor } from "./Editor";
+import { insertSnippet, toDiagnostics } from "./CodeEditor";
+import { Editor, SNIPPETS } from "./Editor";
 import { StaffApp } from "./StaffApp";
 
 // CodeMirror needs layout APIs jsdom lacks; the editor flows only need a controlled text field.
@@ -136,15 +137,19 @@ describe("Editor", () => {
     );
   });
 
-  it("on 412 offers overwrite (re-fetching the ETag) or reload", async () => {
+  it("on 412 offers overwrite (with their ETag) or reload; the safe choice has focus (#70)", async () => {
     routes["PUT /api/v1/events/ev/surveys/fb"] = (c) =>
       c.headers["if-match"] === '"e9"' ? [200, survey({ etag: '"e10"' })] : [412, { error: "x" }];
     const box = await setup();
     const mine = `${MD}\n<!-- mine -->`;
     type(box, mine);
+    routes["GET /api/v1/events/ev/surveys/fb"] = () => [200, survey({ etag: '"e9"' })];
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
     const dialog = await screen.findByRole("dialog", { name: "This draft changed elsewhere" });
-    routes["GET /api/v1/events/ev/surveys/fb"] = () => [200, survey({ etag: '"e9"' })];
+    expect(document.activeElement?.textContent).toBe("Keep editing");
+    // Both versions are shown, with my changed line marked.
+    expect(within(dialog).getByText("<!-- mine -->").tagName).toBe("MARK");
+    expect(within(dialog).getByRole("heading", { name: "Their version" })).toBeTruthy();
     fireEvent.click(within(dialog).getByRole("button", { name: "Overwrite with mine" }));
     await screen.findByText("Draft saved.");
     const puts = calls.filter((c) => c.method === "PUT");
@@ -152,13 +157,18 @@ describe("Editor", () => {
     expect(JSON.parse(puts[1]?.body ?? "").markdown).toBe(mine);
     expect(screen.queryByRole("dialog")).toBeNull();
 
-    // Reload path: their markdown replaces mine.
+    // Copy, then the reload path: their markdown replaces mine.
     routes["PUT /api/v1/events/ev/surveys/fb"] = () => [412, { error: "x" }];
+    routes["GET /api/v1/events/ev/surveys/fb"] = () => [200, survey({ markdown: "# Theirs\n" })];
     type(box, `${mine}!`);
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
     const again = await screen.findByRole("dialog");
-    routes["GET /api/v1/events/ev/surveys/fb"] = () => [200, survey({ markdown: "# Theirs\n" })];
-    fireEvent.click(within(again).getByRole("button", { name: "Reload theirs" }));
+    const writeText = vi.fn(async (_t: string) => {});
+    Object.assign(navigator, { clipboard: { writeText } });
+    fireEvent.click(within(again).getByRole("button", { name: "Copy my version" }));
+    await within(again).findByText(/on the clipboard/);
+    expect(writeText).toHaveBeenCalledWith(`${mine}!`);
+    fireEvent.click(within(again).getByRole("button", { name: "Discard mine and load theirs" }));
     await waitFor(() => expect(box.value).toBe("# Theirs\n"));
   });
 
@@ -170,11 +180,36 @@ describe("Editor", () => {
     await setup();
     fireEvent.click(screen.getByRole("button", { name: "Publish…" }));
     const dialog = await screen.findByRole("dialog", { name: "Publish this survey" });
-    expect(within(dialog).getByLabelText(/Privacy statement/)).toBeTruthy();
+    const privacy = within(dialog).getByLabelText(/Privacy statement/) as HTMLTextAreaElement;
+    // First publish starts from the template and asks for contact and retention (#65).
+    expect(privacy.value).toContain("[[CONTACT EMAIL]]");
+    expect(privacy.value).toContain("[[RETENTION");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Publish" }));
+    await within(dialog).findByText(/Replace every \[\[\.\.\.\]\] in the privacy statement/);
+    expect(calls.find((c) => c.method === "POST")).toBeUndefined(); // never sent
+    fireEvent.change(privacy, { target: { value: "" } }); // empty: the server's default
     fireEvent.click(within(dialog).getByRole("button", { name: "Publish" }));
     await within(dialog).findByText(/Line 7: Unknown question type/);
     const post = calls.find((c) => c.method === "POST");
     expect(JSON.parse(post?.body ?? "")).toEqual({ opensAt: null, closesAt: null });
+  });
+
+  it("on 409 with changes, lists them and publishes anyway with force (#52)", async () => {
+    const v = { version: 1, publishedAt: "2026-10-02T10:00:00Z", opensAt: null, closesAt: null };
+    routes["POST /api/v1/events/ev/surveys/fb/publish"] = (c) =>
+      JSON.parse(c.body ?? "{}").force
+        ? [201, v]
+        : [409, { error: "This survey already has responses.", changes: ["Statement 1 moved."] }];
+    await setup();
+    fireEvent.click(screen.getByRole("button", { name: "Publish…" }));
+    const dialog = await screen.findByRole("dialog");
+    // First publish pre-fills the placeholder template (#65); empty means the server default.
+    fireEvent.change(within(dialog).getByLabelText(/Privacy statement/), { target: { value: "" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Publish" }));
+    await within(dialog).findByText("Statement 1 moved.");
+    expect(within(dialog).getByText("This survey already has responses.")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Publish anyway" }));
+    await screen.findByText(/Published version 1\./);
   });
 
   it("publishes and lists the new version", async () => {
@@ -188,10 +223,81 @@ describe("Editor", () => {
     });
     routes["GET /api/v1/events/ev/surveys/fb/versions"] = () => [200, [v]];
     fireEvent.click(within(dialog).getByRole("button", { name: "Publish" }));
-    await screen.findByText("Published version 1.");
+    routes["GET /api/v1/events/ev/surveys/fb/link"] = () => [
+      200,
+      { url: "http://x/s/abc", published: true },
+    ];
+    await screen.findByText(/Published version 1\./);
     expect(screen.getByText(/Version 1, published/)).toBeTruthy();
+    // #69: the share panel comes first after publishing and takes focus.
+    const link = await screen.findByLabelText("Survey link");
+    await waitFor(() => expect(document.activeElement).toBe(link));
+    const share = screen.getByRole("region", { name: "Share this survey" });
+    expect(
+      share.compareDocumentPosition(screen.getByRole("region", { name: "Markdown" })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     const post = calls.find((c) => c.method === "POST");
     expect(JSON.parse(post?.body ?? "").privacyStatement).toBe("We keep nothing.");
+  });
+
+  it("insert is a menu button: arrows only move focus, an item inserts (#51)", async () => {
+    const box = await setup();
+    const button = screen.getByRole("button", { name: "Insert question" });
+    expect(button.getAttribute("aria-haspopup")).toBe("menu");
+    fireEvent.keyDown(button, { key: "ArrowDown" });
+    const menu = await screen.findByRole("menu", { name: "Insert question" });
+    const items = within(menu).getAllByRole("menuitem");
+    await waitFor(() => expect(document.activeElement).toBe(items[0]));
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(items[1]);
+    fireEvent.keyDown(menu, { key: "ArrowUp" });
+    fireEvent.keyDown(menu, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(items.at(-1)); // wraps
+    expect(box.value).toBe(MD); // browsing changed nothing
+    fireEvent.keyDown(menu, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(button);
+
+    fireEvent.click(button);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Number" }));
+    expect(box.value).toContain("::: {.number #number-1");
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("marks unpublished changes, shows the close date, and confirms closing (#69)", async () => {
+    const v = {
+      version: 1,
+      publishedAt: "2026-10-02T10:00:00Z",
+      opensAt: null,
+      closesAt: "2026-11-01T10:00:00Z",
+    };
+    routes["GET /api/v1/events/ev/surveys/fb/versions"] = () => [200, [v]];
+    routes["GET /api/v1/events/ev/surveys/fb/versions/1"] = () => [
+      200,
+      { ...v, markdown: "# Fall feedback\n", model: {}, privacyStatement: "" },
+    ];
+    routes["PATCH /api/v1/events/ev/surveys/fb"] = () => [200, survey({ closed: true })];
+    await setup();
+    expect(await screen.findByText(/unpublished changes: participants still see v1/)).toBeTruthy();
+    expect(screen.getByText(/^Published v1/).textContent).toMatch(/ · closes /);
+    expect(screen.getByRole("button", { name: "Publish…" }).className).toBe("primary");
+
+    fireEvent.click(screen.getByRole("button", { name: "Close survey…" }));
+    const dialog = await screen.findByRole("dialog", { name: "Close this survey?" });
+    expect(document.activeElement?.textContent).toBe("Cancel");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close survey" }));
+    await screen.findByText("Survey closed for responses.");
+    expect(calls.filter((c) => c.method === "PATCH")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Reopen survey" })).toBeTruthy();
+  });
+
+  it("hides Close for never-published drafts and the QR before publishing (#69)", async () => {
+    await setup();
+    await screen.findByText(/Not published yet: the link/);
+    expect(screen.queryByRole("button", { name: /Close survey/ })).toBeNull();
+    expect(screen.queryByRole("img", { name: /QR code/ })).toBeNull();
+    expect(screen.queryByText(/unpublished changes/)).toBeNull();
   });
 
   it("is read-only for viewers but still previews", async () => {
@@ -201,6 +307,37 @@ describe("Editor", () => {
       expect(screen.queryByRole("button", { name })).toBeNull();
     expect(preview().getByLabelText("Any comments?")).toBeTruthy();
     expect(screen.getByText(/read-only/)).toBeTruthy();
+  });
+});
+
+describe("insertSnippet (#51)", () => {
+  const snippet = SNIPPETS.choice.replace("ID", "choice-1");
+  const insert = (doc: string, cursor: number) => {
+    const { at, insert } = insertSnippet(doc, cursor, snippet);
+    return doc.slice(0, at) + insert + doc.slice(at);
+  };
+  const doc = "# T\n\nIntro.\n\n::: {.text #a}\nQ\n:::\n\n::: {.text #b}\nQ\n:::\n";
+
+  it("never-focused (cursor 0) or in the intro: appends, title stays on line 1, compiles", () => {
+    for (const cursor of [0, doc.indexOf("Intro")]) {
+      const out = insert(doc, cursor);
+      expect(out.startsWith("# T\n")).toBe(true);
+      expect(out.endsWith(`${snippet}\n`)).toBe(true);
+      expect(compile(out).errors).toBeUndefined();
+    }
+    expect(compile(insert("# T", 0)).errors).toBeUndefined();
+  });
+
+  it("inside a block: after its closing line; between blocks: after the cursor's line", () => {
+    const inFirst = insert(doc, doc.indexOf("Q"));
+    expect(inFirst.indexOf("#choice-1")).toBeLessThan(inFirst.indexOf("#b"));
+    expect(inFirst.indexOf("#choice-1")).toBeGreaterThan(inFirst.indexOf("#a"));
+    expect(compile(inFirst).errors).toBeUndefined();
+    const onOpening = insert(doc, doc.indexOf("::: {.text #b}") + 2);
+    expect(onOpening.trimEnd().endsWith(snippet)).toBe(true);
+    expect(compile(onOpening).errors).toBeUndefined();
+    const between = insert(doc, doc.indexOf("\n\n::: {.text #b}") + 1);
+    expect(compile(between).errors).toBeUndefined();
   });
 });
 

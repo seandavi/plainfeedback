@@ -4,7 +4,8 @@
   --fg: #1a1a1a;
   --bg: #fff;
   --muted: #555;
-  --line: #ccc;
+  --line: #ccc; /* decorative dividers only */
+  --control-border: #767676; /* inputs and buttons: >= 3:1 on --bg (WCAG 1.4.11, #71) */
   --accent: #0b57d0;
   --error: #b3261e;
   --panel: #f3f4f6;
@@ -18,6 +19,7 @@
     --bg: #121212;
     --muted: #aaa;
     --line: #444;
+    --control-border: #8a8a8a;
     --accent: #8ab4f8;
     --error: #f2b8b5;
     --panel: #1e1f22;
@@ -88,7 +90,7 @@ textarea {
   width: 100%;
   font: inherit;
   padding: 0.5rem;
-  border: 1px solid var(--line);
+  border: 1px solid var(--control-border);
   border-radius: 4px;
   background: var(--bg);
   color: var(--fg);
@@ -127,17 +129,44 @@ input.other {
   padding: 0.75rem 0;
   min-width: 0;
 }
+.statement.unrated {
+  border-left: 4px solid var(--error);
+  padding-left: 0.5rem;
+}
+.not-rated {
+  color: var(--error);
+  font-weight: 600;
+}
+.ends {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+  margin: 0;
+}
+.ends span:last-child {
+  text-align: right;
+}
+.limit {
+  display: block;
+  color: var(--error);
+  font-size: 0.875rem;
+}
 .statement legend {
   padding: 0;
   margin-bottom: 0.4rem;
 }
+/* Columns just wider than the radio (#66): a 5-point scale stays on one line at 200% text on a
+   phone; an 11-point one wraps rather than overlapping. Each label is the tap target. */
 .scale {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
 }
 .scale label {
-  flex: 1 0 2.75rem;
+  flex: 1 0 1.5rem;
+  min-height: 44px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -218,7 +247,7 @@ a.button {
   font: inherit;
   min-height: 2.75rem;
   padding: 0.4rem 0.9rem;
-  border: 1px solid var(--line);
+  border: 1px solid var(--control-border);
   border-radius: 6px;
   background: var(--bg);
   color: var(--fg);
@@ -308,7 +337,7 @@ a.button {
   width: 100%;
   font: inherit;
   padding: 0.5rem;
-  border: 1px solid var(--line);
+  border: 1px solid var(--control-border);
   border-radius: 4px;
   background: var(--bg);
   color: var(--fg);
@@ -339,7 +368,7 @@ a.button {
 }
 /* CodeMirror's own .cm-scroller is the only scroller (keyboard and caret scrolling work, #78). */
 .code {
-  border: 1px solid var(--line);
+  border: 1px solid var(--control-border);
   border-radius: 4px;
 }
 .code .cm-editor {
@@ -376,6 +405,62 @@ a.button {
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: 1rem;
+}
+/* Editor toolbar and share panel (#51, #69); colours come from the shared tokens. */
+.staff button.primary {
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+.staff button.danger {
+  color: var(--error);
+  border-color: var(--error);
+}
+.menu {
+  position: relative;
+}
+.menu [role="menu"] {
+  position: absolute;
+  z-index: 10;
+  margin: 0.25rem 0 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  min-width: 14rem;
+}
+.staff .menu [role="menuitem"] {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+}
+.share {
+  margin: 0.75rem 0;
+}
+.share-url {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.share-url input {
+  flex: 1 1 20rem;
+  min-width: 0;
+}
+.share-downloads {
+  display: flex;
+  gap: 1.5rem;
+  list-style: none;
+  padding: 0;
+}
+.compare {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--line);
+  padding: 0.5rem;
+  font-size: 0.875rem;
 }
 dialog {
   color: var(--fg);
