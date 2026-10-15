@@ -2821,7 +2821,7 @@
           "surveys"
         ],
         "summary": "Publish the stored draft as a new immutable version (creator)",
-        "description": "Fields left out are inherited from the latest version (privacy statement defaults to a template). Publishing an unchanged draft with unchanged settings returns the latest version (200).",
+        "description": "Fields left out are inherited from the latest version (privacy statement defaults to a template). Publishing an unchanged draft with unchanged settings returns the latest version (200). Once the survey has responses, a draft that would change what an existing export column means (reordered, inserted or reworded Likert statements, a reused id with a new type, a removed or renamed option) is refused with 409 and `changes`, unless `force` is true (ADR 0015).",
         "parameters": [
           {
             "schema": {
@@ -2867,6 +2867,10 @@
                       "null"
                     ],
                     "format": "date-time"
+                  },
+                  "force": {
+                    "type": "boolean",
+                    "description": "Publish even if export columns would change meaning"
                   }
                 },
                 "additionalProperties": false
@@ -2936,11 +2940,25 @@
             }
           },
           "409": {
-            "description": "Conflict, e.g. the group is archived",
+            "description": "The group is archived, or (with `changes`) the draft would change what existing export columns mean; publish with `force` to accept",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "changes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
                 }
               }
             }
