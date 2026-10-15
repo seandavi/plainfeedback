@@ -5,7 +5,7 @@ import { useTestDb } from "./testdb";
 // The app's role from db/ (#76): rows only, so DB-level immutability does not rest on app code.
 const getDb = useTestDb();
 
-test("plainfeedback_app reads and writes rows but cannot disable the trigger or truncate", async () => {
+test("plainfeedback_app reads and writes rows but cannot update responses, disable the trigger or truncate", async () => {
   const owner = getDb().$client;
   // Cluster-wide and maybe created by compose already; SET ROLE (the owner is a superuser in
   // compose and CI) avoids needing its password.
@@ -23,6 +23,8 @@ test("plainfeedback_app reads and writes rows but cannot disable the trigger or 
     await app.query("select count(*) from survey_versions");
     await app.query("insert into later_table values (1)");
     for (const ddl of [
+      "update responses set answers = answers",
+      "update survey_versions set version = version",
       "alter table survey_versions disable trigger survey_versions_immutable",
       "truncate survey_versions",
       "truncate responses",
