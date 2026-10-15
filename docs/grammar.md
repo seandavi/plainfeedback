@@ -58,6 +58,13 @@ edit the wording. Ids use lowercase letters, digits, `-` and `_`, start with a
 letter, and must be different for each question in the survey. Good:
 `#affiliation`, `#years-in-field`, `#q3`.
 
+To ask the same questions at another event, or before and after one, copy the
+survey instead of retyping it: **Duplicate** next to a survey on the event page
+copies its draft into a new survey in the same or another event of the group,
+and **Start from** on the new-survey form offers the CFDE example. Keep the ids
+of copied questions unchanged, so answers line up across events; give a new id
+only to a question whose meaning changed.
+
 Once a survey has responses, publishing asks you to confirm changes that would
 mix different answers in one export column: reordering, inserting or rewording
 rating-grid statements (add new ones at the end instead), reusing an id for a

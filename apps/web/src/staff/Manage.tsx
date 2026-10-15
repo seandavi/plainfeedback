@@ -31,12 +31,14 @@ export function ConfirmButton({
   title,
   children,
   onConfirm,
+  danger = true,
 }: {
   label: string;
   name: string;
   title: string;
   children: ReactNode;
   onConfirm: () => void;
+  danger?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const opener = useRef<HTMLButtonElement>(null);
@@ -51,6 +53,7 @@ export function ConfirmButton({
         ref={opener}
         type="button"
         aria-label={`${label} ${name}`}
+        className={danger ? "danger" : undefined}
         onClick={() => setOpen(true)}
       >
         {label}
@@ -64,6 +67,7 @@ export function ConfirmButton({
             </button>
             <button
               type="button"
+              className={danger ? "danger" : "primary"}
               onClick={() => {
                 close();
                 onConfirm();
@@ -99,6 +103,7 @@ const RoleSelect = ({
 export function Members({ me, group, g }: { me: Me; group: Group; g: string }) {
   const members = useLoad(() => api.members(g), g);
   const { error, run } = useAction(members.reload);
+  const [note, setNote] = useState("");
   if (members.error) return <ErrorNote error={members.error} />;
   if (!members.data) return <p aria-busy="true">Loading members…</p>;
   const manage = me.isAdmin || group.role === "owner";
@@ -121,6 +126,10 @@ export function Members({ me, group, g }: { me: Me; group: Group; g: string }) {
   return (
     <section aria-labelledby="members-h">
       <h2 id="members-h">Members</h2>
+      <p className="meta">
+        Owner: everything below, plus members and deleting responses. Creator: create and edit
+        events and surveys. Viewer: read surveys and see and download responses.
+      </p>
       <section
         className="table-wrap"
         // biome-ignore lint/a11y/noNoninteractiveTabindex: scrollable region must be keyboard-focusable
@@ -145,7 +154,13 @@ export function Members({ me, group, g }: { me: Me; group: Group; g: string }) {
                     <RoleSelect
                       label={`Role of ${m.email}`}
                       value={m.role}
-                      onChange={(role) => run(() => api.setMember(g, m.userId, role))}
+                      onChange={(role) => {
+                        setNote("");
+                        run(async () => {
+                          await api.setMember(g, m.userId, role);
+                          setNote(`${m.email} is now ${role}.`);
+                        });
+                      }}
                     />
                   ) : (
                     m.role
@@ -169,6 +184,9 @@ export function Members({ me, group, g }: { me: Me; group: Group; g: string }) {
           </tbody>
         </table>
       </section>
+      <p role="status" className="status">
+        {note}
+      </p>
       {error !== undefined && <ErrorNote error={error} />}
       {manage && (
         <form className="create" onSubmit={add}>
@@ -227,8 +245,10 @@ export function Tokens({ me, group, g }: { me: Me; group: Group; g: string }) {
     }
   };
   return (
-    <section aria-labelledby="tokens-h">
-      <h2 id="tokens-h">API tokens</h2>
+    <details className="advanced">
+      <summary>
+        <h2 id="tokens-h">Advanced: API tokens</h2>
+      </summary>
       <p className="meta">
         {all ? "All tokens for this group." : "Your tokens for this group."} A token can do what you
         can do here, at most its role, until it expires or is revoked.
@@ -341,7 +361,7 @@ export function Tokens({ me, group, g }: { me: Me; group: Group; g: string }) {
           </fieldset>
         </form>
       )}
-    </section>
+    </details>
   );
 }
 

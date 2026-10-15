@@ -262,6 +262,32 @@ a.button {
   color: var(--bg);
   font-weight: 600;
 }
+/* Button hierarchy (#78): primary for Save/Publish, outlined danger for destructive actions. */
+.staff button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+.staff button.danger {
+  border-color: var(--error);
+  color: var(--error);
+}
+.list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  max-width: 48rem;
+}
+.list li .danger {
+  margin-left: auto; /* away from the row's main link */
+}
+.guide {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-variant-ligatures: none;
+}
 .staff button.link {
   min-height: 0;
   padding: 0;
@@ -300,6 +326,9 @@ a.button {
   display: block;
   margin: 0 0 0.75rem;
 }
+.create label .meta {
+  display: block;
+}
 .create input,
 .publish input,
 .publish textarea {
@@ -337,15 +366,14 @@ a.button {
   font-size: 1rem;
   margin: 0 0 0.5rem;
 }
+/* CodeMirror's own .cm-scroller is the only scroller (keyboard and caret scrolling work, #78). */
 .code {
   border: 1px solid var(--control-border);
   border-radius: 4px;
-  min-height: 20rem;
-  max-height: 75vh;
-  overflow: auto;
 }
 .code .cm-editor {
   min-height: 20rem;
+  max-height: 75vh;
 }
 .preview {
   border: 1px solid var(--line);
@@ -362,6 +390,10 @@ a.button {
 .problems ul {
   margin: 0;
   padding-left: 1.25rem;
+}
+.stale {
+  border-left: 4px dashed var(--muted);
+  padding-left: 0.75rem;
 }
 .banner {
   background: var(--panel);

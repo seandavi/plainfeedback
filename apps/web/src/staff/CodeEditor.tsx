@@ -82,6 +82,7 @@ const theme = EditorView.theme({
   "&": { color: "var(--fg)", backgroundColor: "var(--bg)", height: "100%" },
   ".cm-content": {
     fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+    fontVariantLigatures: "none", // "ffi" must read as three letters
     caretColor: "var(--fg)",
   },
   ".cm-gutters": { backgroundColor: "var(--panel)", color: "var(--muted)", border: "none" },
@@ -123,7 +124,8 @@ export function CodeEditor({
           lintGutter(),
           theme,
           ro.current.of(EditorState.readOnly.of(!!readOnly)),
-          EditorView.contentAttributes.of({ "aria-label": label }),
+          // tabindex: axe does not count contenteditable alone as focusable content of the scroller.
+          EditorView.contentAttributes.of({ "aria-label": label, tabindex: "0" }),
           EditorView.updateListener.of((u) => {
             if (u.docChanged) changed.current(u.state.doc.toString());
           }),

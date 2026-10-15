@@ -128,6 +128,10 @@ describe("admin", () => {
     expect(await screen.findByRole("table", { name: "Users who have signed in" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Admin" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Grant admin bob@x.org" }));
+    // #78: granting admin asks first, like revoking.
+    expect(called("PATCH", "/api/v1/users/u2")).toHaveLength(0);
+    const grant = await screen.findByRole("dialog", { name: "Grant admin" });
+    fireEvent.click(within(grant).getByRole("button", { name: "Grant admin" }));
     await waitFor(() =>
       expect(called("PATCH", "/api/v1/users/u2")[0]?.body).toEqual({ isAdmin: true }),
     );
@@ -222,6 +226,8 @@ describe("admin", () => {
     open("/app/admin");
     await screen.findByRole("table", { name: /Users/ });
     fireEvent.click(screen.getByRole("button", { name: "Grant admin bob@x.org" }));
+    const grant = await screen.findByRole("dialog", { name: "Grant admin" });
+    fireEvent.click(within(grant).getByRole("button", { name: "Grant admin" }));
     expect(await screen.findByText(/Your role does not allow this/)).toBeTruthy();
   });
 });
@@ -260,6 +266,7 @@ describe("group page", () => {
     ).toEqual(["Email", "Role", "Actions"]);
     fireEvent.change(screen.getByLabelText("Role of view@x.org"), { target: { value: "creator" } });
     await waitFor(() => expect(called("PUT", `${M}/v1`)[0]?.body).toEqual({ role: "creator" }));
+    expect((await screen.findByRole("status")).textContent).toBe("view@x.org is now creator."); // #78
     fireEvent.change(screen.getByLabelText("Role of owner@x.org"), { target: { value: "viewer" } });
     expect(await screen.findByText(/at least one owner/)).toBeTruthy();
     expect((screen.getByLabelText("Role of owner@x.org") as HTMLSelectElement).value).toBe("owner");
@@ -341,7 +348,7 @@ describe("group page", () => {
     const writeText = vi.fn(async () => {});
     vi.stubGlobal("navigator", { clipboard: { writeText } });
     open(`/app/g/${G}`);
-    await screen.findByRole("heading", { name: "API tokens" });
+    await screen.findByRole("heading", { name: "Advanced: API tokens" });
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "ci" } });
     fireEvent.change(screen.getByLabelText(/Expires after/), { target: { value: "30" } });
     fireEvent.click(screen.getByRole("button", { name: "Create token" }));
@@ -574,5 +581,73 @@ describe("event dates (#61) and wave (#54)", () => {
         waveLabel: "post",
       }),
     );
+  });
+});
+
+describe("duplicate and templates (#74)", () => {
+  const fall = { id: "ev1", slug: "fall", title: "Fall", description: "" };
+  const spring = { id: "ev2", slug: "spring", title: "Spring", description: "" };
+  const MD = "# Post\n\n::: {.text #comments}\nAny comments?\n:::\n";
+  const eventRoutes = (role: string) => {
+    routes = {
+      ...base(false),
+      [`GET /api/v1/groups/${G}`]: () => [200, group(role)],
+      [`GET /api/v1/groups/${G}/events`]: () => [200, [fall, spring]],
+      [`GET /api/v1/groups/${G}/events/fall`]: () => [200, fall],
+      "GET /api/v1/events/ev1/surveys": () => [
+        200,
+        [{ slug: "post", closed: false, latestVersion: 1, responseCount: 4 }],
+      ],
+      "GET /api/v1/events/ev1/surveys/post": () => [200, { slug: "post", markdown: MD }],
+      "PUT /api/v1/events/ev2/surveys/post": () => [201, { slug: "post" }],
+      "PUT /api/v1/events/ev1/surveys/cfde": () => [201, { slug: "cfde" }],
+    };
+  };
+
+  it("a creator duplicates a survey's draft into another event of the group", async () => {
+    eventRoutes("creator");
+    open(`/app/g/${G}/e/fall`);
+    fireEvent.click(await screen.findByRole("button", { name: "Duplicate post" }));
+    const dialog = await screen.findByRole("dialog", { name: "Duplicate post" });
+    fireEvent.change(within(dialog).getByLabelText("Into event"), { target: { value: "ev2" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Duplicate" }));
+    await waitFor(() =>
+      expect(called("PUT", "/api/v1/events/ev2/surveys/post")[0]?.body).toEqual({ markdown: MD }),
+    );
+    await waitFor(() => expect(location.pathname).toBe(`/app/g/${G}/e/spring/s/post`));
+  });
+
+  it("explains a short name that is taken in the target event", async () => {
+    eventRoutes("creator");
+    routes["PUT /api/v1/events/ev1/surveys/post"] = () => [428, { error: "If-Match required" }];
+    open(`/app/g/${G}/e/fall`);
+    fireEvent.click(await screen.findByRole("button", { name: "Duplicate post" }));
+    const dialog = await screen.findByRole("dialog", { name: "Duplicate post" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Duplicate" }));
+    expect(await within(dialog).findByText(/already exists there/)).toBeTruthy();
+  });
+
+  it("a viewer cannot duplicate", async () => {
+    eventRoutes("viewer");
+    open(`/app/g/${G}/e/fall`);
+    await screen.findByRole("heading", { level: 1, name: "Fall" });
+    expect(screen.queryByRole("button", { name: "Duplicate post" })).toBeNull();
+  });
+
+  it("starts a new survey from the CFDE template with the given title", async () => {
+    eventRoutes("creator");
+    open(`/app/g/${G}/e/fall`);
+    fireEvent.change(await screen.findByLabelText("Title"), {
+      target: { value: "Spring check-in" },
+    });
+    fireEvent.change(screen.getByLabelText(/Short name \(used in exports/), {
+      target: { value: "cfde" },
+    });
+    fireEvent.change(screen.getByLabelText(/Start from/), { target: { value: "cfde" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(called("PUT", "/api/v1/events/ev1/surveys/cfde")).toHaveLength(1));
+    const put = called("PUT", "/api/v1/events/ev1/surveys/cfde")[0]?.body as { markdown: string };
+    expect(put.markdown.startsWith("# Spring check-in\n")).toBe(true);
+    expect(put.markdown).toContain("#affiliation");
   });
 });
