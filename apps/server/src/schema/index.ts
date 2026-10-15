@@ -122,7 +122,7 @@ export const surveys = pgTable(
   ],
 );
 
-// Immutable: a trigger (see migrations) rejects UPDATE, TRUNCATE and DELETE, except a DELETE
+// Immutable: a trigger (see migrations; drizzle cannot declare triggers, so never `drizzle-kit push`) rejects UPDATE, TRUNCATE and DELETE, except a DELETE
 // cascading from its survey (the survey row is already gone; ADR 0012).
 export const surveyVersions = pgTable(
   "survey_versions",
@@ -157,7 +157,15 @@ export const responses = pgTable(
     // Export order and cursor. Global, so gaps hint at other surveys' volume; see threat-model.md.
     seq: bigint("seq", { mode: "number" }).notNull().generatedAlwaysAsIdentity(),
   },
-  (t) => [index().on(t.surveyVersionId), unique().on(t.seq)],
+  (t) => [
+    index().on(t.surveyVersionId),
+    unique().on(t.seq),
+    // Declared so a schema diff never drops it (migration 0007 added it by hand).
+    check(
+      "responses_submitted_at_hour",
+      sql`${t.submittedAt} = date_trunc('hour', ${t.submittedAt}, 'UTC')`,
+    ),
+  ],
 );
 
 // Per-user API tokens (#11, ADR 0010): only the SHA-256 of the token is stored. role is creator or

@@ -12,8 +12,8 @@ The reference is generated, not hand-written:
 | `sessionCookie` | Staff sign in through OIDC (`/api/v1/auth/login`); the `pf_session` cookie (Path=`/api/v1`) is then sent automatically. | Unsafe methods (POST/PUT/PATCH/DELETE) must carry an `Origin` header equal to the app origin (CSRF check). |
 | `bearerToken` | `Authorization: Bearer pf_...` | Per-user API token for one group (see below). Bearer requests never use the cookie and need no `Origin`. |
 
-Participant endpoints (`/s/*`, `/api/v1/public/*`) are anonymous and never set cookies.
-Errors are `{"error": "..."}` with 400/401/403/404/409 (and 412/428 for draft concurrency). A group you are not a member of answers 404, not 403 (ADR 0009).
+Participant endpoints (`/s/*`, `/api/v1/public/*`) are anonymous and never set cookies; see [Participant endpoints](#participant-endpoints).
+Errors are `{"error": "..."}` with 400 (also `issues`), 401, 403, 404, 409, 413 (any `/api/v1` body over 512 KB), 422 (publish of an invalid draft, with line-numbered `errors`) and 412/428 for draft concurrency. A group you are not a member of answers 404, not 403 (ADR 0009). An unknown path under `/api/` also answers `404 {"error": "not found"}`, never the web app's HTML.
 
 ## API tokens (automation)
 
@@ -115,8 +115,27 @@ Every row, in both formats, says where it came from: `eventId`, `eventSlug`, `ev
 
 Viewer role or higher. `format=jsonl` (default) or `csv`; `version=<n>` limits to one version; rows are ordered by `seq`. `since` is either the `seq` of the last row you received (exclusive; this is the resume cursor) or an ISO time with an offset such as `2026-10-14T22:00:00Z`. An ISO `since` is a coarse filter, not a cursor: `submittedAt` is recorded to the hour only ([#37](https://github.com/seandavi/plainfeedback/issues/37)), so it returns everything from the start of that hour on, and `since=22:30Z` includes the 22:00 rows. Any other `since` is a 400. `seq` is assigned when a response is inserted, not when it commits, so a slow submission can become visible after a higher `seq` you already exported. To resume without losing rows, ask with an overlap (`since` = the highest `seq` you have minus 1000) and drop rows whose `responseId` you already have. If the export fails part way, the transfer is aborted rather than ended cleanly, so a truncated download shows up as a network error, not a short file. CSV is wide (multi answers joined with `;`, Likert as `<id>_<statement number>`, Other text in `<id>_other`, the fixed columns above first, union of columns across versions). The compiler refuses a question id that equals another question's column (`#r_1` next to a grid `#r`, `#c_other` next to `#c` with Other) or `seq`, so a header never repeats a name. Publishing keeps a column's meaning stable across versions unless an author forced a change (see publish above), so before aggregating a column across versions, check each version's codebook or export one `version` at a time. CSV is meant for spreadsheets: text cells that start with `=`, `+`, `-` or `@` (or their fullwidth forms `＝＋－＠`, also after leading whitespace), or with a tab or carriage return, get a leading single quote so a spreadsheet shows text instead of running a formula. That also changes legitimate text such as `-- nothing to add`. JSONL is the lossless format: answers exactly as stored, multi answers as arrays. Use it for analysis and text coding. Multi option labels never contain `;` (the compiler rejects it), so the CSV `;` join splits back exactly. Answers are stored normalised: strings trimmed, unrated Likert statements removed, and empty answers (`null`, `""`, `[]`, `{}`) left out, so a key present in JSONL means the same "answered" as a filled CSV cell. The codebook maps Likert statement numbers to text and lists scale anchors; `freeText: true` marks every question that can hold respondent-written text, including choice and multi questions with an Other box (the text is in `<id>_other`). Free text can identify people: treat it accordingly. Parquet is deferred: DuckDB and polars read these files directly.
 
-## Coming
+## Deleting
 
-- Participant link and QR code (#9): not yet merged, so not in the spec.
+Deletion is real (no soft delete) and cascades; backups keep data until they rotate ([deploy.md](deploy.md#retention-and-deletion), [ADR 0012](adr/0012-deletion-and-coarse-time.md)).
 
-Update this section as those land (their routes appear in `/openapi.json` automatically).
+| Request | Who | Effect |
+| --- | --- | --- |
+| `DELETE /events/{e}/surveys/{s}/responses/{id}` | owner | One response by the `responseId` of the export; `204`. |
+| `DELETE /events/{e}/surveys/{s}/responses[?before=<ISO time with offset>]` | owner | All responses of the survey, or those whose `submittedAt` (hour-truncated) is before `before` (exclusive); `{"deleted": n}`. |
+| `DELETE /events/{e}/surveys/{s}` | owner; creator if never published | The survey, its versions and responses; `204`. |
+| `DELETE /groups/{g}/events/{e}` (`{e}` is the slug) | owner | The event and everything under it; `204`. |
+| `DELETE /groups/{g}` | admin, session only, once the group is archived (else 409) | The group and everything under it; `204`. |
+
+In an archived group the first four answer 409.
+
+## Participant endpoints
+
+Anonymous, no cookies, `Cache-Control: no-store`; the web page at `/s/{publicId}` uses these ([ADR 0011](adr/0011-participant-page.md)). `publicId` is the random id from the share link.
+
+- `GET /api/v1/public/surveys/{publicId}` returns the latest published version (model, privacy statement, `status`: `open`, `closed` or `not_yet_open`) and a `ticket`. 404 until published. Not rate limited.
+- `POST /api/v1/public/surveys/{publicId}/responses` with `{"versionId", "answers", "ticket", "hp"?}`, JSON only (415 otherwise), at most 64 KB (413). `201 {"ok": true}` stores one response: the answers, the version and the submission time to the hour, nothing else.
+- Each `ticket` is signed, valid for 24 h and **stores one response**: reusing it gets 409 and the client fetches the survey again for a new one ([ADR 0014](adr/0014-single-use-tickets-and-crowd-sized-limit.md)). A 422 or 429 leaves the ticket usable. Used tickets are tracked in memory per process; a restart invalidates every open ticket (409, and the page keeps the answers).
+- Errors: 403 not open yet, 409 `versionId` is not the latest or the ticket is invalid, expired or used, 410 closed, 422 `{"error", "errors": {questionId: message}}` (answers are validated against the version; unknown keys are rejected), 429 rate limited.
+- Rate limits ([ADR 0013](adr/0013-transient-client-rate-limit.md), [deploy.md](deploy.md#client-address-and-rate-limits)): one bucket per survey (burst 1000, then 10 per second) and one per survey and client address (300 per 10 minutes). Both answer 429 with `Retry-After` in seconds.
+- Bot checks: a non-empty `hp`, or a submission less than 3 s after the ticket was issued, gets 201 and is not stored.

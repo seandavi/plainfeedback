@@ -1,11 +1,10 @@
-import { readFile } from "node:fs/promises";
 import { serve } from "@hono/node-server";
-import { serveStatic } from "@hono/node-server/serve-static";
 import { createApp } from "./app";
 import { type AuthOptions, discover } from "./auth";
 import { clientAddress } from "./clientip";
 import { loadConfig } from "./config";
 import { createDb, ping } from "./db";
+import { mountSpa } from "./spa";
 
 const config = loadConfig();
 const db = createDb(config.DATABASE_URL);
@@ -44,9 +43,7 @@ const app = createApp({
   },
 });
 
-// Serve the built SPA; unknown GETs (e.g. /s/...) fall back to index.html.
-app.use("*", serveStatic({ root: config.WEB_DIST }));
-app.get("*", async (c) => c.html(await readFile(`${config.WEB_DIST}/index.html`, "utf8")));
+mountSpa(app, config.WEB_DIST);
 
 serve({ fetch: app.fetch, port: config.PORT });
 console.log(`listening on :${config.PORT}`);

@@ -7,9 +7,9 @@ consortium that wants to move off one-off Google Forms and Qualtrics.
 - Surveys are written in **markdown** (with a live-preview editor) and shared as a link or QR code.
 - Designed to avoid collecting participant identifiers: the app sets no cookies and logs no IP or user-agent. See the limits in [`docs/design.md`](docs/design.md#privacy).
 - Groups with owners, creators and viewers; an admin manages the system.
-- Free-text answers and CSV/JSONL/Parquet export for analysis.
+- Free-text answers and CSV and JSONL export for analysis (Parquet is deferred).
 
-**Status:** design stage. See [`docs/design.md`](docs/design.md), the decision
+**Status:** phase 1 is built (groups and roles, API and API tokens, markdown editor and renderer, share link and QR code, response viewer, export, deletion) and has had an independent review ([`docs/reviews/2026-10-14-phase-1.md`](docs/reviews/2026-10-14-phase-1.md)); fixes from it are tracked as GitHub issues. The chat assistant (phase 2) and conditionals and multiple pages (phase 3) are not started. See [`docs/design.md`](docs/design.md), the decision
 records in [`docs/adr/`](docs/adr/), and the platform comparison in
 [`research/platform-survey.md`](research/platform-survey.md).
 
