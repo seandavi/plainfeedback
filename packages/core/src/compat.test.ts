@@ -47,3 +47,19 @@ test("refused: a reused id changes type; an option is removed or renamed", () =>
     `In 'c', the option "y" was removed or renamed.`,
   ]);
 });
+
+test("refused: the Other label renamed; adding or removing Other is free (#95)", () => {
+  const other = (label?: string) =>
+    m(`::: {.choice #c${label ? ` other="${label}"` : ""}}\nPick\n- x\n- y\n:::\n`);
+  expect(exportChanges([other("Other")], other("Something else"))).toEqual([
+    `In 'c', the Other label was "Other" and is now "Something else".`,
+  ]);
+  expect(exportChanges([other()], other("Other"))).toEqual([]);
+  expect(exportChanges([other("Other")], other())).toEqual([]);
+});
+
+test("refused: a column name moves to a different question across versions (#95)", () => {
+  expect(exportChanges([likert("a")], m("::: {.text #r_1}\nQ\n:::\n"))).toEqual([
+    "The export column 'r_1' was part of 'r' and is now part of 'r_1'.",
+  ]);
+});

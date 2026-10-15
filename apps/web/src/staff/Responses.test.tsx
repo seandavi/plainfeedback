@@ -67,6 +67,8 @@ describe("responses page (#50)", () => {
     expect(screen.getByRole("link", { name: "Download JSON lines" }).getAttribute("href")).toBe(
       `${EXPORT}?format=jsonl`,
     );
+    // Bare `download`: the server's Content-Disposition names the file (<event>-<survey>-responses).
+    expect(screen.getByRole("link", { name: "Download CSV" }).getAttribute("download")).toBe("");
     expect(
       screen.getByText(/can contain names or other details that identify people/),
     ).toBeTruthy();

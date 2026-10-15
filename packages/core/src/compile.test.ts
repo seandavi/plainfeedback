@@ -127,6 +127,19 @@ describe("errors carry line numbers", () => {
       5,
       /already used on line 2/,
     ],
+    [
+      "id equals another question's likert column, defined first (#95)",
+      "# T\n::: {.text #r_1}\nQ\n:::\n::: {.likert #r}\nQ\n- s\n:::\n",
+      2,
+      /'#r_1' is also an export column of '#r' \(line 5\)/,
+    ],
+    [
+      "id equals another question's Other column (#95)",
+      '# T\n::: {.choice #c other="O"}\nQ\n- x\n- y\n:::\n::: {.text #c_other}\nQ\n:::\n',
+      7,
+      /'#c_other' is also an export column of '#c'/,
+    ],
+    ["reserved seq id", "# T\n::: {.text #seq}\nQ\n:::\n", 2, /'#seq' is reserved/],
     ["empty other", '# T\n::: {.choice #a other=""}\nQ\n- x\n- y\n:::\n', 2, /needs a label/],
     ["missing options", "# T\n::: {.choice #a}\nQ\n- only\n:::\n", 2, /at least two options/],
     [

@@ -1,5 +1,6 @@
 // Markdown survey source -> JSON model. Grammar: docs/grammar.md. Parser choice: ADR 0008.
 // Line-based on purpose: every construct is line-oriented, so errors carry exact lines.
+import { columnsFor } from "./compat";
 import {
   ID_PATTERN,
   LIKERT_MAX_POINTS,
@@ -25,6 +26,7 @@ const ATTRS: Record<QuestionType, string[]> = {
 };
 const FLAGS = new Set(["required", "multiline", "other"]);
 
+const RESERVED_SEQ = "The id '#seq' is reserved for the export's row number. Choose another id.";
 const TITLE_MESSAGE = "A survey starts with its title on a line like: # Fall Meeting Feedback";
 const FENCE_OPEN = /^:{3,}\s*(.*?)\s*$/;
 const LIST_ITEM = /^ {0,3}(?:[-*+]|\d+[.)])\s+(.*)$/;
@@ -160,6 +162,15 @@ export function compile(markdown: string): CompileResult {
       firstLine ?? 1,
       markdown.trim() ? TITLE_MESSAGE : "The survey is empty. Start with a title line.",
     );
+  // #95: an id must not equal a CSV column another question generates (#r -> r_1, #c -> c_other),
+  // or the export header repeats and one value overwrites the other. `seq` is a fixed column.
+  if (idLines.has("seq")) err(idLines.get("seq") as number, RESERVED_SEQ);
+  for (const c of columnsFor({ title: "", pages: [{ questions }] }))
+    if (c.name !== c.questionId && idLines.has(c.name))
+      err(
+        idLines.get(c.name) as number,
+        `The id '#${c.name}' is also an export column of '#${c.questionId}' (line ${idLines.get(c.questionId)}). Choose another id.`,
+      );
   if (errors.length > 0) return { errors: errors.sort((a, b) => a.line - b.line) };
 
   const introText = intro.join("\n").trim();

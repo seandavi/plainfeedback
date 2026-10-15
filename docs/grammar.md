@@ -56,7 +56,9 @@ Every question needs an id written after `#`. Answers are stored and exported
 under it, so pick something short and meaningful, and keep it the same when you
 edit the wording. Ids use lowercase letters, digits, `-` and `_`, start with a
 letter, and must be different for each question in the survey. Good:
-`#affiliation`, `#years-in-field`, `#q3`.
+`#affiliation`, `#years-in-field`, `#q3`. An id also can't be `seq` or the name
+of another question's export column: a rating grid `#r` exports `r_1`, `r_2`,
+..., and a question `#c` with an Other box exports `c_other`.
 
 To ask the same questions at another event, or before and after one, copy the
 survey instead of retyping it: **Duplicate** next to a survey on the event page
@@ -68,7 +70,9 @@ only to a question whose meaning changed.
 Once a survey has responses, publishing asks you to confirm changes that would
 mix different answers in one export column: reordering, inserting or rewording
 rating-grid statements (add new ones at the end instead), reusing an id for a
-different question type (use a new id), or removing or renaming an option.
+different question type (use a new id), removing or renaming an option, renaming
+the Other label, or giving an earlier question's export column (such as `r_1`) to
+a new question.
 Adding questions, options and statements at the end needs no confirmation.
 
 ### Settings for every question
