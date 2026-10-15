@@ -352,6 +352,7 @@ describe("drafts", () => {
     const list = await read(call(w, "GET", `${ev(w)}/surveys`, w.who.viewer));
     expect(list[0]).toMatchObject({
       slug: "post",
+      title: "Fall feedback", // #72: lists show titles
       responseCount: 2,
       opensAt: null,
       closesAt: null,

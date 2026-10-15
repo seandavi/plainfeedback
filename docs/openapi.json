@@ -287,12 +287,20 @@
               "responseCount": {
                 "type": "number",
                 "description": "Submitted responses, all versions"
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The draft's '# ' title line, if it has one"
               }
             },
             "required": [
               "opensAt",
               "closesAt",
-              "responseCount"
+              "responseCount",
+              "title"
             ]
           }
         ]
