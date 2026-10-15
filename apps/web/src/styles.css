@@ -587,3 +587,22 @@ h1[tabindex="-1"]:focus:not(:focus-visible) {
   margin: 0;
   white-space: pre-wrap;
 }
+
+.empty {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+  max-width: 40rem;
+}
+.error-note {
+  border-left: 4px solid var(--error);
+}
+.copy {
+  user-select: all;
+  overflow-wrap: anywhere;
+  padding: 0.1em 0.35em;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+}
