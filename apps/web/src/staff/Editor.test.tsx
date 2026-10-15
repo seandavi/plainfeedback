@@ -175,6 +175,22 @@ describe("Editor", () => {
     expect(JSON.parse(post?.body ?? "")).toEqual({ opensAt: null, closesAt: null });
   });
 
+  it("on 409 with changes, lists them and publishes anyway with force (#52)", async () => {
+    const v = { version: 1, publishedAt: "2026-10-02T10:00:00Z", opensAt: null, closesAt: null };
+    routes["POST /api/v1/events/ev/surveys/fb/publish"] = (c) =>
+      JSON.parse(c.body ?? "{}").force
+        ? [201, v]
+        : [409, { error: "This survey already has responses.", changes: ["Statement 1 moved."] }];
+    await setup();
+    fireEvent.click(screen.getByRole("button", { name: "Publish…" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Publish" }));
+    await within(dialog).findByText("Statement 1 moved.");
+    expect(within(dialog).getByText("This survey already has responses.")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Publish anyway" }));
+    await screen.findByText("Published version 1.");
+  });
+
   it("publishes and lists the new version", async () => {
     const v = { version: 1, publishedAt: "2026-10-02T10:00:00Z", opensAt: null, closesAt: null };
     routes["POST /api/v1/events/ev/surveys/fb/publish"] = () => [201, v];

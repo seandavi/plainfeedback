@@ -1,5 +1,5 @@
 import { compile } from "@plainfeedback/core";
-import { eq, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { authorize } from "./authz";
 import { events, groups, responses, surveys, surveyVersions } from "./schema";
@@ -461,6 +461,40 @@ describe("publish and versions", () => {
       .from(surveyVersions)
       .where(eq(surveyVersions.surveyId, w.survey.id));
     expect(n).toHaveLength(1);
+  });
+
+  it("once answered, refuses drafts that change what an export column means unless forced (#52)", async () => {
+    const w = await world();
+    const as = w.who.creator;
+    const base = `${ev(w)}/surveys/post`;
+    const likert = (...s: string[]) =>
+      `# T\n\n::: {.likert #r}\nRate\n${s.map((x) => `- ${x}`).join("\n")}\n:::\n`;
+    let etag = '"e1"';
+    const publish = async (md: string, body?: unknown) => {
+      const put = await call(w, "PUT", base, as, md, undefined, { "if-match": etag });
+      etag = put.headers.get("etag") as string;
+      return call(w, "POST", `${base}/publish`, as, body);
+    };
+    // No responses yet: anything goes.
+    expect((await publish(likert("b", "a"))).status).toBe(201);
+    expect((await publish(likert("a", "b"))).status).toBe(201); // v3
+    const [v3] = await getDb()
+      .select()
+      .from(surveyVersions)
+      .where(eq(surveyVersions.surveyId, w.survey.id))
+      .orderBy(desc(surveyVersions.version));
+    await getDb()
+      .insert(responses)
+      .values({ surveyVersionId: v3?.id as string, answers: {} });
+
+    const refused = await publish(likert("new", "a", "b"));
+    expect(refused.status).toBe(409);
+    expect((await read(refused)).changes).toContain(
+      `In 'r', statement 1 was "a" and is now "new".`,
+    );
+    expect((await publish(likert("a", "b", "c"))).status).toBe(201); // appending is free
+    expect((await publish(likert("a", "B", "c"), { force: true })).status).toBe(201);
+    expect((await publish(likert("a", "B", "c", "d"))).status).toBe(201); // forced change not re-asked
   });
 
   it("rejects closesAt before opensAt and unknown fields", async () => {

@@ -5,6 +5,7 @@ import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import {
   MIN_SUBMIT_MS,
   type Survey as Model,
+  normalizeAnswers,
   surveyStatus,
   validateAnswers,
 } from "@plainfeedback/core";
@@ -312,14 +313,15 @@ export const publicRoutes = (db: Db, opts: PublicOptions = {}) => {
           409,
           "This survey was just updated. Please check your answers and submit again.",
         );
-      const errors = validateAnswers(row.v.model as Model, answers);
+      const clean = normalizeAnswers(answers);
+      const errors = validateAnswers(row.v.model as Model, clean);
       if (Object.keys(errors).length)
         return c.json({ error: "invalid answers", errors: { ...errors } }, 422);
       // Claimed only when storing, so a 422 or 429 leaves the ticket usable for the resubmit.
       sweepUsed(t);
       used.set(tk.id, t);
       try {
-        await db.insert(responses).values({ surveyVersionId: row.v.id, answers });
+        await db.insert(responses).values({ surveyVersionId: row.v.id, answers: clean });
       } catch (e) {
         used.delete(tk.id); // nothing stored: let the participant retry with the same page
         throw e;

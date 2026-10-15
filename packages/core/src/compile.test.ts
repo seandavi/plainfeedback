@@ -135,6 +135,13 @@ describe("errors carry line numbers", () => {
       5,
       /repeats the one on line 4/,
     ],
+    ["';' in multi option", "# T\n::: {.multi #a}\nQ\n- x\n- a; b\n:::\n", 5, /can't contain ';'/],
+    [
+      "';' in multi other",
+      '# T\n::: {.multi #a other="x; y"}\nQ\n- x\n- y\n:::\n',
+      2,
+      /can't contain ';'/,
+    ],
     [
       "bad scale",
       '# T\n::: {.likert #a scale="five"}\nQ\n- s\n:::\n',
@@ -186,8 +193,69 @@ describe("errors carry line numbers", () => {
 
   test("unreadable attributes report a column", () => {
     expect(errorsOf('# T\n::: {.text #a key="open}\nQ\n:::\n')).toEqual([
-      { line: 2, column: 15, message: expect.stringMatching(/Can't read the attributes/) },
+      { line: 2, column: 15, message: expect.stringMatching(/Can't read the settings/) },
     ]);
+  });
+
+  // #73, #51: common paste and editing mistakes give one clear error each, with no follow-ons.
+  const single: [string, string, number, RegExp][] = [
+    [
+      "curly quotes around a phrase",
+      "# T\n::: {.likert #a low=“Not at all” high=“Very”}\nQ\n- s\n:::\n",
+      2,
+      /Curly quotes/,
+    ],
+    [
+      "curly quotes around one word",
+      "# T\n::: {.choice #a other=“Other”}\nQ\n- x\n- y\n:::\n",
+      2,
+      /Curly quotes/,
+    ],
+    ["missing closing brace", "# T\n::: {.text #elab\nQ\n:::\n", 2, /braces are not closed/],
+    ["no braces swallows its block", "# T\n::: .text #a\nQ\n:::\n", 2, /in braces/],
+    [
+      "unindented option continuation",
+      "# T\n::: {.choice #a}\nQ\n- one long\noption\n:::\n",
+      5,
+      /isn't indented/,
+    ],
+    [
+      "unindented likert continuation",
+      "# T\n::: {.likert #a}\nQ\n- one long\nstatement\n:::\n",
+      5,
+      /isn't indented/,
+    ],
+    ["pasted bullets", "# T\n::: {.choice #a}\nQ\n• x\n- y\n:::\n", 4, /Pasted bullets/],
+    [
+      "question inserted above the title",
+      "::: {.text #a}\nQ\n:::\n# T\n\nIntro text.\n\n::: {.text #b}\nQ\n:::\n",
+      4,
+      /title must be the first line \(found on line 4\)/,
+    ],
+    ["text above the title", "Hello\n\n# T\n", 3, /title must be the first line/],
+    ["no title at all", "Hello\n::: {.text #a}\nQ\n:::\n", 1, /starts with its title/],
+  ];
+  test.each(single)("%s: exactly one error", (_, md, line, message) => {
+    expect(errorsOf(md)).toEqual([
+      expect.objectContaining({ line, message: expect.stringMatching(message) }),
+    ]);
+  });
+
+  test("a prompt line starting with a dash is still prompt text", () => {
+    expect(errorsOf("# T\n::: {.text #a}\nComments?\n— optional\n:::\n")).toEqual([]);
+  });
+
+  test("curly quotes inside straight-quoted values and in prose are fine", () => {
+    const { model } = compile(
+      '# “T”\n\nIt’s short.\n\n::: {.likert #a low="He said “hi”"}\nHow’s it?\n- s\n:::\n',
+    );
+    expect(model?.title).toBe("“T”");
+    expect(model?.pages[0]?.questions[0]).toMatchObject({ anchors: { low: "He said “hi”" } });
+  });
+
+  test("errors after a curly-quote block are still reported", () => {
+    const md = "# T\n::: {.text #a low=“x”}\nQ\n:::\n::: {.choice #b}\nQ\n- only\n:::\n";
+    expect(errorsOf(md).map((e) => e.line)).toEqual([2, 5]);
   });
 
   test("collects several errors in line order", () => {

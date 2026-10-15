@@ -161,6 +161,20 @@ describe("public survey API", () => {
     expect((rows[0]?.submittedAt.getTime() ?? 1) % 3_600_000).toBe(0); // to the hour (#37)
   });
 
+  it("stores answers normalised: trimmed, empty answers dropped (#75)", async () => {
+    const w = await world();
+    const answers = { role: "  Visiting scholar ", years: null };
+    expect((await w.submit({ versionId: w.versionId, answers })).status).toBe(201);
+    const [row] = await getDb()
+      .select()
+      .from(responses)
+      .where(eq(responses.surveyVersionId, w.versionId));
+    expect(row?.answers).toEqual({ role: "Visiting scholar" });
+    // Whitespace-only counts as not answered, so a required question still fails.
+    const res = await w.submit({ versionId: w.versionId, answers: { role: "   " } });
+    expect(res.status).toBe(422);
+  });
+
   it("rejects an outdated version with 409", async () => {
     const w = await world({ versions: 2 });
     const res = await w.submit({ versionId: w.ids[0], answers: { role: "Staff" } });
