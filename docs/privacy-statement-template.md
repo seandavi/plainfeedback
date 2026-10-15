@@ -1,12 +1,13 @@
 # Privacy statement template
 
-A plain-language statement for survey authors to adapt. It is shown on the participant page above the questions. Paste your version into the publish dialog (or the `privacyStatement` field of `POST .../publish`); it is stored with each published version, so participants' view is recorded.
+A plain-language statement for survey authors to adapt. It is shown on the participant page above the questions, collapsed under a one-line summary. Paste your version into the publish dialog (or the `privacyStatement` field of `POST .../publish`); it is stored with each published version, so participants' view is recorded.
 
 How to use it:
 - Replace every `[[PLACEHOLDER]]`. Delete any optional paragraph that does not apply.
 - Do not add promises the software or your host cannot keep. Each sentence below says what it relies on; check those before publishing.
 - Keep it short. Markdown works: paragraphs, lists, **bold**, links.
-- The built-in default (`DEFAULT_PRIVACY_STATEMENT` in `apps/server/src/surveys.ts`) is the first two paragraphs below, reworded. Use it only if you have nothing to add; most surveys should say who runs them and how long data is kept.
+- On a first publish the dialog starts from a short version of this template (`PRIVACY_STATEMENT_TEMPLATE` in `packages/core/src/privacy.ts`) with placeholders for who runs the survey, a contact and retention. Publishing is refused while any `[[...]]` is left.
+- Clearing the box publishes the built-in default (`DEFAULT_PRIVACY_STATEMENT`, same file): "What we collect", "Staying anonymous" and "Who can read the answers" below, reworded, plus "kept until the organisers delete them; nothing is deleted automatically". It names no one and gives no contact. Use it only if you have nothing to add; most surveys should say who runs them and how long data is kept.
 
 ---
 

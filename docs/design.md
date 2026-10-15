@@ -54,7 +54,7 @@ Pandoc-style fenced divs, as in `quarto-revealjs-live-questions`. Worked example
 We want to hear your feedback. Your answers are anonymous. Agenda: [here](https://example.org).
 
 ::: {.choice #affiliation required other="Other"}
-Please specify any CFDE affiliation(s).
+What is your main CFDE affiliation?
 - CFDE Center Member
 - CFDE DCC Member
 - NIH Representative

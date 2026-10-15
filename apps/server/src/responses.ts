@@ -2,13 +2,19 @@
 // deletion owner only (same 404/403 rules as the rest of the event API). Streams JSONL or wide CSV in
 // keyset batches ordered by `seq`. Never logs response contents. Parquet is deferred.
 //
-// Cursor: `since` is exclusive and is either the `seq` of the last row you received (digits only)
-// or an ISO time, a coarse filter (submitted_at > since; times are stored to the hour, #37).
+// `since` is either the `seq` of the last row you received (digits only, exclusive: the resume
+// cursor) or an ISO time with offset, a coarse filter that includes that whole hour (times are
+// stored to the hour, #37). Anything else is 400 before streaming starts (#58).
+//
+// ponytail (#59): `seq` is assigned at insert, not commit, so a slow insert can become visible after
+// a higher seq. Clients resume with an overlap and dedupe on responseId (docs/api.md). An exact
+// cursor needs serialised inserts or a commit-order horizon; xmin-based filters are not exact
+// (xid order != seq order); a global insert lock held to commit would serialise every submit.
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import type { Question, Survey } from "@plainfeedback/core";
 import { and, asc, eq, inArray, lt, sql } from "drizzle-orm";
-import { type AuthzEnv, fail, notArchived, notFound, requireEventRole, UUID } from "./authz";
-import type { Db } from "./db";
+import { type AuthzEnv, notArchived, notFound, requireEventRole, UUID } from "./authz";
+import { type Db, errorLine } from "./db";
 import { err, errors, json } from "./groups";
 import { responses, surveys, surveyVersions } from "./schema";
 
@@ -73,12 +79,15 @@ export const flatten = (model: Survey, answers: Answers): Record<string, string 
   return out;
 };
 
-// RFC 4180 quoting plus formula-injection guard: string cells starting with = + - @ (or tab/CR) get
-// a leading single quote so spreadsheets show text instead of evaluating it. Numbers are untouched.
+// RFC 4180 quoting plus formula-injection guard: string cells starting with = + - @ (or their
+// fullwidth forms), possibly after whitespace since some importers trim first, or with tab/CR, get a
+// leading single quote so spreadsheets show text. Numbers are untouched. This alters legitimate text
+// like "-- none"; JSONL is the lossless format for analysis (#63).
+const FORMULA = /^(\s*[=+\-@＝＋－＠]|[\t\r])/;
 export const csvCell = (v: string | number | undefined): string => {
   if (v === undefined) return "";
   let s = String(v);
-  if (typeof v === "string" && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  if (typeof v === "string" && FORMULA.test(s)) s = `'${s}`;
   return /[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
 };
 
@@ -95,19 +104,26 @@ const CodebookParams = Params.extend({
     .min(1)
     .openapi({ param: { name: "n", in: "path" } }),
 });
+const SEQ = /^\d{1,18}$/;
 const Query = z.object({
   format: z.enum(["jsonl", "csv"]).default("jsonl"),
   since: z
-    .string()
-    .max(100)
+    .union([z.string().regex(SEQ), z.iso.datetime({ offset: true })])
     .optional()
-    .openapi({ description: "Exclusive: the `seq` of the last row received, or an ISO time" }),
+    .openapi({
+      description:
+        "The `seq` of the last row received (exclusive; resume cursor), or an ISO time with offset " +
+        "(coarse filter: rows submitted in that hour or later)",
+    }),
   version: z.coerce.number().int().min(1).optional(),
 });
 
-const SEQ = /^\d{1,18}$/;
 const ISO = `'YYYY-MM-DD"T"HH24:MI:SS"Z"'`;
-export const responseRoutes = (db: Db) => {
+const HOUR = 3_600_000;
+// Fixed leading fields of every exported row, in CSV column order. Add new per-row fields here and
+// in `fixed` below; both formats pick them up.
+const FIXED = ["responseId", "seq", "surveyVersion", "submittedAt"] as const;
+export const responseRoutes = (db: Db, log: (line: string) => void = () => {}) => {
   const r = new OpenAPIHono<AuthzEnv>();
   const viewer = requireEventRole(db, "viewer");
   const owner = requireEventRole(db, "owner");
@@ -144,9 +160,13 @@ export const responseRoutes = (db: Db) => {
       tags: ["responses"],
       summary: "Export responses as JSONL or CSV, streamed (viewer)",
       description:
-        "Ordered by `seq`. `since` is exclusive: the `seq` of the last row received (resume), or an ISO " +
-        "time (coarse filter). `submittedAt` is to the hour. CSV cells starting with = + - @ are " +
-        "prefixed with a single quote.",
+        "Ordered by `seq`. `since` is a `seq` (exclusive; resume cursor) or an ISO time with offset " +
+        "(coarse filter: that whole hour and later). Any other `since` is 400. `seq` is assigned at " +
+        "insert, so a row can become visible after a higher one: resume with an overlap (`since` = " +
+        "last seq - 1000) and dedupe on `responseId`. " +
+        "`submittedAt` is to the hour. CSV is for spreadsheets: text cells starting with = + - @ " +
+        "(also fullwidth, or after whitespace) get a leading single quote. JSONL is lossless; use it " +
+        "for analysis. If the stream fails midway the transfer is aborted, never ended cleanly.",
       middleware: [viewer],
       request: { params: Params, query: Query },
       responses: {
@@ -167,12 +187,13 @@ export const responseRoutes = (db: Db) => {
       const byId = new Map(versions.map((v) => [v.id, v]));
       const ids = versions.map((v) => v.id);
 
-      // Digits are a seq even though "2026" would also parse as a date.
+      // The query schema already restricts `since` to digits or a full ISO datetime with offset.
+      // ISO is floored to the hour and inclusive, so `since=22:30Z` still returns the 22:00 rows.
       let after = sql`true`;
       if (since && SEQ.test(since)) after = sql`${responses.seq} > ${since}::bigint`;
       else if (since) {
-        if (Number.isNaN(Date.parse(since))) throw fail(400, "invalid since");
-        after = sql`${responses.submittedAt} > ${since}::timestamptz`;
+        const hour = new Date(Math.floor(Date.parse(since) / HOUR) * HOUR).toISOString();
+        after = sql`${responses.submittedAt} >= ${hour}::timestamptz`;
       }
       const page = (cur: number | null) =>
         db
@@ -199,39 +220,49 @@ export const responseRoutes = (db: Db) => {
 
       const csv = format === "csv";
       const cols = [...new Set(versions.flatMap((v) => columnsFor(v.model).map((x) => x.name)))];
+      type Row = Awaited<ReturnType<typeof page>>[number];
+      const render = (row: Row) => {
+        const v = byId.get(row.versionId) as NonNullable<ReturnType<typeof byId.get>>;
+        const fixed = {
+          responseId: row.id,
+          seq: row.seq,
+          surveyVersion: v.version,
+          submittedAt: row.at,
+        };
+        if (!csv) return `${JSON.stringify({ ...fixed, answers: row.answers })}\n`;
+        const flat = flatten(v.model, row.answers as Answers);
+        const cells = [...FIXED.map((k) => fixed[k]), ...cols.map((n) => flat[n])];
+        return `${cells.map(csvCell).join(",")}\r\n`;
+      };
+
+      // The first batch is read before the Response exists, so most failures still reach onError
+      // as a 500. Later batches are read one per pull (backpressure: a slow client never makes us
+      // buffer the whole export). A failure there is logged redacted and aborts the transfer, so a
+      // client never mistakes a truncated export for a complete one.
       const enc = new TextEncoder();
-      const stream = new ReadableStream<Uint8Array>({
-        async start(ctrl) {
-          try {
-            if (csv) {
-              const head = ["responseId", "seq", "surveyVersion", "submittedAt", ...cols];
-              ctrl.enqueue(enc.encode(`${head.map(csvCell).join(",")}\r\n`));
-            }
-            let cur: number | null = null;
-            for (;;) {
-              const rows: Awaited<ReturnType<typeof page>> = ids.length ? await page(cur) : [];
-              let out = "";
-              for (const row of rows) {
-                const v = byId.get(row.versionId) as NonNullable<ReturnType<typeof byId.get>>;
-                if (csv) {
-                  const flat = flatten(v.model, row.answers as Answers);
-                  const cells = [row.id, row.seq, v.version, row.at, ...cols.map((n) => flat[n])];
-                  out += `${cells.map(csvCell).join(",")}\r\n`;
-                } else {
-                  out += `${JSON.stringify({ responseId: row.id, seq: row.seq, surveyVersion: v.version, submittedAt: row.at, answers: row.answers })}\n`;
-                }
-              }
-              if (out) ctrl.enqueue(enc.encode(out));
+      let rows: Row[] | undefined = ids.length ? await page(null) : [];
+      let cur: number | null = null;
+      const stream = new ReadableStream<Uint8Array>(
+        {
+          start(ctrl) {
+            if (csv) ctrl.enqueue(enc.encode(`${[...FIXED, ...cols].map(csvCell).join(",")}\r\n`));
+          },
+          async pull(ctrl) {
+            try {
+              rows ??= await page(cur);
               const last = rows.at(-1);
-              if (rows.length < BATCH || !last) break;
+              if (rows.length) ctrl.enqueue(enc.encode(rows.map(render).join("")));
+              if (rows.length < BATCH || !last) return ctrl.close();
               cur = last.seq;
+              rows = undefined;
+            } catch (err) {
+              log(errorLine(err as Error));
+              ctrl.error(new Error("export failed")); // never the query error: the adapter prints it
             }
-            ctrl.close();
-          } catch (err) {
-            ctrl.error(err);
-          }
+          },
         },
-      });
+        { highWaterMark: 0 },
+      );
       return new Response(stream, {
         headers: {
           "content-type": csv ? "text/csv; charset=utf-8" : "application/x-ndjson; charset=utf-8",
@@ -336,7 +367,8 @@ export const responseRoutes = (db: Db) => {
           type: q.type,
           prompt: q.prompt,
           required: q.required,
-          freeText: q.type === "text",
+          // Can hold respondent-written text: a text answer, or Other text in `<id>_other` (#75).
+          freeText: q.type === "text" || ("other" in q && q.other !== undefined),
           ...(q.type === "choice" || q.type === "multi"
             ? { options: q.options, other: q.other ?? null }
             : {}),

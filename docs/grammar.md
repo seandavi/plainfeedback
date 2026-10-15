@@ -58,6 +58,12 @@ edit the wording. Ids use lowercase letters, digits, `-` and `_`, start with a
 letter, and must be different for each question in the survey. Good:
 `#affiliation`, `#years-in-field`, `#q3`.
 
+Once a survey has responses, publishing asks you to confirm changes that would
+mix different answers in one export column: reordering, inserting or rewording
+rating-grid statements (add new ones at the end instead), reusing an id for a
+different question type (use a new id), or removing or renaming an option.
+Adding questions, options and statements at the end needs no confirmation.
+
 ### Settings for every question
 
 | Setting | Meaning |
@@ -92,7 +98,8 @@ Please specify your CFDE affiliation.
 #### Multiple choice: `.multi`
 
 Same as `.choice`, but people may tick several options (or none, unless
-`required`). `other` works the same way.
+`required`). `other` works the same way. Options and the `other` label can't
+contain `;`, because the CSV export joins the ticked options with `;`.
 
 #### Rating grid: `.likert`
 
@@ -116,6 +123,10 @@ Answer any applicable questions:
 
 `required` on a grid means every statement must be rated. Without it, people
 rate the statements that apply to them.
+
+The `low` and `high` labels are repeated under every statement so they stay in
+view on a phone; keep them short (a word or two). If statements need different
+labels, use separate grids.
 
 #### Free text: `.text`
 
@@ -143,7 +154,8 @@ How many years have you worked in this field?
 ### Writing settings
 
 - A setting with a value is `name=value`. Use quotes when the value has spaces:
-  `low="Not at all"`. Single quotes also work.
+  `low="Not at all"`. Single quotes also work. Use straight quotes: curly quotes
+  (`“ ”`), which Word and Google Docs insert, are reported as an error.
 - `required`, `multiline` and `other` can be written on their own.
 - Settings can come in any order. A misspelled setting is an error, not ignored.
 
@@ -176,11 +188,11 @@ the real CFDE Fall 2026 form.
 # 2026 Fall Meeting Feedback
 
 We want to hear your feedback so we can keep improving our logistics and content.
-Please fill this quick survey and let us know your thoughts (your answers will be
-anonymous). As a reminder, the agenda is [here](https://example.org/agenda).
+Please fill this quick survey and let us know your thoughts (we do not ask for your
+name or email). As a reminder, the agenda is [here](https://example.org/agenda).
 
 ::: {.choice #affiliation required other="Other"}
-Please specify any CFDE affiliation(s).
+What is your main CFDE affiliation?
 - CFDE Center Member
 - CFDE DCC Member
 - CFDE Program Member (not DCC affiliated)
@@ -256,7 +268,9 @@ rendering. Errors are `{ line, column?, message }` with 1-based lines.
 
 A response is an object keyed by question id. `validateAnswers(model, answers)`
 returns `{ [questionId]: message }`, empty when valid. The browser and server
-use the same function.
+use the same function. The server first applies `normalizeAnswers` (trim
+strings, drop unrated Likert statements and empty answers), then validates and
+stores the normalised object.
 
 | Type | Answer |
 |---|---|
@@ -267,6 +281,8 @@ use the same function.
 | `number` | A finite number within `min`/`max`. |
 
 A missing answer, `null`, an empty or blank string, an empty array and an empty
-object all count as unanswered. Answers for ids that are not in the survey are
+object all count as unanswered, with one exception: for a question with `other`,
+a blank string (or a blank entry in a `multi` array) means "Other" was picked and
+left empty, and is rejected with a message asking to describe it. Answers for ids that are not in the survey are
 rejected. Published versions are immutable, so statement numbers and option
 texts are stable within a version.

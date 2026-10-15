@@ -16,7 +16,7 @@ import type { CompileError } from "@plainfeedback/core";
 import { type Ref, useEffect, useImperativeHandle, useRef } from "react";
 
 export type CodeEditorHandle = {
-  /** Inserts text at the cursor (on its own lines) and focuses the editor. */
+  /** Inserts a question block near the cursor (see insertPosition) and focuses the editor. */
   insert: (text: string) => void;
   /** Moves the cursor to a 1-based line and focuses the editor. */
   goToLine: (line: number) => void;
@@ -31,6 +31,44 @@ export type CodeEditorProps = {
 };
 
 const lineAt = (doc: Text, n: number) => doc.line(Math.min(Math.max(1, n), doc.lines));
+
+const FENCE = /^\s*:{3,}\s*(.*?)\s*$/;
+
+/** Where a new question block goes for a cursor offset: never in the title and intro (end of the
+ * document), never inside a block (after its closing ':::'), otherwise after the cursor's line.
+ * A never-focused editor has its cursor at 0, in the title, so it lands at the end. */
+export function insertPosition(doc: string, cursor: number): number {
+  let from = 0;
+  let inBlock = false;
+  let seen = false; // a question block has started
+  let found = false; // the cursor is in a block: insert after its closing line
+  for (const line of doc.split("\n")) {
+    const to = from + line.length;
+    const fence = line.match(FENCE)?.[1];
+    if (fence === "" && inBlock) {
+      inBlock = false;
+      if (found) return to;
+    } else if (fence && !inBlock) {
+      inBlock = true;
+      seen = true;
+    }
+    if (!found && cursor <= to) {
+      if (inBlock) found = true;
+      else return seen ? to : doc.length;
+    }
+    from = to + 1;
+  }
+  return doc.length;
+}
+
+/** The text to insert so `snippet` becomes its own paragraph, where, and the cursor after it. */
+export function insertSnippet(doc: string, cursor: number, snippet: string) {
+  const at = insertPosition(doc, cursor);
+  const before =
+    at === 0 || doc.slice(at - 2, at) === "\n\n" ? "" : doc[at - 1] === "\n" ? "\n" : "\n\n";
+  const insert = `${before}${snippet}\n`;
+  return { at, insert, cursor: at + insert.length };
+}
 
 export function toDiagnostics(doc: Text, errors: CompileError[]): Diagnostic[] {
   return errors.map((e) => {
@@ -117,12 +155,11 @@ export function CodeEditor({
     insert(text) {
       const v = view.current;
       if (!v) return;
-      const { from, to } = v.state.selection.main;
-      const before = from > 0 && v.state.sliceDoc(from - 1, from) !== "\n" ? "\n\n" : "";
-      const insert = `${before}${text}\n`;
+      const doc = v.state.doc.toString();
+      const { at, insert, cursor } = insertSnippet(doc, v.state.selection.main.head, text);
       v.dispatch({
-        changes: { from, to, insert },
-        selection: EditorSelection.cursor(from + insert.length),
+        changes: { from: at, insert },
+        selection: EditorSelection.cursor(cursor),
         scrollIntoView: true,
       });
       v.focus();

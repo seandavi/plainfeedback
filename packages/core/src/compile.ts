@@ -28,11 +28,17 @@ const FLAGS = new Set(["required", "multiline", "other"]);
 const TITLE_MESSAGE = "A survey starts with its title on a line like: # Fall Meeting Feedback";
 const FENCE_OPEN = /^:{3,}\s*(.*?)\s*$/;
 const LIST_ITEM = /^ {0,3}(?:[-*+]|\d+[.)])\s+(.*)$/;
+const CURLY = /[‘’“”]/;
+const CURLY_MESSAGE =
+  'Curly quotes (“ ” ‘ ’) can\'t be used around settings; they often come from pasting out of Word or Google Docs. Use straight quotes, like low="Not at all".';
+const PASTED_BULLET = /^\s*[•◦▪]\s+/; // not dashes: "— optional" is fine prompt text
 const ATTR =
   /\s*(?:\.([\w-]+)|#(\S*?)(?=\s|$)|([\w-]+)(?![\w-])(?:=(?:"([^"]*)"|'([^']*)'|([^\s"']+))|(?!=)))\s*/y;
 
 type Block = {
   line: number;
+  broken: boolean; // the opening line already got an error: swallow the block, check nothing
+  stray?: number; // first unindented, non-list line after the options
   attrText: string;
   attrColumn: number;
   prompt: string[];
@@ -52,13 +58,14 @@ export function compile(markdown: string): CompileResult {
   const idLines = new Map<string, number>();
   let block: Block | undefined;
   let started = false; // a question block has been opened
+  let firstLine: number | undefined; // first non-blank line, when it came before the title
 
   lines.forEach((raw, i) => {
     const n = i + 1;
     const fence = raw.match(FENCE_OPEN)?.[1];
     if (block) {
       if (fence === "") {
-        const q = finish(block, err, idLines);
+        const q = block.broken ? undefined : finish(block, err, idLines);
         if (q) questions.push(q);
         block = undefined;
       } else if (fence !== undefined) {
@@ -67,31 +74,52 @@ export function compile(markdown: string): CompileResult {
           "A question block can't contain another ':::' block. Close the first one with ':::'.",
         );
       } else {
-        const item = raw.match(LIST_ITEM);
+        const pasted = !block.broken && PASTED_BULLET.test(raw);
+        if (pasted)
+          err(
+            n,
+            "Start each option with '- ' (a hyphen and a space). Pasted bullets like '•' aren't recognised.",
+          );
+        const item = pasted ? ["", raw.replace(PASTED_BULLET, "")] : raw.match(LIST_ITEM);
         const last = block.items.at(-1);
         const wrapped = !item && last && block.inItem && /^\s+\S/.test(raw);
         if (item) block.items.push({ text: (item[1] ?? "").trim(), line: n });
         else if (wrapped && last) last.text += ` ${raw.trim()}`;
-        else block.prompt.push(raw);
+        else {
+          if (last && raw.trim()) block.stray ??= n;
+          block.prompt.push(raw);
+        }
         block.inItem = Boolean(item || wrapped);
       }
       return;
     }
     if (fence !== undefined) {
-      if (fence === "") err(n, "This ':::' doesn't close any question block.");
-      else if (!/^\{.*\}$/.test(fence))
-        err(n, "Put the question's attributes in braces, like ::: {.text #comments}");
-      else {
-        started = true;
-        block = {
-          line: n,
-          attrText: fence.slice(1, -1),
-          attrColumn: raw.indexOf("{") + 2,
-          prompt: [],
-          items: [],
-          inItem: false,
-        };
+      if (fence === "") {
+        err(n, "This ':::' doesn't close any question block.");
+        return;
       }
+      // A malformed opening line still opens a block, so the lines inside it and its closing
+      // ':::' don't produce follow-on errors.
+      let broken = true;
+      if (/^\{[^}]*$/.test(fence))
+        err(
+          n,
+          "The settings braces are not closed. End the line with '}', like ::: {.text #comments}",
+        );
+      else if (!/^\{.*\}$/.test(fence))
+        err(n, "Put the question's settings in braces, like ::: {.text #comments}");
+      else broken = false;
+      if (title === undefined) firstLine ??= n;
+      started = true;
+      block = {
+        line: n,
+        broken,
+        attrText: fence.slice(1, -1),
+        attrColumn: raw.indexOf("{") + 2,
+        prompt: [],
+        items: [],
+        inItem: false,
+      };
       return;
     }
     if (raw.trim() === "") {
@@ -100,10 +128,18 @@ export function compile(markdown: string): CompileResult {
     }
     const heading = raw.match(/^(#{1,6})\s+(.*?)\s*#*\s*$/);
     if (title === undefined) {
-      if (heading?.[1] === "#") title = heading[2];
-      else err(n, TITLE_MESSAGE);
-      // ponytail: one error is enough; later lines still get checked as intro text.
-      title ??= "";
+      if (heading?.[1] !== "#") {
+        firstLine ??= n; // reported once at the end if no title follows
+        return;
+      }
+      title = heading[2];
+      if (firstLine !== undefined) {
+        err(
+          n,
+          `The title must be the first line (found on line ${n}). Move it above line ${firstLine}.`,
+        );
+        started = false; // the intro after it is fine; don't also report it as stray text
+      }
       return;
     }
     if (heading?.[1] === "#") err(n, "Only one title (# heading) is allowed per survey.");
@@ -119,8 +155,11 @@ export function compile(markdown: string): CompileResult {
 
   if (block)
     err(block.line, "This question block is never closed. Add a line with just ':::' after it.");
-  if (!title && errors.length === 0)
-    err(1, markdown.trim() ? TITLE_MESSAGE : "The survey is empty. Start with a title line.");
+  if (!title)
+    err(
+      firstLine ?? 1,
+      markdown.trim() ? TITLE_MESSAGE : "The survey is empty. Start with a title line.",
+    );
   if (errors.length > 0) return { errors: errors.sort((a, b) => a.line - b.line) };
 
   const introText = intro.join("\n").trim();
@@ -148,11 +187,15 @@ function finish(
   while (ATTR.lastIndex < b.attrText.length) {
     const at = ATTR.lastIndex;
     const m = ATTR.exec(b.attrText);
-    if (!m || m[0] === "") {
-      e(`Can't read the attributes from here: "${b.attrText.slice(at)}"`, b.attrColumn + at);
+    const [, cls, hash, key = "", dq, sq, bare] = m ?? [];
+    if (!m || m[0] === "" || (bare && CURLY.test(bare))) {
+      const rest = b.attrText.slice(at);
+      e(
+        CURLY.test(rest) ? CURLY_MESSAGE : `Can't read the settings from here: "${rest}"`,
+        b.attrColumn + at,
+      );
       return;
     }
-    const [, cls, hash, key = "", dq, sq, bare] = m;
     if (cls) classes.push(cls);
     else if (hash !== undefined) {
       if (id !== undefined) e("A question can only have one #id.");
@@ -218,7 +261,8 @@ function finish(
   switch (type) {
     case "choice":
     case "multi": {
-      if (items.length < 2)
+      if (b.stray) strayError(b, err);
+      else if (items.length < 2)
         e(`A .${type} question needs at least two options, written as '- ' list items.`);
       checkDuplicates(b, err, "option");
       const otherAttr = attrs.get("other");
@@ -226,11 +270,20 @@ function finish(
       if (other === "") e("'other' needs a label, like other=\"Other\", or write just 'other'.");
       else if (other !== undefined && items.includes(other))
         e(`The 'other' label "${other}" is also a listed option. Remove one of them.`);
+      // The CSV export joins multi answers with ';' (#64), so a label containing one can't be split.
+      if (type === "multi") {
+        for (const it of b.items)
+          if (it.text.includes(";"))
+            err(it.line, `A .multi option can't contain ';'. Use a comma or 'and' instead.`);
+        if (typeof other === "string" && other.includes(";"))
+          e(`The 'other' label "${other}" can't contain ';' in a .multi question.`);
+      }
       q = { ...common, type, options: items, ...(other !== undefined ? { other } : {}) };
       break;
     }
     case "likert": {
-      if (items.length < 1)
+      if (b.stray) strayError(b, err);
+      else if (items.length < 1)
         e("A .likert question needs at least one statement, written as '- ' list items.");
       checkDuplicates(b, err, "statement");
       const scale = str("scale") ?? "1-5";
@@ -273,6 +326,12 @@ function finish(
   }
   return q;
 }
+
+const strayError = (b: Block, err: (line: number, message: string) => void) =>
+  err(
+    b.stray as number,
+    "This line comes after the options but isn't indented, so it isn't part of an option. Indent it to continue the option above, start it with '- ' for a new option, or move it above the list.",
+  );
 
 function checkDuplicates(b: Block, err: (line: number, message: string) => void, what: string) {
   const seen = new Map<string, number>();
