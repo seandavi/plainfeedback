@@ -25,6 +25,27 @@ export function validateAnswers(model: Survey, answers: Answers): AnswerErrors {
   return errors;
 }
 
+/** Stored form of a submission (#75), applied before validateAnswers so the validator sees what is
+ * stored: strings trimmed, unrated Likert statements and blank multi entries removed, and empty
+ * answers (`null`, `""`, `[]`, `{}`) dropped, so "answered" means the same in JSONL and CSV. */
+export function normalizeAnswers(answers: Answers): Answers {
+  // fromEntries, not assignment: a "__proto__" key stays an own key (and is then a validation error).
+  return Object.fromEntries(
+    Object.entries(answers).flatMap(([k, v]) => {
+      const n = normalize(v);
+      return isEmpty(n) ? [] : [[k, n]];
+    }),
+  );
+}
+
+function normalize(v: unknown): unknown {
+  if (typeof v === "string") return v.trim();
+  if (Array.isArray(v)) return v.map(normalize).filter((x) => !isEmpty(x));
+  if (typeof v === "object" && v !== null)
+    return Object.fromEntries(Object.entries(v).filter(([, r]) => r !== null));
+  return v;
+}
+
 function isEmpty(v: unknown): boolean {
   if (v === undefined || v === null) return true;
   if (typeof v === "string") return v.trim() === "";
