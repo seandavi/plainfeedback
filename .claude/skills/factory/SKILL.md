@@ -72,8 +72,13 @@ The setup recipe is in AGENTS.md, under "Running the app locally for checks". Gi
    - It returns a PR number.
 5. **Review round r** (starting at 1).
    - Set `factory:review`.
-   - Spawn the four reviewers in **one message** so they run in parallel: `reviewer-security`, `reviewer-ux`, `reviewer-ui`, `reviewer-code`.
-   - The round is done only when all four `round=r` comments exist. If an agent finishes without posting, re-run it.
+   - Decide whether UI and UX review can be skipped, from the PR's whole diff (`gh pr diff <pr> --name-only`). Test files (`*.test.*`, `fixtures/`) never count.
+     - **UI-facing:** anything under `apps/web/`, or a server file that serves HTML (`apps/server/src/spa.ts`, `apps/server/src/openapi.ts`).
+     - **UX-facing:** UI-facing files, plus `packages/core/src/` (compile and validation messages), `apps/server/src/` (API errors, exports), `docs/grammar.md` and `docs/api.md`.
+     - If no file is UI-facing, don't spawn `reviewer-ui`. Post its comment yourself: `<!-- factory:review-ui round=r -->`, then `VERDICT: PASS`, then `SKIPPED: no UI-facing files changed.` Do the same for UX.
+     - When unsure, spawn the reviewer. A spawned reviewer can still post a quick PASS for "no visible change" or "no user-facing change".
+   - Spawn the remaining reviewers in **one message** so they run in parallel. `reviewer-security` and `reviewer-code` always run.
+   - The round is done only when all four `round=r` comments exist. Check the markers on the PR yourself, because a reviewer's reported URL may not be its own comment. If an agent finishes without posting, re-run it.
    - **If any reviewer says CHANGES:**
      - If r < 3, resume the builder with the links to the CHANGES comments. It pushes fixes and posts `factory:build round=r+1`. Then run round r+1 with all four reviewers again.
      - If r = 3, escalate: set `factory:needs-human` and post a PR comment listing the unresolved findings.

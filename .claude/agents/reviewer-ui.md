@@ -45,4 +45,4 @@ Post a PR comment:
 
 Use CHANGES for unreadable or broken rendering, or for clear inconsistencies. Put taste under "Notes".
 
-Finish with one line: the verdict and the comment URL.
+Before finishing, confirm your comment is on the PR (`gh pr view <pr> --json comments -q '.comments[].body' | grep 'factory:review-ui round=r'`). Finish with one line: the verdict and the URL `gh pr comment` printed for your comment.
