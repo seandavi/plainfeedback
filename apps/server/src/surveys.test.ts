@@ -493,12 +493,19 @@ describe("publish and versions", () => {
 
     const refused = await publish(likert("new", "a", "b"));
     expect(refused.status).toBe(409);
-    expect((await read(refused)).changes).toContain(
-      `In 'r', statement 1 was "a" and is now "new".`,
-    );
+    const body = await read(refused);
+    expect(body.changes).toContain(`In 'r', statement 1 was "a" and is now "new".`);
+    expect(body.error).toContain("If you only fixed a typo");
     expect((await publish(likert("a", "b", "c"))).status).toBe(201); // appending is free
     expect((await publish(likert("a", "B", "c"), { force: true })).status).toBe(201);
     expect((await publish(likert("a", "B", "c", "d"))).status).toBe(201); // forced change not re-asked
+
+    // #122: a changed option value is not a typo; the advice says to put it back.
+    const choice = (v: string) => `# T\n\n::: {.choice #c}\nQ\n- Yes {value=${v}}\n- No\n:::\n`;
+    expect((await publish(choice("1"))).status).toBe(201);
+    const valueChanged = await read(await publish(choice("2")));
+    expect(valueChanged.error).toContain("Put a changed option value back");
+    expect(valueChanged.error).not.toContain("typo");
   });
 
   it("rejects closesAt before opensAt and unknown fields", async () => {

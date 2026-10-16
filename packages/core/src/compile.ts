@@ -331,7 +331,7 @@ function finish(
       else if (items.length < 1)
         e("A .likert question needs at least one statement, written as '- ' list items.");
       for (const it of b.items)
-        if (/\{[^{}]*\bvalue\s*=[^{}]*\}\s*$/.test(it.text))
+        if (/\bvalue\s*=/.test(trailingBraces(it.text)?.inner ?? ""))
           err(it.line, "Stored values apply to .choice and .multi options only.");
       checkDuplicates(b, err, "statement");
       const scale = str("scale") ?? "1-5";
@@ -375,7 +375,15 @@ function finish(
   return q;
 }
 
-const ITEM_BRACES = /^(.*?)\s*\{([^{}]*=[^{}]*)\}$/;
+/** The trailing `{...=...}` block of a list item, if any. No backtracking regex: item text is
+ * author input up to the body limit, and the compile route is open to viewers. */
+function trailingBraces(text: string): { label: string; inner: string } | undefined {
+  if (!text.endsWith("}")) return;
+  const open = text.lastIndexOf("{");
+  const inner = text.slice(open + 1, -1);
+  if (open < 0 || inner.includes("}") || !inner.includes("=")) return;
+  return { label: text.slice(0, open).trimEnd(), inner };
+}
 const ITEM_ATTR = /\s*([\w-]+)=(?:"([^"]*)"|'([^']*)'|([^\s"'{}]*)(?=\s|$))\s*/y;
 
 /** Splits a trailing `{value=...}` off an option. Braces without '=' stay label text (`Python {3}`).
@@ -384,9 +392,11 @@ function itemValue(
   it: { text: string; line: number },
   err: (line: number, message: string) => void,
 ): { label: string; value?: string } | undefined {
-  const m = it.text.match(ITEM_BRACES);
+  const m = trailingBraces(it.text);
   if (!m) return;
-  const inner = m[2] as string;
+  const { label, inner } = m;
+  if (trailingBraces(label))
+    err(it.line, "An option can have only one {value=...}. Remove the extra braces.");
   let value: string | undefined;
   ITEM_ATTR.lastIndex = 0;
   while (ITEM_ATTR.lastIndex < inner.length) {
@@ -399,7 +409,7 @@ function itemValue(
         it.line,
         CURLY.test(inner) ? CURLY_MESSAGE : `Can't read the option's settings from here: "${rest}"`,
       );
-      return { label: m[1] as string };
+      return { label };
     }
     if (key !== "value")
       err(it.line, `'${key}' doesn't apply to options. Only {value=...} is allowed.`);
@@ -409,7 +419,7 @@ function itemValue(
       if (value === "") err(it.line, "This option's value is empty. Write it like {value=5}.");
     }
   }
-  return { label: m[1] as string, ...(value ? { value } : {}) };
+  return { label, ...(value ? { value } : {}) };
 }
 
 const strayError = (b: Block, err: (line: number, message: string) => void) =>

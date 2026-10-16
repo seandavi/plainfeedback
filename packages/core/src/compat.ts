@@ -45,6 +45,7 @@ export function exportChanges(earlier: Survey[], next: Survey): string[] {
 
 function diff(earlier: Survey[], next: Survey): string[] {
   const out = new Set<string>();
+  const seen = new Set<string>();
   const nextCols = columnsFor(next);
   for (const old of earlier) {
     const byId = new Map(questions(old).map((q) => [q.id, q]));
@@ -73,7 +74,10 @@ function diff(earlier: Survey[], next: Survey): string[] {
         const now = optionValues(q);
         const valued = o.values !== undefined || q.values !== undefined;
         optionValues(o).forEach((v, i) => {
-          if (now.includes(v)) return;
+          // One line per value: the first (oldest) label wins, so the message stays stable.
+          const key = `${q.id}\u0000${v}`;
+          if (now.includes(v) || seen.has(key)) return;
+          seen.add(key);
           out.add(
             valued
               ? `In '${q.id}', the option value "${v}" ("${o.options[i]}") was removed or changed.`

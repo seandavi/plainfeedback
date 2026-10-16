@@ -665,7 +665,10 @@ export const surveyRoutes = (db: Db, publicBaseUrl: string) => {
                   "This survey already has responses, and these changes would put different " +
                   "answers under the same export column. Keep existing statements and options " +
                   "in place and add new ones at the end, or give a changed question a new id. " +
-                  "If you only fixed a typo, publish anyway.",
+                  (changes.some((x) => x.includes("the option value"))
+                    ? "Put a changed option value back as it was; rewording an option's text is " +
+                      "fine as long as its {value=...} stays the same."
+                    : "If you only fixed a typo, publish anyway."),
                 changes,
               },
               409,

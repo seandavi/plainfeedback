@@ -325,6 +325,22 @@ How satisfied?
     expect(errs[0]?.message).toContain(message);
   });
 
+  test("two brace blocks on one option are an error", () => {
+    expect(errorsOf("# T\n\n::: {.choice #c}\nQ\n- A {value=1}{value=2}\n- B\n:::\n")).toEqual([
+      { line: 5, message: "An option can have only one {value=...}. Remove the extra braces." },
+    ]);
+  });
+
+  test("a long option compiles in linear time (no ReDoS)", () => {
+    for (const item of [`a${" ".repeat(190_000)}b`, `x{${"=".repeat(190_000)}`]) {
+      for (const type of ["choice", "likert"]) {
+        const start = Date.now();
+        compile(`# T\n\n::: {.${type} #c}\nQ\n- ${item}\n- B\n:::\n`);
+        expect(Date.now() - start).toBeLessThan(500);
+      }
+    }
+  });
+
   test("';' in a .multi value, and a value on a .likert statement", () => {
     expect(errorsOf("# T\n\n::: {.multi #c}\nQ\n- A {value='1;2'}\n- B\n:::\n")).toEqual([
       { line: 5, message: "A .multi option's value can't contain ';'." },
