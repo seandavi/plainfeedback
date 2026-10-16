@@ -70,10 +70,12 @@ only to a question whose meaning changed.
 Once a survey has responses, publishing asks you to confirm changes that would
 mix different answers in one export column: reordering, inserting or rewording
 rating-grid statements (add new ones at the end instead), reusing an id for a
-different question type (use a new id), removing or renaming an option, renaming
-the Other label, or giving an earlier question's export column (such as `r_1`) to
+different question type (use a new id), removing or renaming an option (or
+changing an option's `{value=...}`), renaming the Other label, or giving an earlier question's export column (such as `r_1`) to
 a new question.
 Adding questions, options and statements at the end needs no confirmation.
+Rewording an option that has a `{value=...}` is free too, as long as the value
+stays the same.
 
 ### Settings for every question
 
@@ -105,12 +107,31 @@ Please specify your CFDE affiliation.
 - `other="Label"` adds a last option with a text box, so people can write their
   own answer. Write just `other` for the label "Other". Leave it out if people
   must pick from the list.
+- `{value=...}` at the end of an option stores a value instead of the option
+  text, so you can reword the text later without splitting the export column:
+
+  ```markdown
+  ::: {.choice #satisfaction}
+  How satisfied were you?
+  - Very satisfied {value=5}
+  - Somewhat satisfied {value=4}
+  - Not satisfied {value=1}
+  :::
+  ```
+
+  People still see the text; answers, the export and the codebook hold the
+  value. The value can be bare (`{value=5}`) or quoted (`{value="very high"}`),
+  must not be empty and must differ from the other options' values and from the
+  `other` label. An option without `{value=...}` in the same list stores its
+  text. Braces without `=`, like `- Python {3}`, are part of the option text.
+  Values don't apply to `.likert` statements.
 
 #### Multiple choice: `.multi`
 
 Same as `.choice`, but people may tick several options (or none, unless
 `required`). `other` works the same way. Options and the `other` label can't
-contain `;`, because the CSV export joins the ticked options with `;`.
+contain `;`, because the CSV export joins the ticked options with `;`; the same
+goes for option values.
 
 #### Rating grid: `.likert`
 
@@ -265,7 +286,7 @@ in `packages/core/src/model.ts` is authoritative.
 // every Question has:
 { id, type, prompt /* markdown source */, required: boolean, visibleIf?: string /* reserved */ }
 // plus, by type:
-choice | multi: { options: string[], other?: string /* label */ }
+choice | multi: { options: string[], values?: string[] /* stored per option, parallel to options */, other?: string /* label */ }
 likert: { statements: string[], scale: { min, max }, anchors: { low?, mid?, high? } }
 text:   { maxlength: number /* default 2000 */, multiline: boolean }
 number: { min?: number, max?: number }
@@ -285,8 +306,8 @@ stores the normalised object.
 
 | Type | Answer |
 |---|---|
-| `choice` | The chosen option's text. With `other`, any other string (at most 500 characters) is the "Other" text. |
-| `multi` | An array of distinct option texts. With `other`, at most one entry may be "Other" text. |
+| `choice` | The chosen option's value (its `{value=...}`, else its text; `optionValues(q)`). With `other`, any other string (at most 500 characters) is the "Other" text. |
+| `multi` | An array of distinct option values. With `other`, at most one entry may be "Other" text. |
 | `likert` | An object from statement number (`"1"`, `"2"`, ... in list order) to an integer rating within the scale. Unrated statements are left out (or `null`). |
 | `text` | A string of at most `maxlength` characters. |
 | `number` | A finite number within `min`/`max`. |
@@ -296,4 +317,4 @@ object all count as unanswered, with one exception: for a question with `other`,
 a blank string (or a blank entry in a `multi` array) means "Other" was picked and
 left empty, and is rejected with a message asking to describe it. Answers for ids that are not in the survey are
 rejected. Published versions are immutable, so statement numbers and option
-texts are stable within a version.
+values are stable within a version.

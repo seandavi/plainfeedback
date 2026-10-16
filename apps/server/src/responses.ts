@@ -11,7 +11,7 @@
 // cursor needs serialised inserts or a commit-order horizon; xmin-based filters are not exact
 // (xid order != seq order); a global insert lock held to commit would serialise every submit.
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
-import { columnsFor, type Question, type Survey } from "@plainfeedback/core";
+import { columnsFor, optionValues, type Question, type Survey } from "@plainfeedback/core";
 import { and, asc, eq, inArray, lt, type SQL, sql } from "drizzle-orm";
 import { requireAdmin } from "./auth";
 import {
@@ -35,7 +35,7 @@ const BATCH = 500;
 export { type Column, columnsFor } from "@plainfeedback/core";
 
 const isOther = (q: Question, a: string) =>
-  (q.type === "choice" || q.type === "multi") && !q.options.includes(a);
+  (q.type === "choice" || q.type === "multi") && !optionValues(q).includes(a);
 
 // Column name -> cell value for one answer set. Missing answers are simply absent.
 // An "Other" answer shows the Other label in the main column and the typed text in `<id>_other`.
@@ -492,7 +492,7 @@ export const responseRoutes = (db: Db, log: (line: string) => void = () => {}) =
           // Can hold respondent-written text: a text answer, or Other text in `<id>_other` (#75).
           freeText: q.type === "text" || ("other" in q && q.other !== undefined),
           ...(q.type === "choice" || q.type === "multi"
-            ? { options: q.options, other: q.other ?? null }
+            ? { options: q.options, values: optionValues(q), other: q.other ?? null }
             : {}),
           ...(q.type === "likert"
             ? {

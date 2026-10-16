@@ -151,3 +151,35 @@ describe("normalizeAnswers (#75)", () => {
     expect(Object.keys(n)).toEqual(["__proto__"]);
   });
 });
+
+describe("option values (#122)", () => {
+  const valued = (other: string) =>
+    compile(`# T
+
+::: {.choice #c ${other}}
+Q
+- Very satisfied {value=5}
+- Meh {value=3}
+:::
+
+::: {.multi #m ${other}}
+Q
+- A {value=a}
+- B {value=b}
+:::
+`).model as Survey;
+
+  test("values are accepted, labels are not", () => {
+    const m = valued("");
+    expect(validateAnswers(m, { c: "5", m: ["a", "b"] })).toEqual({});
+    expect(validateAnswers(m, { c: "Very satisfied" })).toEqual({
+      c: "Choose one of the options.",
+    });
+    expect(validateAnswers(m, { m: ["A"] })).toEqual({ m: "Choose one of the options." });
+  });
+
+  test("with Other, a label is Other text", () => {
+    const m = valued("other");
+    expect(validateAnswers(m, { c: "Very satisfied", m: ["a", "A"] })).toEqual({});
+  });
+});
