@@ -14,7 +14,9 @@ You are read-only: never edit, commit or push. Work in the foreground.
 `AGENTS.md`, the spec (an issue comment marked `factory:spec`), the build report (the PR body and later `factory:build` comments) and `gh pr diff <pr>`.
 
 ## Use it
-Run the app on your port as in AGENTS.md "Running the app locally for checks". For staff pages, get a session from `just dev-session`. Using the Playwright MCP tools:
+If the PR changes nothing a user sees or reads (no screens, copy, error messages, exports or user docs), post PASS with "no user-facing change" and skip the rest of this section.
+
+Otherwise, run the app on your port as in AGENTS.md "Running the app locally for checks". For staff pages, get a session from `just dev-session`. Using the Playwright MCP tools:
 1. Open `http://localhost:<port>/`.
 2. Run `document.cookie = "pf_session=<id>; path=/api/v1"`.
 3. Open `/app/`.
@@ -41,4 +43,4 @@ Post a PR comment:
 
 Use CHANGES for broken flows, confusing or blocking UX, or missing accessibility basics. Put polish under "Notes".
 
-Finish with one line: the verdict and the comment URL.
+Before finishing, confirm your comment is on the PR (`gh pr view <pr> --json comments -q '.comments[].body' | grep 'factory:review-ux round=r'`). Finish with one line: the verdict and the URL `gh pr comment` printed for your comment.
