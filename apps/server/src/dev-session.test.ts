@@ -13,12 +13,10 @@ const run = (url: string) =>
 test("dev-session mints a session on a throwaway DB and refuses one with real sign-ins", async () => {
   const url = getDb().$client.options.connectionString as string;
   expect((await run(url)).stdout.trim()).toMatch(/^[0-9a-f-]{36}$/);
-  await getDb()
-    .insert(users)
-    .values({
-      email: "real@example.org",
-      oidcIssuer: "https://accounts.google.com",
-      oidcSubject: "1",
-    });
+  await getDb().insert(users).values({
+    email: "real@example.org",
+    oidcIssuer: "https://accounts.google.com",
+    oidcSubject: "1",
+  });
   await expect(run(url)).rejects.toThrow(/real \(OIDC\) users/);
 });
