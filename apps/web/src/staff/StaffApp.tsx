@@ -10,7 +10,6 @@ import {
   useRef,
   useState,
 } from "react";
-import grammar from "../../../../docs/grammar.md?raw";
 import cfdeExample from "../../../../packages/core/src/fixtures/cfde-fall-2026.md?raw";
 import { AdminPage } from "./Admin";
 import { ApiError, api, canEdit, type Event, isOwner, type Me, type Wave } from "./api";
@@ -154,25 +153,12 @@ function route(path: string, me: Me): ReactNode {
     return m === undefined ? undefined : decodeURIComponent(m);
   });
   if (/^\/app\/admin\/?$/.test(path)) return <AdminPage me={me} />;
-  if (/^\/app\/guide\/?$/.test(path)) return <Guide />;
   if (g && e && rs) return <ResponsesPage key={path} me={me} g={g} e={e} s={rs} />;
   if (g && e && s) return <EditorPage key={path} me={me} g={g} e={e} s={s} />;
   if (g && e) return <EventPage key={path} me={me} g={g} e={e} />;
   if (g) return <GroupPage key={path} me={me} g={g} />;
   if (/^\/app\/?$/.test(path)) return <Dashboard me={me} />;
   return <p role="alert">Page not found.</p>;
-}
-
-/** docs/grammar.md as plain text, so authors need not leave the app (#78). ponytail: markdown
- * source rather than rendered; the survey renderer has no tables or code blocks. */
-function Guide() {
-  usePageTitle("Survey markdown guide");
-  return (
-    <>
-      <h1>Survey markdown guide</h1>
-      <pre className="guide">{grammar.replace(/^# .*\n+/, "")}</pre>
-    </>
-  );
 }
 
 const Crumbs = ({ items }: { items: [string, string?][] }) => (

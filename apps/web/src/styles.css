@@ -311,11 +311,6 @@ a.button {
 .list li .danger {
   margin-left: auto; /* away from the row's main link */
 }
-.guide {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font-variant-ligatures: none;
-}
 .staff button.link {
   min-height: 0;
   padding: 0;
