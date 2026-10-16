@@ -7,6 +7,7 @@ import { useTestDb } from "./testdb";
 const getDb = useTestDb();
 const run = (url: string) =>
   promisify(execFile)("pnpm", ["exec", "tsx", "src/dev-session.ts", "dev@example.org"], {
+    cwd: new URL("..", import.meta.url).pathname, // apps/server, whatever dir vitest runs from
     env: { ...process.env, DATABASE_URL: url },
   });
 
