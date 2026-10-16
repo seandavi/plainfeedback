@@ -4,8 +4,13 @@ set dotenv-load
 dev:
     pnpm -C apps/server dev & pnpm -C apps/web dev; kill %1
 
+# DB tests default to the `just db-up` Postgres when DATABASE_URL is unset (no .env needed)
 test:
-    pnpm test
+    DATABASE_URL="${DATABASE_URL:-postgresql://plainfeedback:plainfeedback-dev-only@localhost:${DB_PORT:-5432}/plainfeedback}" pnpm test
+
+# start local Postgres 17 only (DB_PORT=... if 5432 is taken); each DB test file makes and drops its own database
+db-up:
+    docker compose up --build -d --wait db
 
 lint:
     pnpm lint

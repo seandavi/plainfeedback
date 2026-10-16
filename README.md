@@ -38,6 +38,12 @@ just dev                 # server on :3000, web on :5173
 just lint typecheck test # tests need DATABASE_URL pointing at Postgres
 ```
 
+To run the tests only, no `.env` or secrets needed:
+
+```sh
+pnpm install && just db-up && just test   # db-up: Postgres 17 on localhost:${DB_PORT:-5432}
+```
+
 ## Self-hosting with Docker Compose
 
 ```sh
