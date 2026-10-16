@@ -27,6 +27,10 @@ migrate:
 openapi:
     pnpm -C apps/server exec tsx src/openapi-gen.ts
 
+# local checks: print a pf_session cookie for <email>, owner of group "Dev" (localhost DB only)
+dev-session email *flags:
+    pnpm -C apps/server exec tsx src/dev-session.ts {{email}} {{flags}}
+
 # generate a migration after editing apps/server/src/schema
 migration-generate name:
     pnpm -C apps/server exec drizzle-kit generate --name {{name}}
