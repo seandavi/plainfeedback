@@ -4,7 +4,7 @@ Read `docs/design.md` and `docs/adr/` first. ADRs are inputs, not constraints: i
 
 ## Workflow
 - Work tracks GitHub issues. One worktree/branch per issue; open a PR with `Closes #N`; the maintainer has delegated merging: squash-merge when CI is green. Never `git stash` (shared refs).
-- Software factory: `/factory <issue>` runs spec → build → four reviews → approve or escalate, tracked with issue labels and comments. See `.claude/skills/factory/SKILL.md`.
+- Software factory: `/factory <issue>` runs spec → build → four reviews → approve or escalate, tracked with issue labels and comments. The skill (`.claude/skills/factory/SKILL.md`) and its `factory-*` agents are repo-agnostic; this repo's commands, reviewer rules and escalation rules are in `.factory/`.
 - Architecture changes: add `docs/adr/NNNN-title.md` (copy `0000-template.md`), link it from the PR.
 - Deep modules with clear seams: small interfaces, hidden complexity. Prefer boring and minimal.
 
