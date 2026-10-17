@@ -292,6 +292,44 @@ Your institution?
       expect(onSubmit).toHaveBeenCalledWith({ inst: "Visitor" }, "");
     });
   });
+
+  describe("date (#124)", () => {
+    const date = (errors?: Record<string, string>) => {
+      const m = compile(`# T
+
+::: {.date #d min=2026-01-01 max=2026-12-31}
+Arrival date?
+:::
+`).model as Survey;
+      const onSubmit = vi.fn(async () => errors);
+      render(<SurveyForm model={m} mode="live" onSubmit={onSubmit} />);
+      return { onSubmit, input: screen.getByLabelText("Arrival date?") as HTMLInputElement };
+    };
+
+    it("renders a labelled native date input with min and max", () => {
+      const { input } = date();
+      expect([input.type, input.min, input.max]).toEqual(["date", "2026-01-01", "2026-12-31"]);
+    });
+
+    it("submits the ISO string", async () => {
+      const { onSubmit, input } = date();
+      fireEvent.change(input, { target: { value: "2026-03-15" } });
+      submit();
+      await flush();
+      expect(onSubmit).toHaveBeenCalledWith({ d: "2026-03-15" }, "");
+    });
+
+    it("shows server errors under the field", async () => {
+      const { input } = date({ d: "Enter a date on or before 2026-12-31." });
+      fireEvent.change(input, { target: { value: "2026-03-15" } });
+      submit();
+      await flush();
+      await flush();
+      expect(input.getAttribute("aria-invalid")).toBe("true");
+      const err = document.getElementById(input.getAttribute("aria-describedby") ?? "");
+      expect(err?.textContent).toBe("Enter a date on or before 2026-12-31.");
+    });
+  });
 });
 
 describe("Markdown", () => {

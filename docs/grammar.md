@@ -92,6 +92,7 @@ stays the same.
 | `.likert` | Rate each statement on one shared scale | statements (at least one) | `scale`, `low`, `mid`, `high` |
 | `.text` | Type an answer | (no list) | `maxlength`, `multiline` |
 | `.number` | Enter a number | (no list) | `min`, `max` |
+| `.date` | Pick a calendar date | (no list) | `min`, `max` |
 
 #### Single choice: `.choice`
 
@@ -199,6 +200,18 @@ How many years have you worked in this field?
 
 `min` and `max` are optional and may be decimals.
 
+#### Date: `.date`
+
+```markdown
+::: {.date #arrival min=2026-01-01 max=2026-12-31}
+When did you arrive?
+:::
+```
+
+Participants pick a day with their browser's date picker. The answer is the
+date as `YYYY-MM-DD`, with no time of day and no timezone. `min` and `max` are
+optional, written as `YYYY-MM-DD`, and inclusive.
+
 ### Writing settings
 
 - A setting with a value is `name=value`. Use quotes when the value has spaces:
@@ -220,7 +233,7 @@ give an error rather than being silently ignored:
 
 The app lists every problem it finds, each with a line number, for example:
 
-- `Line 7: Unknown question type '.radio'. Use one of: .choice, .multi, .likert, .text, .number.`
+- `Line 7: Unknown question type '.radio'. Use one of: .choice, .multi, .likert, .text, .number, .date.`
 - `Line 12: The id '#role' is already used on line 3.`
 - `Line 15: A .choice question needs at least two options, written as '- ' list items.`
 - `Line 20: The scale "5-1" must go from low to high, like scale="1-5".`
@@ -306,6 +319,7 @@ choice | multi: { options: string[], values?: string[] /* stored per option, par
 likert: { statements: string[], scale: { min, max }, anchors: { low?, mid?, high? } }
 text:   { maxlength: number /* default 2000 */, multiline: boolean }
 number: { min?: number, max?: number }
+date:   { min?: string, max?: string /* YYYY-MM-DD */ }
 ```
 
 Prompts and the intro are stored as markdown source. Rendering them to HTML,
@@ -327,6 +341,7 @@ stores the normalised object.
 | `likert` | An object from statement number (`"1"`, `"2"`, ... in list order) to an integer rating within the scale. Unrated statements are left out (or `null`). |
 | `text` | A string of at most `maxlength` characters. |
 | `number` | A finite number within `min`/`max`. |
+| `date` | A real calendar date as a `"YYYY-MM-DD"` string, within `min`/`max` (inclusive). |
 
 A missing answer, `null`, an empty or blank string, an empty array and an empty
 object all count as unanswered, with one exception: for a question with `other`,

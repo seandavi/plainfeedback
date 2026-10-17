@@ -501,7 +501,9 @@ export const responseRoutes = (db: Db, log: (line: string) => void = () => {}) =
                 anchors: q.anchors,
               }
             : {}),
-          ...(q.type === "number" ? { min: q.min ?? null, max: q.max ?? null } : {}),
+          ...(q.type === "number" || q.type === "date"
+            ? { min: q.min ?? null, max: q.max ?? null }
+            : {}),
         })),
       );
       return c.json(

@@ -10,6 +10,10 @@ export const TEXT_DEFAULT_MAXLENGTH = 2000;
  * the participant page waits out the remainder, so a fast human is never dropped. */
 export const MIN_SUBMIT_MS = 3000;
 export const LIKERT_MAX_POINTS = 11;
+// zod's ISO date regex is anchored and fixed-length (no backtracking) and checks leap years.
+const ISO_DATE = z.iso.date();
+/** A real calendar date written `YYYY-MM-DD` (#124). Within such strings `<` is date order. */
+export const isIsoDate = (s: string) => ISO_DATE.safeParse(s).success;
 
 const base = {
   id: z.string().regex(ID_PATTERN),
@@ -60,6 +64,12 @@ export const questionSchema = z.discriminatedUnion("type", [
     type: z.literal("number"),
     min: z.number().optional(),
     max: z.number().optional(),
+  }),
+  z.object({
+    ...base,
+    type: z.literal("date"),
+    min: z.string().refine(isIsoDate).optional(),
+    max: z.string().refine(isIsoDate).optional(),
   }),
 ]);
 

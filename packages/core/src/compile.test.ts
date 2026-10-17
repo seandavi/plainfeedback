@@ -434,3 +434,56 @@ describe("dropdown (#123)", () => {
     expect(surveySchema.parse(bad).pages[0]?.questions[0]).not.toHaveProperty("dropdown");
   });
 });
+
+describe("date (#124)", () => {
+  const first = (md: string) => compile(md).model?.pages[0]?.questions[0];
+  const at3 = (message: string) => [{ line: 3, message }];
+
+  test("compiles; min/max bare or quoted", () => {
+    expect(first("# T\n\n::: {.date #d}\nWhen?\n:::\n")).toEqual({
+      type: "date",
+      id: "d",
+      prompt: "When?",
+      required: false,
+    });
+    expect(
+      first('# T\n\n::: {.date #d required min=2026-01-01 max="2026-12-31"}\nWhen?\n:::\n'),
+    ).toMatchObject({ type: "date", required: true, min: "2026-01-01", max: "2026-12-31" });
+  });
+
+  test.each([
+    [
+      "min=2026-02-30",
+      `'min' must be a date written as YYYY-MM-DD, like min=2026-03-15, not "2026-02-30".`,
+    ],
+    [
+      "max=2026/03/15",
+      `'max' must be a date written as YYYY-MM-DD, like max=2026-03-15, not "2026/03/15".`,
+    ],
+    ["min", `'min' needs a value, like min="..."`],
+    ["min=2026-03-02 max=2026-03-01", "'min' must not be later than 'max'."],
+    ["maxlength=5", "'maxlength' doesn't apply to .date questions."],
+    ["dropdown", "'dropdown' doesn't apply to .date questions."],
+    ["multiline", "'multiline' doesn't apply to .date questions."],
+  ])("%s is an error", (attrs, message) => {
+    expect(errorsOf(`# T\n\n::: {.date #d ${attrs}}\nWhen?\n:::\n`)).toEqual(at3(message));
+  });
+
+  test("a list is an error", () => {
+    expect(errorsOf("# T\n\n::: {.date #d}\nWhen?\n- A\n:::\n")).toEqual([
+      { line: 5, message: "A .date question doesn't take a list. Remove the '- ' items." },
+    ]);
+  });
+
+  test("listed among known types", () => {
+    expect(errorsOf("# T\n\n::: {.calendar #d}\nWhen?\n:::\n")[0]?.message).toContain(".date");
+  });
+
+  test("a hostile min compiles quickly", () => {
+    const start = Date.now();
+    expect(
+      errorsOf(`# T\n\n::: {.date #d min="${"2026-01-01".repeat(20_000)}"}\nQ\n:::\n`),
+    ).toHaveLength(1);
+    expect(Date.now() - start).toBeLessThan(500);
+  });
+});

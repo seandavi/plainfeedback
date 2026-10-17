@@ -363,9 +363,9 @@ function QuestionField(p: FieldProps<any>) {
       <label htmlFor={inputId}>{prompt}</label>
       <input
         id={inputId}
-        type="number"
-        inputMode="decimal"
-        step="any"
+        {...(q.type === "date"
+          ? { type: "date" } // the browser always submits ISO YYYY-MM-DD (#124)
+          : { type: "number", inputMode: "decimal" as const, step: "any" })}
         min={q.min}
         max={q.max}
         value={(p.value ?? "") as string}

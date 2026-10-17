@@ -508,6 +508,36 @@ describe("publish and versions", () => {
     expect(valueChanged.error).not.toContain("typo");
   });
 
+  it("once answered, a reused id changing to or from .date is refused; min/max changes are free (#124)", async () => {
+    const w = await world();
+    const as = w.who.creator;
+    const base = `${ev(w)}/surveys/post`;
+    let etag = '"e1"';
+    const publish = async (md: string) => {
+      const put = await call(w, "PUT", base, as, md, undefined, { "if-match": etag });
+      etag = put.headers.get("etag") as string;
+      return call(w, "POST", `${base}/publish`, as);
+    };
+    const q = (type: string, attrs = "") => `# T\n\n::: {.${type} #d ${attrs}}\nWhen?\n:::\n`;
+    expect((await publish(q("date", "min=2026-01-01"))).status).toBe(201);
+    const [v] = await getDb()
+      .select()
+      .from(surveyVersions)
+      .where(eq(surveyVersions.surveyId, w.survey.id))
+      .orderBy(desc(surveyVersions.version));
+    await getDb()
+      .insert(responses)
+      .values({ surveyVersionId: v?.id as string, answers: { d: "2026-03-01" } });
+    expect((await publish(q("date", "max=2026-06-30"))).status).toBe(201);
+    for (const type of ["text", "number"]) {
+      const refused = await publish(q(type));
+      expect(refused.status).toBe(409);
+      expect((await read(refused)).changes).toEqual([
+        `'d' was a .date question and is now a .${type} question.`,
+      ]);
+    }
+  });
+
   it("rejects closesAt before opensAt and unknown fields", async () => {
     const w = await world();
     const path = `${ev(w)}/surveys/post/publish`;

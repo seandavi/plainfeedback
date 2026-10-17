@@ -201,3 +201,48 @@ describe("dropdown (#123)", () => {
     });
   });
 });
+
+describe("date (#124)", () => {
+  const m = (attrs: string) => compile(`# T\n\n::: {.date #d ${attrs}}\nQ\n:::\n`).model as Survey;
+  const open = m("");
+  const ranged = m("min=2026-01-01 max=2026-12-31");
+
+  test("accepts real dates, leap days and inclusive bounds", () => {
+    for (const d of ["2024-02-29", "2000-02-29", "9999-12-31"])
+      expect(validateAnswers(open, { d })).toEqual({});
+    for (const d of ["2026-01-01", "2026-12-31", "2026-06-15"])
+      expect(validateAnswers(ranged, { d })).toEqual({});
+  });
+
+  test("rejects non-dates and out-of-range dates", () => {
+    const bad = { d: "Enter a date like 2026-03-15." };
+    for (const d of [
+      "2026-02-30",
+      "2023-02-29",
+      "1900-02-29",
+      "2026-3-5",
+      "2026-03-15T00:00",
+      20260315,
+    ])
+      expect(validateAnswers(open, { d })).toEqual(bad);
+    expect(validateAnswers(ranged, { d: "2025-12-31" })).toEqual({
+      d: "Enter a date on or after 2026-01-01.",
+    });
+    expect(validateAnswers(ranged, { d: "2027-01-01" })).toEqual({
+      d: "Enter a date on or before 2026-12-31.",
+    });
+  });
+
+  test("required with no answer", () => {
+    expect(validateAnswers(m("required"), normalizeAnswers({ d: "" }))).toEqual({
+      d: "This question is required.",
+    });
+  });
+
+  test("a 100k-character answer fails quickly", () => {
+    const start = Date.now();
+    for (const d of ["2".repeat(100_000), `2026-01-01${"0".repeat(100_000)}`, "-".repeat(100_000)])
+      expect(validateAnswers(open, { d })).toEqual({ d: "Enter a date like 2026-03-15." });
+    expect(Date.now() - start).toBeLessThan(500);
+  });
+});
