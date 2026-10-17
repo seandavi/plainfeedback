@@ -183,3 +183,21 @@ Q
     expect(validateAnswers(m, { c: "Very satisfied", m: ["a", "A"] })).toEqual({});
   });
 });
+
+describe("dropdown (#123)", () => {
+  const src = (flags: string) =>
+    `# T\n\n::: {.choice #c ${flags}}\nQ\n- Very satisfied {value=5}\n- Meh {value=3}\n:::\n`;
+  test("validates exactly like the radio version", () => {
+    for (const flags of ["", "other", "required other"]) {
+      const radios = compile(src(flags)).model as Survey;
+      const dropdown = compile(src(`${flags} dropdown`)).model as Survey;
+      for (const a of [{ c: "5" }, { c: "Very satisfied" }, { c: "Visitor" }, { c: " " }, {}])
+        expect(validateAnswers(dropdown, a)).toEqual(validateAnswers(radios, a));
+    }
+    const plain = compile(src("dropdown")).model as Survey;
+    expect(validateAnswers(plain, { c: "5" })).toEqual({});
+    expect(validateAnswers(plain, { c: "Very satisfied" })).toEqual({
+      c: "Choose one of the options.",
+    });
+  });
+});

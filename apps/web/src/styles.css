@@ -97,6 +97,7 @@ input[type="email"],
 input[type="url"],
 input[type="date"],
 input[type="datetime-local"],
+.question select,
 textarea {
   box-sizing: border-box;
   width: 100%;
@@ -110,6 +111,11 @@ textarea {
 input.other {
   margin: 0 0 0.5rem 1.85rem;
   width: calc(100% - 1.85rem);
+}
+/* A dropdown's Other box sits under the select, not indented under a radio (#123). */
+.question select + input.other {
+  margin: 0.5rem 0;
+  width: 100%;
 }
 [aria-invalid="true"] {
   border-color: var(--error);

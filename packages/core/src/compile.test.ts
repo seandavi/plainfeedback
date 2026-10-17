@@ -372,3 +372,65 @@ How satisfied?
     expect(() => surveySchema.parse(bad)).toThrow();
   });
 });
+
+describe("dropdown (#123)", () => {
+  const first = (md: string) => compile(md).model?.pages[0]?.questions[0];
+
+  test("compiles to dropdown: true; absent without the flag", () => {
+    expect(first("# T\n\n::: {.choice #inst dropdown}\nQ\n- A\n- B\n:::\n")).toMatchObject({
+      type: "choice",
+      options: ["A", "B"],
+      dropdown: true,
+    });
+    expect(first("# T\n\n::: {.choice #inst}\nQ\n- A\n- B\n:::\n")).not.toHaveProperty("dropdown");
+    expect(JSON.stringify(compile(cfdeSource).model)).not.toContain("dropdown");
+  });
+
+  test("works with required, other and option values", () => {
+    for (const other of ["other", 'other="Somewhere else"']) {
+      const q = first(
+        `# T\n\n::: {.choice #inst required dropdown ${other}}\nQ\n- Uni A {value=ua}\n- Uni B\n:::\n`,
+      );
+      expect(q).toMatchObject({
+        required: true,
+        dropdown: true,
+        options: ["Uni A", "Uni B"],
+        values: ["ua", "Uni B"],
+        other: other === "other" ? "Other" : "Somewhere else",
+      });
+      expect(() =>
+        surveySchema.parse(compile(`# T\n\n::: {.choice #x dropdown}\nQ\n- A\n- B\n:::\n`).model),
+      ).not.toThrow();
+    }
+  });
+
+  test.each(["multi", "likert", "text", "number"])("'dropdown' on .%s is an error", (type) => {
+    const body = type === "likert" ? "\n- A" : type === "multi" ? "\n- A\n- B" : "";
+    expect(errorsOf(`# T\n\n::: {.${type} #x dropdown}\nQ${body}\n:::\n`)).toContainEqual({
+      line: 3,
+      message: `'dropdown' doesn't apply to .${type} questions.`,
+    });
+  });
+
+  test("dropdown=yes is an error", () => {
+    expect(errorsOf("# T\n\n::: {.choice #x dropdown=yes}\nQ\n- A\n- B\n:::\n")).toEqual([
+      { line: 3, message: "Write 'dropdown' on its own, without a value." },
+    ]);
+  });
+
+  test("a hostile attribute line compiles in linear time", () => {
+    for (const attrs of ["dropdown ".repeat(40_000), "{".repeat(190_000), "=".repeat(190_000)]) {
+      const start = Date.now();
+      compile(`# T\n\n::: {.choice #c ${attrs}}\nQ\n- A\n- B\n:::\n`);
+      expect(Date.now() - start).toBeLessThan(500);
+    }
+  });
+
+  test("dropdown on a .multi model is dropped by the schema", () => {
+    const m = compile("# T\n\n::: {.multi #x}\nQ\n- A\n- B\n:::\n").model;
+    const q = m?.pages[0]?.questions[0] as object;
+    const bad = { ...m, pages: [{ questions: [{ ...q, dropdown: true }] }] };
+    expect(surveySchema.safeParse(bad).success).toBe(true); // zod strips unknown keys
+    expect(surveySchema.parse(bad).pages[0]?.questions[0]).not.toHaveProperty("dropdown");
+  });
+});

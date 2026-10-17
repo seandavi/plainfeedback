@@ -18,13 +18,13 @@ export type CompileResult =
 
 const TYPES: QuestionType[] = ["choice", "multi", "likert", "text", "number"];
 const ATTRS: Record<QuestionType, string[]> = {
-  choice: ["other"],
+  choice: ["other", "dropdown"],
   multi: ["other"],
   likert: ["scale", "low", "mid", "high"],
   text: ["maxlength", "multiline"],
   number: ["min", "max"],
 };
-const FLAGS = new Set(["required", "multiline", "other"]);
+const FLAGS = new Set(["required", "multiline", "other", "dropdown"]);
 
 const RESERVED_SEQ = "The id '#seq' is reserved for the export's row number. Choose another id.";
 const TITLE_MESSAGE = "A survey starts with its title on a line like: # Fall Meeting Feedback";
@@ -241,7 +241,7 @@ function finish(
     else if (key !== "required" && !ATTRS[type].includes(key))
       e(`'${key}' doesn't apply to .${type} questions.`);
     else if (value === true && !FLAGS.has(key)) e(`'${key}' needs a value, like ${key}="..."`);
-    else if (value !== true && (key === "required" || key === "multiline"))
+    else if (value !== true && (key === "required" || key === "multiline" || key === "dropdown"))
       e(`Write '${key}' on its own, without a value.`);
   }
 
@@ -323,6 +323,7 @@ function finish(
         options: labels,
         ...(values ? { values } : {}),
         ...(other !== undefined ? { other } : {}),
+        ...(type === "choice" && attrs.has("dropdown") ? { dropdown: true as const } : {}),
       };
       break;
     }
