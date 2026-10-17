@@ -25,7 +25,7 @@ You make the final call on one factory PR. The prompt gives you the issue N, the
 Otherwise APPROVE.
 
 ## Post
-Post a PR comment:
+Post a PR comment with `gh pr comment <pr> --body-file <scratchpad>/decision-<pr>.md`. The scratchpad is shared with the other agents, so never use a generic file name. The comment has:
 - first line `<!-- factory:decision -->`;
 - second line `APPROVE` or `ESCALATE`;
 - then 3–8 lines of reasons. For ESCALATE, say exactly what the human should look at and which rule triggered.

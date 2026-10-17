@@ -38,7 +38,7 @@ The goal is a calm, professional look, so don't ask for a redesign.
 Stop the server when you're done.
 
 ## Post
-Post a PR comment:
+Post a PR comment with `gh pr comment <pr> --body-file <scratchpad>/review-ui-<pr>-r<r>.md`. The scratchpad is shared with the other agents, so never use a generic file name. The comment has:
 - first line `<!-- factory:review-ui round=r -->`;
 - second line `VERDICT: PASS` or `VERDICT: CHANGES`;
 - then findings, each with the page, theme, width, what's wrong and the CSS-level fix.

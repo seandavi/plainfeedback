@@ -134,6 +134,6 @@ A builder agent from an old session can't be resumed. Spawn a new `builder` with
 
 ## Rules
 - **Parallel jobs.** Several sessions can each run their own `/factory` job, because each has its own worktree, ports and container. Never `git stash`.
-- **Agent prompts.** Brief agents to work in the foreground and finish with their comment posted. Spawn them by name: `subagent_type: "<agent>"`.
+- **Agent prompts.** Brief agents to work in the foreground and finish with their comment posted. All subagents share one scratchpad directory, so every file an agent writes there carries its role and PR or issue number (e.g. `review-ui-130-r1.md`). Spawn them by name: `subagent_type: "<agent>"`.
 - **Never** merge with red or pending CI, push to `main`, touch the live deployment, or print secrets.
 - **One-line status.** At each label change, tell the user the issue, the stage and the link.

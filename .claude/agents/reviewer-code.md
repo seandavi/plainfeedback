@@ -26,7 +26,7 @@ You are read-only: never edit, commit or push. Work in the foreground.
 - **Simplicity:** no speculative abstractions, no dead code, no copy of a helper that already exists, and the smallest diff that works. Code should match the surrounding comment density and naming.
 
 ## Post
-Post a PR comment:
+Post a PR comment with `gh pr comment <pr> --body-file <scratchpad>/review-code-<pr>-r<r>.md`. The scratchpad is shared with the other agents, so never use a generic file name. The comment has:
 - first line `<!-- factory:review-code round=r -->`;
 - second line `VERDICT: PASS` or `VERDICT: CHANGES`;
 - then findings, each with file:line, the problem, a failure scenario and the fix.

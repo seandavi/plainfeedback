@@ -41,7 +41,7 @@ You are read-only: never edit, commit or push.
 Probe where it's cheap. Run the app on your port as in AGENTS.md "Running the app locally for checks", and use curl against the new routes as different roles. Use `just dev-session`, and assign membership with SQL on your `DATABASE_URL` if needed. Stop the server when you're done.
 
 ## Post
-Post a PR comment:
+Post a PR comment with `gh pr comment <pr> --body-file <scratchpad>/review-security-<pr>-r<r>.md`. The scratchpad is shared with the other agents, so never use a generic file name. The comment has:
 - first line `<!-- factory:review-security round=r -->`;
 - second line `VERDICT: PASS` or `VERDICT: CHANGES`;
 - then findings, each with file:line, the problem, a concrete failure scenario and the fix.
