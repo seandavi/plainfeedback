@@ -1,0 +1,27 @@
+# plainfeedback's settings for the generic /factory skill (.claude/skills/factory/SKILL.md).
+# {n} is the issue number. Per-agent guidance lives next to this file as <role>.md.
+
+[commands]
+setup = "just factory-setup {n}"       # job Postgres + pnpm install; prints DATABASE_URL and PORT_BASE
+teardown = "just factory-teardown {n}"
+check = "just lint && just typecheck && just test"
+regenerate = "just openapi"            # after merging main in; AGENTS.md covers migration journal order
+
+merge = "squash"
+
+[review]
+# Order sets the ports: security PORT_BASE+1, ux +2, ui +3, code +4.
+kinds = ["security", "ux", "ui", "code"]
+ignore = ["**/*.test.*", "**/fixtures/**"]
+
+[review.when_changed]
+# UI-facing: the web app, and server files that serve HTML.
+ui = ["apps/web/**", "apps/server/src/spa.ts", "apps/server/src/openapi.ts"]
+# UX-facing: UI-facing files, compile and validation messages, API errors and exports, user docs.
+ux = [
+  "apps/web/**",
+  "apps/server/src/**",
+  "packages/core/src/**",
+  "docs/grammar.md",
+  "docs/api.md",
+]
