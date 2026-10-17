@@ -543,3 +543,38 @@ Which?
     );
   });
 });
+
+describe("date (#124)", () => {
+  const DATED = `# T
+
+::: {.date #arrived min=2026-01-01 max=2026-12-31}
+Arrived?
+:::
+
+::: {.date #left}
+Left?
+:::
+`;
+
+  it("one ISO column in the CSV; codebook has min/max", async () => {
+    const w = await world();
+    const v3 = await w.mk(3, DATED);
+    expect(flatten(compile(DATED).model as never, { arrived: "2026-03-15" })).toEqual({
+      arrived: "2026-03-15",
+    });
+    await w.add(v3, { arrived: "2026-03-15" }, "2026-01-05T00:00:00Z");
+    const csv = await text(call(w, "GET", `${w.base}/responses?format=csv`, w.who.viewer));
+    const [head, row] = csv.split("\r\n");
+    expect(head).toMatch(/,arrived,left$/);
+    expect(row).toMatch(/,2026-03-15,$/);
+    // biome-ignore lint/suspicious/noExplicitAny: response JSON
+    const cb: any = await (
+      await call(w, "GET", `${w.base}/versions/3/codebook`, w.who.viewer)
+    ).json();
+    expect(cb.questions[0]).toMatchObject({ type: "date", min: "2026-01-01", max: "2026-12-31" });
+    expect(cb.questions[1]).toMatchObject({ type: "date", min: null, max: null });
+    expect(cb.csvColumns).toContainEqual(
+      expect.objectContaining({ name: "arrived", freeText: false }),
+    );
+  });
+});

@@ -89,3 +89,17 @@ test("free: switching a .choice between radios and dropdown (#123)", () => {
   expect(exportChanges([radios], dropdown)).toEqual([]);
   expect(exportChanges([dropdown], radios)).toEqual([]);
 });
+
+test("#124: a reused id changing to or from .date is reported; min/max changes are free", () => {
+  const date = (attrs = "") => m(`::: {.date #d ${attrs}}\nWhen?\n:::\n`);
+  expect(exportChanges([m("::: {.text #d}\nQ\n:::\n")], date())).toEqual([
+    "'d' was a .text question and is now a .date question.",
+  ]);
+  expect(exportChanges([date()], m("::: {.number #d}\nQ\n:::\n"))).toEqual([
+    "'d' was a .date question and is now a .number question.",
+  ]);
+  expect(exportChanges([date("min=2026-01-01")], date("max=2025-06-30"))).toEqual([]);
+  expect(columnsFor(date())).toEqual([
+    { name: "d", questionId: "d", type: "date", part: "value", freeText: false },
+  ]);
+});

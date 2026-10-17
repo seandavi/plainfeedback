@@ -265,6 +265,14 @@ describe("Editor", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
+  it("inserts a Date question that compiles (#124)", async () => {
+    const box = await setup();
+    fireEvent.click(screen.getByRole("button", { name: "Insert question" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Date" }));
+    expect(box.value).toContain("::: {.date #date-1}\nWhen did you arrive?\n:::");
+    expect(compile(box.value).errors).toBeUndefined();
+  });
+
   it("marks unpublished changes, shows the close date, and confirms closing (#69)", async () => {
     const v = {
       version: 1,

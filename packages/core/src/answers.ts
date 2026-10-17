@@ -1,6 +1,6 @@
 // Shared answer validation: the browser shows these errors, the server enforces them.
 // Answer shapes are specified in docs/grammar.md ("Answers").
-import { OTHER_MAXLENGTH, optionValues, type Question, type Survey } from "./model";
+import { isIsoDate, OTHER_MAXLENGTH, optionValues, type Question, type Survey } from "./model";
 
 export type Answers = Record<string, unknown>;
 /** Question id -> human-readable error. Empty when the answers are valid. */
@@ -131,6 +131,11 @@ function check(q: Question, v: unknown): string | undefined {
       if (typeof v !== "number" || !Number.isFinite(v)) return "Enter a number.";
       if (q.min !== undefined && v < q.min) return `Enter a number of at least ${q.min}.`;
       if (q.max !== undefined && v > q.max) return `Enter a number of at most ${q.max}.`;
+      return;
+    case "date":
+      if (typeof v !== "string" || !isIsoDate(v)) return "Enter a date like 2026-03-15.";
+      if (q.min !== undefined && v < q.min) return `Enter a date on or after ${q.min}.`;
+      if (q.max !== undefined && v > q.max) return `Enter a date on or before ${q.max}.`;
       return;
   }
 }
