@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { exportChanges } from "./compat";
+import { columnsFor, exportChanges } from "./compat";
 import { compile } from "./compile";
 import type { Survey } from "./model";
 
@@ -79,4 +79,13 @@ test("#122: option values; rewording a valued label is free", () => {
   expect(exportChanges([choice("choice", "x", "y")], choice("choice", "x {value=1}", "y"))).toEqual(
     [`In 'c', the option value "x" ("x") was removed or changed.`],
   );
+});
+
+test("free: switching a .choice between radios and dropdown (#123)", () => {
+  const src = (f: string) => `::: {.choice #c other ${f}}\nPick\n- A {value=1}\n- B\n:::\n`;
+  const radios = m(src(""));
+  const dropdown = m(src("dropdown"));
+  expect(columnsFor(dropdown)).toEqual(columnsFor(radios));
+  expect(exportChanges([radios], dropdown)).toEqual([]);
+  expect(exportChanges([dropdown], radios)).toEqual([]);
 });

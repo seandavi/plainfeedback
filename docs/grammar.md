@@ -87,7 +87,7 @@ stays the same.
 
 | Type | What people do | List items are | Settings |
 |---|---|---|---|
-| `.choice` | Pick one option | options (at least two) | `other` |
+| `.choice` | Pick one option | options (at least two) | `other`, `dropdown` |
 | `.multi` | Pick any number of options | options (at least two) | `other` |
 | `.likert` | Rate each statement on one shared scale | statements (at least one) | `scale`, `low`, `mid`, `high` |
 | `.text` | Type an answer | (no list) | `maxlength`, `multiline` |
@@ -125,6 +125,22 @@ Please specify your CFDE affiliation.
   `other` label. An option without `{value=...}` in the same list stores its
   text. Braces without `=`, like `- Python {3}`, are part of the option text.
   Values don't apply to `.likert` statements.
+- `dropdown` shows the options as a drop-down list instead of radio buttons,
+  which suits a long list:
+
+  ```markdown
+  ::: {.choice #institution dropdown other}
+  Which institution are you from?
+  - University of Colorado
+  - University of Washington
+  - Stanford University
+  :::
+  ```
+
+  Answers, the export and the codebook columns are the same as without it, so
+  you can switch either way after responses arrive. The list starts at
+  "Choose one", which leaves an optional question unanswered. `dropdown` applies
+  to `.choice` only, not `.multi`.
 
 #### Multiple choice: `.multi`
 
@@ -188,7 +204,7 @@ How many years have you worked in this field?
 - A setting with a value is `name=value`. Use quotes when the value has spaces:
   `low="Not at all"`. Single quotes also work. Use straight quotes: curly quotes
   (`“ ”`), which Word and Google Docs insert, are reported as an error.
-- `required`, `multiline` and `other` can be written on their own.
+- `required`, `multiline`, `other` and `dropdown` can be written on their own.
 - Settings can come in any order. A misspelled setting is an error, not ignored.
 
 ## Not supported yet
@@ -286,7 +302,7 @@ in `packages/core/src/model.ts` is authoritative.
 // every Question has:
 { id, type, prompt /* markdown source */, required: boolean, visibleIf?: string /* reserved */ }
 // plus, by type:
-choice | multi: { options: string[], values?: string[] /* stored per option, parallel to options */, other?: string /* label */ }
+choice | multi: { options: string[], values?: string[] /* stored per option, parallel to options */, other?: string /* label */, dropdown?: true /* choice only */ }
 likert: { statements: string[], scale: { min, max }, anchors: { low?, mid?, high? } }
 text:   { maxlength: number /* default 2000 */, multiline: boolean }
 number: { min?: number, max?: number }

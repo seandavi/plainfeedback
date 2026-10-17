@@ -30,7 +30,13 @@ const options = {
 };
 
 export const questionSchema = z.discriminatedUnion("type", [
-  z.object({ ...base, type: z.literal("choice"), ...options }),
+  z.object({
+    ...base,
+    type: z.literal("choice"),
+    ...options,
+    /** Show as a native `<select>` (#123). Presentation only; answers and export identical to radios. */
+    dropdown: z.literal(true).optional(),
+  }),
   z.object({ ...base, type: z.literal("multi"), ...options }),
   z.object({
     ...base,

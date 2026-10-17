@@ -25,7 +25,7 @@ Option 3. `exportChanges(earlier, next)` in `packages/core` lists, in plain lang
 
 Within one version the compiler refuses such collisions outright (an id equal to another question's `<id>_<n>` or `<id>_other`, or `seq`).
 
-Appending statements, adding options and adding or removing questions are free. Changes the latest version already has are not reported again, since they were accepted (forced) when it was published.
+Appending statements, adding options and adding or removing questions are free. Switching a `.choice` between radios and `dropdown` is free too: it is presentation only, and the answers and columns are the same (#123). Changes the latest version already has are not reported again, since they were accepted (forced) when it was published.
 
 `POST .../publish` returns 409 `{error, changes}` when the list is non-empty and the survey has any response; `{"force": true}` publishes anyway. The editor's publish dialog shows the list and offers "Publish anyway". The check is skipped while a survey has no responses, so authors iterate freely before collection.
 

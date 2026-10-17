@@ -221,6 +221,77 @@ Which?
     await flush();
     expect(onSubmit).toHaveBeenCalledWith({ sat: "5", m: ["b"] }, "");
   });
+
+  describe("dropdown (#123)", () => {
+    const dd = (flags: string) => {
+      const m = compile(`# T
+
+::: {.choice #inst dropdown ${flags}}
+Your institution?
+- Uni A {value=ua}
+- Uni B
+:::
+`).model as Survey;
+      const onSubmit = vi.fn(async () => undefined);
+      render(<SurveyForm model={m} mode="live" onSubmit={onSubmit} />);
+      return { onSubmit, select: screen.getByRole("combobox", { name: /Your institution/ }) };
+    };
+
+    it("renders a labelled select with a placeholder and value/label options", () => {
+      const { select } = dd("");
+      const opts = within(select).getAllByRole("option") as HTMLOptionElement[];
+      expect(opts.map((o) => [o.value, o.textContent])).toEqual([
+        ["", "Choose one"],
+        ["ua", "Uni A"],
+        ["Uni B", "Uni B"],
+      ]);
+    });
+
+    it("the placeholder clears an optional answer", async () => {
+      const { onSubmit, select } = dd("");
+      fireEvent.change(select, { target: { value: "ua" } });
+      fireEvent.change(select, { target: { value: "" } });
+      submit();
+      await flush();
+      expect(onSubmit).toHaveBeenCalledWith({}, "");
+    });
+
+    it("submits the stored value", async () => {
+      const { onSubmit, select } = dd("required");
+      fireEvent.change(select, { target: { value: "ua" } });
+      submit();
+      await flush();
+      expect(onSubmit).toHaveBeenCalledWith({ inst: "ua" }, "");
+    });
+
+    it("required and empty: marks and focuses the select", async () => {
+      const { onSubmit, select } = dd("required");
+      submit();
+      await flush();
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(select.getAttribute("aria-invalid")).toBe("true");
+      expect(select.getAttribute("aria-describedby")).toBeTruthy();
+      expect(document.activeElement).toBe(select);
+    });
+
+    it("Other shows the text box; blank is an error on it, text is the answer", async () => {
+      const { onSubmit, select } = dd("other");
+      expect(screen.queryByLabelText("Other: please specify")).toBeNull();
+      const other = within(select).getByRole("option", { name: "Other" }) as HTMLOptionElement;
+      fireEvent.change(select, { target: { value: other.value } });
+      const box = screen.getByLabelText("Other: please specify");
+      submit();
+      await flush();
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(screen.getByText('Please describe "Other", or pick another option.')).toBeTruthy();
+      expect(document.activeElement).toBe(box);
+      expect(select.getAttribute("aria-invalid")).toBeNull();
+      fireEvent.change(box, { target: { value: "Visitor" } });
+      submit();
+      await flush();
+      expect(onSubmit).toHaveBeenCalledWith({ inst: "Visitor" }, "");
+    });
+  });
 });
 
 describe("Markdown", () => {

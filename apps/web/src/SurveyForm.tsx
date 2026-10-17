@@ -175,6 +175,49 @@ function QuestionField(p: FieldProps<any>) {
           ? { ...v, picks: on ? [...v.picks, o] : v.picks.filter((x) => x !== o) }
           : { ...v, pick: o },
       );
+    const otherBox = otherOn && (
+      <>
+        <input
+          type="text"
+          className="other"
+          aria-label={`${q.other}: please specify`}
+          maxLength={OTHER_MAXLENGTH}
+          value={v.other}
+          onChange={(e) => p.onChange({ ...v, other: e.target.value })}
+          aria-invalid={invalid}
+          aria-describedby={describedBy}
+        />
+        <LimitNote length={v.other.length} max={OTHER_MAXLENGTH} />
+      </>
+    );
+    if (q.type === "choice" && q.dropdown) {
+      const selectId = `${p.name}-input`;
+      return (
+        <div className="question">
+          <label htmlFor={selectId}>{prompt}</label>
+          <select
+            id={selectId}
+            value={v.pick ?? ""}
+            onChange={(e) =>
+              p.onChange({ ...v, pick: e.target.value === "" ? undefined : e.target.value })
+            }
+            aria-invalid={otherBlank ? undefined : invalid}
+            aria-describedby={describedBy}
+          >
+            {/* Always offered, so an optional question can be cleared. */}
+            <option value="">Choose one</option>
+            {optionValues(q).map((o, i) => (
+              <option key={o} value={o}>
+                {q.options[i]}
+              </option>
+            ))}
+            {q.other && <option value={OTHER}>{q.other}</option>}
+          </select>
+          {otherBox}
+          <ErrorText id={errId} error={p.error} />
+        </div>
+      );
+    }
     return (
       <fieldset className="question" aria-describedby={describedBy}>
         <legend>{prompt}</legend>
@@ -205,21 +248,7 @@ function QuestionField(p: FieldProps<any>) {
               />
               {q.other}
             </label>
-            {otherOn && (
-              <>
-                <input
-                  type="text"
-                  className="other"
-                  aria-label={`${q.other}: please specify`}
-                  maxLength={OTHER_MAXLENGTH}
-                  value={v.other}
-                  onChange={(e) => p.onChange({ ...v, other: e.target.value })}
-                  aria-invalid={invalid}
-                  aria-describedby={describedBy}
-                />
-                <LimitNote length={v.other.length} max={OTHER_MAXLENGTH} />
-              </>
-            )}
+            {otherBox}
           </>
         )}
         <ErrorText id={errId} error={p.error} />
