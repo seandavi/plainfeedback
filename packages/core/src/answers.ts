@@ -1,6 +1,6 @@
 // Shared answer validation: the browser shows these errors, the server enforces them.
 // Answer shapes are specified in docs/grammar.md ("Answers").
-import { OTHER_MAXLENGTH, type Question, type Survey } from "./model";
+import { OTHER_MAXLENGTH, optionValues, type Question, type Survey } from "./model";
 
 export type Answers = Record<string, unknown>;
 /** Question id -> human-readable error. Empty when the answers are valid. */
@@ -75,9 +75,12 @@ function unrated(q: Extract<Question, { type: "likert" }>, v: object): string {
   return `Please rate every statement (${names.length} not rated: ${shown}${more}).`;
 }
 
-function checkOption(q: { options: string[]; other?: string }, v: unknown): string | undefined {
+function checkOption(
+  q: { options: string[]; values?: string[]; other?: string },
+  v: unknown,
+): string | undefined {
   if (typeof v !== "string") return "Choose one of the options.";
-  if (q.options.includes(v)) return;
+  if (optionValues(q).includes(v)) return;
   if (q.other === undefined) return "Choose one of the options.";
   if (v.length > OTHER_MAXLENGTH)
     return `Please use at most ${OTHER_MAXLENGTH} characters for "${q.other}".`;
@@ -92,7 +95,8 @@ function check(q: Question, v: unknown): string | undefined {
     case "multi": {
       if (!Array.isArray(v)) return "Choose from the options.";
       if (new Set(v).size !== v.length) return "An option is chosen twice.";
-      if (v.filter((x) => !q.options.includes(x)).length > 1) return "Choose from the options.";
+      if (v.filter((x) => !optionValues(q).includes(x)).length > 1)
+        return "Choose from the options.";
       for (const x of v) {
         const m = checkOption(q, x);
         if (m) return m;

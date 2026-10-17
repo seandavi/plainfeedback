@@ -63,3 +63,20 @@ test("refused: a column name moves to a different question across versions (#95)
     "The export column 'r_1' was part of 'r' and is now part of 'r_1'.",
   ]);
 });
+
+test("#122: option values; rewording a valued label is free", () => {
+  const v1 = choice("choice", "Yes {value=1}", "No {value=0}");
+  expect(exportChanges([v1], choice("choice", "Yes, sure {value=1}", "No {value=0}"))).toEqual([]);
+  expect(exportChanges([v1], choice("choice", "Yes {value=2}", "No {value=0}"))).toEqual([
+    `In 'c', the option value "1" ("Yes") was removed or changed.`,
+  ]);
+  expect(exportChanges([v1], choice("choice", "No {value=0}", "Maybe"))).toHaveLength(1);
+  // One line per value, even when earlier versions labelled it differently (oldest label shown).
+  const v2 = choice("choice", "Yes, sure {value=1}", "No {value=0}");
+  expect(exportChanges([v1, v2], choice("choice", "Yes {value=2}", "No {value=0}"))).toEqual([
+    `In 'c', the option value "1" ("Yes") was removed or changed.`,
+  ]);
+  expect(exportChanges([choice("choice", "x", "y")], choice("choice", "x {value=1}", "y"))).toEqual(
+    [`In 'c', the option value "x" ("x") was removed or changed.`],
+  );
+});

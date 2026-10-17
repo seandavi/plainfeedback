@@ -4,6 +4,7 @@ import {
   type AnswerErrors,
   type Answers,
   OTHER_MAXLENGTH,
+  optionValues,
   type Question,
   type Survey,
   validateAnswers,
@@ -177,16 +178,17 @@ function QuestionField(p: FieldProps<any>) {
     return (
       <fieldset className="question" aria-describedby={describedBy}>
         <legend>{prompt}</legend>
-        {q.options.map((o) => (
+        {optionValues(q).map((o, i) => (
           <label key={o} className="option">
             <input
               type={multi ? "checkbox" : "radio"}
               name={p.name}
+              value={o}
               checked={multi ? v.picks.includes(o) : v.pick === o}
               onChange={(e) => toggle(o, e.target.checked)}
               aria-invalid={otherBlank ? undefined : invalid}
             />
-            {o}
+            {q.options[i]}
           </label>
         ))}
         {q.other && (

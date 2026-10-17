@@ -278,3 +278,97 @@ describe("errors carry line numbers", () => {
     expect(lines).toEqual([2, 5]);
   });
 });
+
+describe("option values (#122)", () => {
+  test("valued and mixed lists; label is the default value", () => {
+    const { model, errors } = compile(`# T
+
+::: {.choice #sat}
+How satisfied?
+- Very satisfied {value=5}
+- Neutral {value="3"}
+- Not sure
+:::
+`);
+    expect(errors).toBeUndefined();
+    expect(model?.pages[0]?.questions[0]).toMatchObject({
+      options: ["Very satisfied", "Neutral", "Not sure"],
+      values: ["5", "3", "Not sure"],
+    });
+  });
+
+  test("no values key without {value=}; literal braces stay label text", () => {
+    const q = compile("# T\n\n::: {.multi #l}\nQ\n- Python {3}\n- R\n:::\n").model?.pages[0]
+      ?.questions[0];
+    expect(q).toMatchObject({ options: ["Python {3}", "R"] });
+    expect(q).not.toHaveProperty("values");
+  });
+
+  test("a value on a wrapped continuation line", () => {
+    const q = compile("# T\n\n::: {.choice #c}\nQ\n- A long\n  label {value='a'}\n- B\n:::\n").model
+      ?.pages[0]?.questions[0];
+    expect(q).toMatchObject({ options: ["A long label", "B"], values: ["a", "B"] });
+  });
+
+  test.each([
+    ["- A {x=1}", "'x' doesn't apply to options. Only {value=...} is allowed."],
+    ["- A {value=1 value=2}", "The attribute 'value' is given twice."],
+    ["- A {value=}", "This option's value is empty. Write it like {value=5}."],
+    ['- A {value=""}', "This option's value is empty. Write it like {value=5}."],
+    ["- A {value=“1”}", "Curly quotes"],
+    ['- A {value="1}', "Can't read the option's settings"],
+    ["- A {value=B}", `This option's value "B" repeats the one on line 5.`, 6],
+    ["- A {value=Other}", `This option's value "Other" is also the 'other' label.`],
+  ])("%s", (item, message, line = 5) => {
+    const errs = errorsOf(`# T\n\n::: {.choice #c other}\nQ\n${item}\n- B\n:::\n`);
+    expect(errs).toEqual([expect.objectContaining({ line })]);
+    expect(errs[0]?.message).toContain(message);
+  });
+
+  test("two brace blocks on one option are an error", () => {
+    expect(errorsOf("# T\n\n::: {.choice #c}\nQ\n- A {value=1}{value=2}\n- B\n:::\n")).toEqual([
+      { line: 5, message: "An option can have only one {value=...}. Remove the extra braces." },
+    ]);
+  });
+
+  test("a long option compiles in linear time (no ReDoS)", () => {
+    for (const item of [`a${" ".repeat(190_000)}b`, `x{${"=".repeat(190_000)}`]) {
+      for (const type of ["choice", "likert"]) {
+        const start = Date.now();
+        compile(`# T\n\n::: {.${type} #c}\nQ\n- ${item}\n- B\n:::\n`);
+        expect(Date.now() - start).toBeLessThan(500);
+      }
+    }
+  });
+
+  test("';' in a .multi value, and a value on a .likert statement", () => {
+    expect(errorsOf("# T\n\n::: {.multi #c}\nQ\n- A {value='1;2'}\n- B\n:::\n")).toEqual([
+      { line: 5, message: "A .multi option's value can't contain ';'." },
+    ]);
+    expect(errorsOf("# T\n\n::: {.likert #r}\nQ\n- A {value=1}\n:::\n")).toEqual([
+      { line: 5, message: "Stored values apply to .choice and .multi options only." },
+    ]);
+  });
+
+  test("an old model without values still parses (immutability)", () => {
+    expect(() => surveySchema.parse(JSON.parse(cfdeModel))).not.toThrow();
+    const bad = {
+      title: "T",
+      pages: [
+        {
+          questions: [
+            {
+              id: "c",
+              prompt: "Q",
+              required: false,
+              type: "choice",
+              options: ["a", "b"],
+              values: ["1", "1"],
+            },
+          ],
+        },
+      ],
+    };
+    expect(() => surveySchema.parse(bad)).toThrow();
+  });
+});

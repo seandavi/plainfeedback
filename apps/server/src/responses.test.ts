@@ -499,3 +499,47 @@ describe("deployment-wide export (#62)", () => {
     expect(ids).toContain(b.event.id);
   });
 });
+
+describe("option values (#122)", () => {
+  const VALUED = `# T
+
+::: {.choice #sat other}
+How satisfied?
+- Very satisfied {value=5}
+- Not at all {value=1}
+:::
+
+::: {.multi #m}
+Which?
+- Alpha {value=a}
+- Beta {value=b}
+:::
+`;
+
+  it("CSV holds the value, the Other label plus _other, and ;-joined values", () => {
+    const model = compile(VALUED).model as never;
+    expect(flatten(model, { sat: "5", m: ["a", "b"] })).toEqual({ sat: "5", m: "a;b" });
+    expect(flatten(model, { sat: "Very satisfied" })).toEqual({
+      sat: "Other",
+      sat_other: "Very satisfied",
+    });
+  });
+
+  it("the codebook lists values next to options", async () => {
+    const w = await world();
+    await w.mk(3, VALUED);
+    // biome-ignore lint/suspicious/noExplicitAny: response JSON
+    const cb: any = await (
+      await call(w, "GET", `${w.base}/versions/3/codebook`, w.who.viewer)
+    ).json();
+    expect(cb.questions[0]).toMatchObject({
+      options: ["Very satisfied", "Not at all"],
+      values: ["5", "1"],
+      other: "Other",
+    });
+    expect(cb.questions[1].values).toEqual(["a", "b"]);
+    expect((await call(w, "GET", `${w.base}/versions/3/codebook`, w.who.nonMember)).status).toBe(
+      404,
+    );
+  });
+});

@@ -275,12 +275,40 @@ function finish(
       if (b.stray) strayError(b, err);
       else if (items.length < 2)
         e(`A .${type} question needs at least two options, written as '- ' list items.`);
+      // #122: `- Label {value=5}` stores "5"; options without one store their label.
+      const explicit = b.items.map((it) => {
+        const v = itemValue(it, err);
+        if (v) it.text = v.label;
+        return v?.value;
+      });
+      const labels = b.items.map((it) => it.text);
+      const values = explicit.some((v) => v !== undefined)
+        ? explicit.map((v, i) => v ?? (labels[i] as string))
+        : undefined;
       checkDuplicates(b, err, "option");
       const otherAttr = attrs.get("other");
       const other = otherAttr === true ? "Other" : otherAttr;
       if (other === "") e("'other' needs a label, like other=\"Other\", or write just 'other'.");
-      else if (other !== undefined && items.includes(other))
+      else if (other !== undefined && labels.includes(other))
         e(`The 'other' label "${other}" is also a listed option. Remove one of them.`);
+      if (values) {
+        const seen = new Map<string, number>();
+        b.items.forEach((it, i) => {
+          const v = values[i] as string;
+          const first = seen.get(v);
+          if (first !== undefined)
+            err(it.line, `This option's value "${v}" repeats the one on line ${first}.`);
+          else seen.set(v, it.line);
+          // The main CSV column holds the value or the Other label, so they must differ.
+          if (v === other && labels[i] !== other)
+            err(
+              it.line,
+              `This option's value "${v}" is also the 'other' label. Change one of them.`,
+            );
+          if (type === "multi" && explicit[i]?.includes(";"))
+            err(it.line, `A .multi option's value can't contain ';'.`);
+        });
+      }
       // The CSV export joins multi answers with ';' (#64), so a label containing one can't be split.
       if (type === "multi") {
         for (const it of b.items)
@@ -289,13 +317,22 @@ function finish(
         if (typeof other === "string" && other.includes(";"))
           e(`The 'other' label "${other}" can't contain ';' in a .multi question.`);
       }
-      q = { ...common, type, options: items, ...(other !== undefined ? { other } : {}) };
+      q = {
+        ...common,
+        type,
+        options: labels,
+        ...(values ? { values } : {}),
+        ...(other !== undefined ? { other } : {}),
+      };
       break;
     }
     case "likert": {
       if (b.stray) strayError(b, err);
       else if (items.length < 1)
         e("A .likert question needs at least one statement, written as '- ' list items.");
+      for (const it of b.items)
+        if (/\bvalue\s*=/.test(trailingBraces(it.text)?.inner ?? ""))
+          err(it.line, "Stored values apply to .choice and .multi options only.");
       checkDuplicates(b, err, "statement");
       const scale = str("scale") ?? "1-5";
       const m = scale.match(/^\s*(-?\d+)\s*-\s*(-?\d+)\s*$/);
@@ -336,6 +373,53 @@ function finish(
     }
   }
   return q;
+}
+
+/** The trailing `{...=...}` block of a list item, if any. No backtracking regex: item text is
+ * author input up to the body limit, and the compile route is open to viewers. */
+function trailingBraces(text: string): { label: string; inner: string } | undefined {
+  if (!text.endsWith("}")) return;
+  const open = text.lastIndexOf("{");
+  const inner = text.slice(open + 1, -1);
+  if (open < 0 || inner.includes("}") || !inner.includes("=")) return;
+  return { label: text.slice(0, open).trimEnd(), inner };
+}
+const ITEM_ATTR = /\s*([\w-]+)=(?:"([^"]*)"|'([^']*)'|([^\s"'{}]*)(?=\s|$))\s*/y;
+
+/** Splits a trailing `{value=...}` off an option. Braces without '=' stay label text (`Python {3}`).
+ * Undefined when there is no attribute block; errors are reported on the item's line. */
+function itemValue(
+  it: { text: string; line: number },
+  err: (line: number, message: string) => void,
+): { label: string; value?: string } | undefined {
+  const m = trailingBraces(it.text);
+  if (!m) return;
+  const { label, inner } = m;
+  if (trailingBraces(label))
+    err(it.line, "An option can have only one {value=...}. Remove the extra braces.");
+  let value: string | undefined;
+  ITEM_ATTR.lastIndex = 0;
+  while (ITEM_ATTR.lastIndex < inner.length) {
+    const at = ITEM_ATTR.lastIndex;
+    const a = ITEM_ATTR.exec(inner);
+    const [, key, dq, sq, bare] = a ?? [];
+    if (!a || a[0] === "" || CURLY.test(inner)) {
+      const rest = inner.slice(at);
+      err(
+        it.line,
+        CURLY.test(inner) ? CURLY_MESSAGE : `Can't read the option's settings from here: "${rest}"`,
+      );
+      return { label };
+    }
+    if (key !== "value")
+      err(it.line, `'${key}' doesn't apply to options. Only {value=...} is allowed.`);
+    else if (value !== undefined) err(it.line, "The attribute 'value' is given twice.");
+    else {
+      value = dq ?? sq ?? bare ?? "";
+      if (value === "") err(it.line, "This option's value is empty. Write it like {value=5}.");
+    }
+  }
+  return { label, ...(value ? { value } : {}) };
 }
 
 const strayError = (b: Block, err: (line: number, message: string) => void) =>

@@ -19,7 +19,7 @@ Option 3. `exportChanges(earlier, next)` in `packages/core` lists, in plain lang
 
 - a Likert statement at a position that exists in an earlier version has different text (reordered, inserted, removed in the middle, or reworded);
 - a reused question id has a different type;
-- an option of an earlier version is missing (removed or renamed);
+- an option value (or, without `{value=...}`, the option text) of an earlier version is missing (removed, renamed or its value changed). Rewording an option that has an explicit `{value=...}` is free, since the column holds the value (#122). Adding `{value=...}` to an option that had none changes what is stored, so it is reported;
 - the Other label of a reused choice/multi question changed: the label is the category written in the main column for Other answers, so renaming it splits that category like an option rename (#95; adding or removing Other stays free);
 - a column name of an earlier version is now produced by a different question (v1 has grid `#r`, so `r_1`; v2 has a question `#r_1`) (#95).
 

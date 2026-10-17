@@ -195,6 +195,32 @@ describe("SurveyForm", () => {
     expect(onSubmit).not.toHaveBeenCalled();
     expect(screen.getByRole("alert").textContent).toContain("Preview");
   });
+
+  it("shows option labels and submits their stored values (#122)", async () => {
+    const valued = compile(`# T
+
+::: {.choice #sat required}
+How satisfied?
+- Very satisfied {value=5}
+- Not at all {value=1}
+:::
+
+::: {.multi #m}
+Which?
+- Alpha {value=a}
+- Beta {value=b}
+:::
+`).model as Survey;
+    const onSubmit = vi.fn(async () => undefined);
+    render(<SurveyForm model={valued} mode="live" onSubmit={onSubmit} />);
+    const radio = within(group("satisfied")).getByRole("radio", { name: "Very satisfied" });
+    expect(radio.getAttribute("value")).toBe("5");
+    fireEvent.click(radio);
+    fireEvent.click(within(group("Which")).getByRole("checkbox", { name: "Beta" }));
+    submit();
+    await flush();
+    expect(onSubmit).toHaveBeenCalledWith({ sat: "5", m: ["b"] }, "");
+  });
 });
 
 describe("Markdown", () => {

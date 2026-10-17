@@ -2,7 +2,7 @@
 // versions (`<id>`, `<id>_<statement number>`), so a new version must not give an existing name a
 // different meaning. Compared with every earlier version, not just the latest: dropping statement 3
 // in v2 and adding a different one in v3 would otherwise pass.
-import type { Question, Survey } from "./model";
+import { optionValues, type Question, type Survey } from "./model";
 
 const questions = (m: Survey) => m.pages.flatMap((p) => p.questions);
 
@@ -45,6 +45,7 @@ export function exportChanges(earlier: Survey[], next: Survey): string[] {
 
 function diff(earlier: Survey[], next: Survey): string[] {
   const out = new Set<string>();
+  const seen = new Set<string>();
   const nextCols = columnsFor(next);
   for (const old of earlier) {
     const byId = new Map(questions(old).map((q) => [q.id, q]));
@@ -69,9 +70,20 @@ function diff(earlier: Survey[], next: Survey): string[] {
             out.add(`In '${q.id}', statement ${i + 1} was "${t}" and is now "${n}".`);
         });
       else if ("options" in o && "options" in q) {
-        for (const opt of o.options)
-          if (!q.options.includes(opt))
-            out.add(`In '${q.id}', the option "${opt}" was removed or renamed.`);
+        // #122: compare stored values; rewording a label whose {value=} is unchanged is free.
+        const now = optionValues(q);
+        const valued = o.values !== undefined || q.values !== undefined;
+        optionValues(o).forEach((v, i) => {
+          // One line per value: the first (oldest) label wins, so the message stays stable.
+          const key = `${q.id}\u0000${v}`;
+          if (now.includes(v) || seen.has(key)) return;
+          seen.add(key);
+          out.add(
+            valued
+              ? `In '${q.id}', the option value "${v}" ("${o.options[i]}") was removed or changed.`
+              : `In '${q.id}', the option "${v}" was removed or renamed.`,
+          );
+        });
         // The Other label is the category in the main column, so renaming it splits it (#95).
         if (o.other !== undefined && q.other !== undefined && o.other !== q.other)
           out.add(`In '${q.id}', the Other label was "${o.other}" and is now "${q.other}".`);

@@ -22,6 +22,9 @@ const base = {
 
 const options = {
   options: z.array(z.string().min(1)).min(2),
+  /** Stored value per option (`- Label {value=5}`, #122), parallel to `options`. Absent: the
+   * option text is stored. Answers, the publish check and the export use `optionValues`. */
+  values: z.array(z.string().min(1)).optional(),
   /** Label of the free-text "Other" option, if offered. */
   other: z.string().min(1).optional(),
 };
@@ -67,8 +70,24 @@ export const surveySchema = z
       return new Set(ids).size === ids.length;
     },
     { message: "Question ids must be unique" },
+  )
+  .refine(
+    (s) =>
+      s.pages.every((p) =>
+        p.questions.every(
+          (q) =>
+            !("values" in q) ||
+            q.values === undefined ||
+            (q.values.length === q.options.length && new Set(q.values).size === q.values.length),
+        ),
+      ),
+    { message: "Option values must be unique and one per option" },
   );
 
 export type Question = z.infer<typeof questionSchema>;
 export type QuestionType = Question["type"];
 export type Survey = z.infer<typeof surveySchema>;
+
+/** What an answer stores for each option: its `{value=...}`, else the option text. */
+export const optionValues = (q: { options: string[]; values?: string[] }): string[] =>
+  q.values ?? q.options;
