@@ -36,7 +36,7 @@ Also check:
 Stop the server when you're done.
 
 ## Post
-Post a PR comment:
+Post a PR comment with `gh pr comment <pr> --body-file <scratchpad>/review-ux-<pr>-r<r>.md`. The scratchpad is shared with the other agents, so never use a generic file name. The comment has:
 - first line `<!-- factory:review-ux round=r -->`;
 - second line `VERDICT: PASS` or `VERDICT: CHANGES`;
 - then findings, each with the page or step, what happened, why it matters to which user, and the fix.
