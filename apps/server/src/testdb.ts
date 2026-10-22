@@ -4,10 +4,11 @@ import { createDb, type Db } from "./db";
 import { runMigrations } from "./migrate";
 
 // Throwaway migrated database per test file. Needs a real Postgres: set DATABASE_URL
-// (`just up db`, DB_PORT=... if 5432 is taken). Returns a getter valid inside tests.
+// (`export $(just db-up)`). Returns a getter valid inside tests.
 export const useTestDb = () => {
   const adminUrl = process.env.DATABASE_URL;
-  if (!adminUrl) throw new Error("DATABASE_URL is required for DB tests");
+  if (!adminUrl)
+    throw new Error("DATABASE_URL is required for DB tests: run `export $(just db-up)`");
   const name = `pf_test_${crypto.randomUUID().replaceAll("-", "")}`;
   const url = new URL(adminUrl);
   url.pathname = `/${name}`;
