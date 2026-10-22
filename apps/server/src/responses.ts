@@ -502,7 +502,12 @@ export const responseRoutes = (db: Db, log: (line: string) => void = () => {}) =
               }
             : {}),
           ...(q.type === "number" || q.type === "date"
-            ? { min: q.min ?? null, max: q.max ?? null }
+            ? {
+                min: q.min ?? null,
+                max: q.max ?? null,
+                // Non-null means slider answers lie on a grid from min (#125).
+                step: q.type === "number" ? (q.step ?? null) : null,
+              }
             : {}),
         })),
       );

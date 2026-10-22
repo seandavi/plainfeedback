@@ -572,9 +572,39 @@ Left?
       await call(w, "GET", `${w.base}/versions/3/codebook`, w.who.viewer)
     ).json();
     expect(cb.questions[0]).toMatchObject({ type: "date", min: "2026-01-01", max: "2026-12-31" });
-    expect(cb.questions[1]).toMatchObject({ type: "date", min: null, max: null });
+    expect(cb.questions[1]).toMatchObject({ type: "date", min: null, max: null, step: null });
     expect(cb.csvColumns).toContainEqual(
       expect.objectContaining({ name: "arrived", freeText: false }),
     );
+  });
+});
+
+describe("slider (#125)", () => {
+  const SLID = `# T
+
+::: {.number #score slider min=0 max=1 step=0.25}
+Score?
+:::
+
+::: {.number #years}
+Years?
+:::
+`;
+
+  it("one numeric column; codebook has step for the slider only", async () => {
+    const w = await world();
+    const v3 = await w.mk(3, SLID);
+    await w.add(v3, { score: 0.75, years: 3 }, "2026-01-05T00:00:00Z");
+    const csv = await text(call(w, "GET", `${w.base}/responses?format=csv`, w.who.viewer));
+    const [head, row] = csv.split("\r\n");
+    expect(head).toMatch(/,score,years$/);
+    expect(row).toMatch(/,0\.75,3$/);
+    // biome-ignore lint/suspicious/noExplicitAny: response JSON
+    const cb: any = await (
+      await call(w, "GET", `${w.base}/versions/3/codebook`, w.who.viewer)
+    ).json();
+    expect(cb.questions[0]).toMatchObject({ type: "number", min: 0, max: 1, step: 0.25 });
+    expect(cb.questions[0]).not.toHaveProperty("slider");
+    expect(cb.questions[1]).toMatchObject({ type: "number", min: null, max: null, step: null });
   });
 });

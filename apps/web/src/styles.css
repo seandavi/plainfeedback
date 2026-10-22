@@ -89,6 +89,41 @@ input[type="checkbox"] {
   margin: 0;
   flex: none;
 }
+/* .number slider (#125): end values beside a full-width track; dimmed thumb while unanswered. */
+.slider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.slider input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  min-height: 2.75rem; /* touch target: the whole track row, not only the native thumb */
+  margin: 0;
+  accent-color: var(--accent);
+}
+.slider input.untouched {
+  accent-color: var(--control-border); /* grey, not the accent; "Not answered" says it in text */
+}
+.slider-value {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-height: 2.75rem;
+}
+.slider-value output {
+  font-weight: 600;
+}
+.slider-value button {
+  font: inherit;
+  min-height: 2.75rem;
+  padding: 0 0.25rem;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
 /* All text controls share one look (participant form, staff forms, share link, token secret). */
 input:not([type]),
 input[type="text"],

@@ -538,6 +538,31 @@ describe("publish and versions", () => {
     }
   });
 
+  it("once answered, a .number can switch to and from a slider (#125)", async () => {
+    const w = await world();
+    const as = w.who.creator;
+    const base = `${ev(w)}/surveys/post`;
+    let etag = '"e1"';
+    const publish = async (md: string) => {
+      const put = await call(w, "PUT", base, as, md, undefined, { "if-match": etag });
+      etag = put.headers.get("etag") as string;
+      return call(w, "POST", `${base}/publish`, as);
+    };
+    const q = (attrs = "") => `# T\n\n::: {.number #n ${attrs}}\nHow many?\n:::\n`;
+    expect((await publish(q())).status).toBe(201);
+    const [v] = await getDb()
+      .select()
+      .from(surveyVersions)
+      .where(eq(surveyVersions.surveyId, w.survey.id))
+      .orderBy(desc(surveyVersions.version));
+    await getDb()
+      .insert(responses)
+      .values({ surveyVersionId: v?.id as string, answers: { n: 3 } });
+    expect((await publish(q("slider min=0 max=10"))).status).toBe(201);
+    expect((await publish(q("slider min=0 max=20 step=5"))).status).toBe(201);
+    expect((await publish(q("min=0"))).status).toBe(201);
+  });
+
   it("rejects closesAt before opensAt and unknown fields", async () => {
     const w = await world();
     const path = `${ev(w)}/surveys/post/publish`;

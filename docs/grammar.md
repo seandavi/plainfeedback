@@ -91,7 +91,7 @@ stays the same.
 | `.multi` | Pick any number of options | options (at least two) | `other` |
 | `.likert` | Rate each statement on one shared scale | statements (at least one) | `scale`, `low`, `mid`, `high` |
 | `.text` | Type an answer | (no list) | `maxlength`, `multiline` |
-| `.number` | Enter a number | (no list) | `min`, `max` |
+| `.number` | Enter a number | (no list) | `min`, `max`, `step`, `slider` |
 | `.date` | Pick a calendar date | (no list) | `min`, `max` |
 
 #### Single choice: `.choice`
@@ -200,6 +200,25 @@ How many years have you worked in this field?
 
 `min` and `max` are optional and may be decimals.
 
+Add `slider` to show a slider instead of a number box:
+
+```markdown
+::: {.number #likely slider min=0 max=10}
+How likely are you to come back next year?
+:::
+```
+
+- A slider needs both `min` and `max`, and `min` must be smaller than `max`.
+- `step` is the distance between the values a participant can pick. It defaults
+  to `1`, must be greater than 0 and must divide the range evenly:
+  `slider min=0 max=1 step=0.25` works, `slider min=0 max=10 step=3` is an
+  error. A slider has at most 10000 steps. `step` applies to sliders only.
+- A slider shows its value next to it, or "Not answered" until the participant
+  moves or taps it. Leaving it untouched leaves an optional question unanswered.
+  Once picked, a "Clear answer" button undoes the pick.
+- The answer and the export column are the same as for a number box, so adding
+  or removing `slider` later is safe.
+
 #### Date: `.date`
 
 ```markdown
@@ -217,7 +236,7 @@ optional, written as `YYYY-MM-DD`, and inclusive.
 - A setting with a value is `name=value`. Use quotes when the value has spaces:
   `low="Not at all"`. Single quotes also work. Use straight quotes: curly quotes
   (`“ ”`), which Word and Google Docs insert, are reported as an error.
-- `required`, `multiline`, `other` and `dropdown` can be written on their own.
+- `required`, `multiline`, `other`, `dropdown` and `slider` can be written on their own.
 - Settings can come in any order. A misspelled setting is an error, not ignored.
 
 ## Not supported yet
@@ -318,7 +337,7 @@ in `packages/core/src/model.ts` is authoritative.
 choice | multi: { options: string[], values?: string[] /* stored per option, parallel to options */, other?: string /* label */, dropdown?: true /* choice only */ }
 likert: { statements: string[], scale: { min, max }, anchors: { low?, mid?, high? } }
 text:   { maxlength: number /* default 2000 */, multiline: boolean }
-number: { min?: number, max?: number }
+number: { min?: number, max?: number, step?: number /* slider only, default 1 */, slider?: true }
 date:   { min?: string, max?: string /* YYYY-MM-DD */ }
 ```
 
@@ -340,7 +359,7 @@ stores the normalised object.
 | `multi` | An array of distinct option values. With `other`, at most one entry may be "Other" text. |
 | `likert` | An object from statement number (`"1"`, `"2"`, ... in list order) to an integer rating within the scale. Unrated statements are left out (or `null`). |
 | `text` | A string of at most `maxlength` characters. |
-| `number` | A finite number within `min`/`max`. |
+| `number` | A finite number within `min`/`max`; on a slider, also a whole number of steps from `min`. |
 | `date` | A real calendar date as a `"YYYY-MM-DD"` string, within `min`/`max` (inclusive). |
 
 A missing answer, `null`, an empty or blank string, an empty array and an empty

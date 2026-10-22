@@ -103,3 +103,16 @@ test("#124: a reused id changing to or from .date is reported; min/max changes a
     { name: "d", questionId: "d", type: "date", part: "value", freeText: false },
   ]);
 });
+
+test("free: switching a .number to or from slider, or changing min/max/step (#125)", () => {
+  const num = (attrs: string) => m(`::: {.number #x ${attrs}}\nQ\n:::\n`);
+  const plain = num("");
+  const slider = num("slider min=0 max=10");
+  expect(columnsFor(slider)).toEqual(columnsFor(plain));
+  expect(exportChanges([plain], slider)).toEqual([]);
+  expect(exportChanges([slider], plain)).toEqual([]);
+  expect(exportChanges([slider], num("slider min=1 max=5 step=0.5"))).toEqual([]);
+  expect(exportChanges([slider], m("::: {.date #x}\nQ\n:::\n"))).toEqual([
+    "'x' was a .number question and is now a .date question.",
+  ]);
+});

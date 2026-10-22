@@ -330,6 +330,76 @@ Arrival date?
       expect(err?.textContent).toBe("Enter a date on or before 2026-12-31.");
     });
   });
+
+  describe("slider (#125)", () => {
+    const slider = (flags = "") => {
+      const m = compile(`# T
+
+::: {.number #n slider min=0 max=10 step=2 ${flags}}
+How likely?
+:::
+`).model as Survey;
+      const onSubmit = vi.fn(async () => undefined);
+      const { container } = render(<SurveyForm model={m} mode="live" onSubmit={onSubmit} />);
+      const input = screen.getByRole("slider", { name: /How likely/ }) as HTMLInputElement;
+      const output = container.querySelector("output") as HTMLOutputElement;
+      return { onSubmit, input, output };
+    };
+
+    it("renders a labelled range with min/max/step, end labels and a tied output", () => {
+      const { input, output } = slider();
+      expect([input.type, input.min, input.max, input.step]).toEqual(["range", "0", "10", "2"]);
+      const ends = [...(input.parentElement?.querySelectorAll("span") ?? [])];
+      expect(ends.map((e) => [e.textContent, e.getAttribute("aria-hidden")])).toEqual([
+        ["0", "true"],
+        ["10", "true"],
+      ]);
+      expect(output.htmlFor.value).toBe(input.id);
+    });
+
+    it("untouched: Not answered, and an optional slider sends no key", async () => {
+      const { onSubmit, input, output } = slider();
+      expect(output.textContent).toBe("Not answered");
+      expect(input.getAttribute("aria-valuetext")).toBe("Not answered");
+      expect(input.value).toBe("6"); // grid point nearest the middle: 0 + round(2.5) * 2
+      fireEvent.keyUp(input, { key: "Tab" }); // focusing it doesn't answer
+      submit();
+      await flush();
+      expect(onSubmit).toHaveBeenCalledWith({}, "");
+    });
+
+    it("changing it shows and submits the number", async () => {
+      const { onSubmit, input, output } = slider();
+      fireEvent.change(input, { target: { value: "8" } });
+      expect(output.textContent).toBe("8");
+      expect(input.getAttribute("aria-valuetext")).toBeNull();
+      submit();
+      await flush();
+      expect(onSubmit).toHaveBeenCalledWith({ n: 8 }, "");
+    });
+
+    it("pointer-up records the resting position; Clear answer undoes it", async () => {
+      const { onSubmit, input, output } = slider();
+      fireEvent.pointerUp(input);
+      expect(output.textContent).toBe("6");
+      fireEvent.click(screen.getByRole("button", { name: "Clear answer" }));
+      expect(output.textContent).toBe("Not answered");
+      expect(screen.queryByRole("button", { name: "Clear answer" })).toBeNull();
+      expect(document.activeElement).toBe(input);
+      submit();
+      await flush();
+      expect(onSubmit).toHaveBeenCalledWith({}, "");
+    });
+
+    it("required and untouched: marks and focuses the slider", async () => {
+      const { onSubmit, input } = slider("required");
+      submit();
+      await flush();
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(input.getAttribute("aria-invalid")).toBe("true");
+      expect(document.activeElement).toBe(input);
+    });
+  });
 });
 
 describe("Markdown", () => {
