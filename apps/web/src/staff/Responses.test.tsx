@@ -125,7 +125,7 @@ describe("route titles and focus (#68)", () => {
     setup("viewer");
     open(`/app/g/${G}`);
     await screen.findByRole("heading", { level: 1, name: "Lab" });
-    expect(document.title).toBe("Lab – plainfeedback");
+    await waitFor(() => expect(document.title).toBe("Lab – plainfeedback"));
     expect(document.activeElement).toBe(document.body); // first load does not steal focus
     expect(screen.getByRole("link", { name: "Skip to content" }).getAttribute("href")).toBe(
       "#main",
