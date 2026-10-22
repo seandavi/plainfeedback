@@ -487,3 +487,59 @@ describe("date (#124)", () => {
     expect(Date.now() - start).toBeLessThan(500);
   });
 });
+
+describe("slider (#125)", () => {
+  const first = (md: string) => compile(md).model?.pages[0]?.questions[0];
+  const num = (attrs: string) => `# T\n\n::: {.number #x ${attrs}}\nHow many?\n:::\n`;
+
+  test("compiles with step stored (default 1)", () => {
+    expect(first(num("slider min=0 max=10"))).toEqual({
+      type: "number",
+      id: "x",
+      prompt: "How many?",
+      required: false,
+      slider: true,
+      min: 0,
+      max: 10,
+      step: 1,
+    });
+    expect(first(num("slider min=0 max=1 step=0.25"))).toMatchObject({ slider: true, step: 0.25 });
+    expect(() => surveySchema.parse(compile(num("slider min=0 max=10")).model)).not.toThrow();
+  });
+
+  test("a plain .number has no slider or step keys", () => {
+    expect(first(num("min=0 max=10"))).toEqual({
+      type: "number",
+      id: "x",
+      prompt: "How many?",
+      required: false,
+      min: 0,
+      max: 10,
+    });
+  });
+
+  test.each([
+    ["slider max=10", "A slider needs both 'min' and 'max', like slider min=0 max=10."],
+    ["slider min=0", "A slider needs both 'min' and 'max', like slider min=0 max=10."],
+    ["slider min=5 max=5", "A slider's 'min' must be smaller than its 'max'."],
+    ["slider min=6 max=5", "A slider's 'min' must be smaller than its 'max'."],
+    ["slider min=0 max=10 step=0", "'step' must be a number greater than 0."],
+    ["slider min=0 max=10 step=-1", "'step' must be a number greater than 0."],
+    ["slider min=0 max=10 step=abc", `'step' must be a number, not "abc".`],
+    [
+      "slider min=0 max=10 step=3",
+      "'step' must divide the range from min to max evenly (here max − min is 10).",
+    ],
+    ["min=0 max=10 step=1", "'step' only applies to a slider. Add 'slider' or remove 'step'."],
+    ["slider=yes min=0 max=10", "Write 'slider' on its own, without a value."],
+  ])("%s is an error", (attrs, message) => {
+    expect(errorsOf(num(attrs))).toEqual([{ line: 3, message }]);
+  });
+
+  test.each(["choice", "text", "date"])("'slider' on .%s is an error", (type) => {
+    const body = type === "choice" ? "\n- A\n- B" : "";
+    expect(errorsOf(`# T\n\n::: {.${type} #x slider}\nQ${body}\n:::\n`)).toEqual([
+      { line: 3, message: `'slider' doesn't apply to .${type} questions.` },
+    ]);
+  });
+});

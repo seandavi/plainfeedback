@@ -23,10 +23,10 @@ const ATTRS: Record<QuestionType, string[]> = {
   multi: ["other"],
   likert: ["scale", "low", "mid", "high"],
   text: ["maxlength", "multiline"],
-  number: ["min", "max"],
+  number: ["min", "max", "step", "slider"],
   date: ["min", "max"],
 };
-const FLAGS = new Set(["required", "multiline", "other", "dropdown"]);
+const FLAGS = new Set(["required", "multiline", "other", "dropdown", "slider"]);
 
 const RESERVED_SEQ = "The id '#seq' is reserved for the export's row number. Choose another id.";
 const TITLE_MESSAGE = "A survey starts with its title on a line like: # Fall Meeting Feedback";
@@ -243,7 +243,7 @@ function finish(
     else if (key !== "required" && !ATTRS[type].includes(key))
       e(`'${key}' doesn't apply to .${type} questions.`);
     else if (value === true && !FLAGS.has(key)) e(`'${key}' needs a value, like ${key}="..."`);
-    else if (value !== true && (key === "required" || key === "multiline" || key === "dropdown"))
+    else if (value !== true && FLAGS.has(key) && key !== "other")
       e(`Write '${key}' on its own, without a value.`);
   }
 
@@ -364,13 +364,32 @@ function finish(
     case "number": {
       const min = num("min");
       const max = num("max");
-      if (min !== undefined && max !== undefined && min > max)
+      const slider = attrs.has("slider");
+      const step = num("step") ?? (slider ? 1 : undefined);
+      if (attrs.has("step") && !slider)
+        e("'step' only applies to a slider. Add 'slider' or remove 'step'.");
+      if (slider && (min === undefined || max === undefined))
+        e("A slider needs both 'min' and 'max', like slider min=0 max=10.");
+      else if (slider && min !== undefined && max !== undefined && min >= max)
+        e("A slider's 'min' must be smaller than its 'max'.");
+      else if (min !== undefined && max !== undefined && min > max)
         e("'min' must not be larger than 'max'.");
+      if (slider && step !== undefined && Number.isFinite(step)) {
+        if (step <= 0) e("'step' must be a number greater than 0.");
+        else if (min !== undefined && max !== undefined && min < max) {
+          const n = (max - min) / step;
+          if (Math.abs(n - Math.round(n)) > 1e-9)
+            e(
+              `'step' must divide the range from min to max evenly (here max − min is ${max - min}).`,
+            );
+        }
+      }
       q = {
         ...common,
         type,
         ...(min !== undefined ? { min } : {}),
         ...(max !== undefined ? { max } : {}),
+        ...(slider ? { slider: true as const, step } : {}),
       };
       break;
     }

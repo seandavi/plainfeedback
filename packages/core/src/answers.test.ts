@@ -246,3 +246,25 @@ describe("date (#124)", () => {
     expect(Date.now() - start).toBeLessThan(500);
   });
 });
+
+describe("slider (#125)", () => {
+  const m = (attrs: string) =>
+    compile(`# T\n\n::: {.number #x ${attrs}}\nQ\n:::\n`).model as Survey;
+
+  test("answers must lie on the step grid", () => {
+    const s = m("slider min=0 max=10 step=2");
+    expect(validateAnswers(s, { x: 4 })).toEqual({});
+    expect(validateAnswers(s, { x: 3 })).toEqual({ x: "Pick a value from 0 to 10 in steps of 2." });
+    expect(validateAnswers(s, { x: 12 })).toEqual({ x: "Enter a number of at most 10." });
+    expect(validateAnswers(s, { x: -2 })).toEqual({ x: "Enter a number of at least 0." });
+    expect(validateAnswers(m("slider min=0 max=1 step=0.1"), { x: 0.3 })).toEqual({});
+    expect(validateAnswers(m("min=0 max=10"), { x: 3 })).toEqual({});
+  });
+
+  test("unanswered: optional is valid, required is not", () => {
+    expect(validateAnswers(m("slider min=0 max=10"), {})).toEqual({});
+    expect(validateAnswers(m("slider required min=0 max=10"), {})).toEqual({
+      x: "This question is required.",
+    });
+  });
+});

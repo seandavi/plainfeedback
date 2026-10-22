@@ -64,6 +64,10 @@ export const questionSchema = z.discriminatedUnion("type", [
     type: z.literal("number"),
     min: z.number().optional(),
     max: z.number().optional(),
+    /** Show as a range slider (#125). Presentation only; answers and export identical to .number. */
+    slider: z.literal(true).optional(),
+    /** Slider grid; the compiler stores it (default 1) whenever `slider` is set. */
+    step: z.number().positive().optional(),
   }),
   z.object({
     ...base,

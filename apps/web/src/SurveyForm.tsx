@@ -358,6 +358,62 @@ function QuestionField(p: FieldProps<any>) {
     );
   }
 
+  if (q.type === "number" && q.slider && q.min !== undefined && q.max !== undefined) {
+    const { min, max } = q;
+    const step = q.step ?? 1;
+    const v = (p.value ?? "") as string;
+    const untouched = v === "";
+    // A range input always has a position; while unanswered it sits dimmed at the grid point
+    // nearest the middle and sends nothing (#125). Tapping it there, or a key that can't move it
+    // (End on a two-point slider), records that position: no input event fires for those.
+    const mid = String(min + Math.round((max - min) / 2 / step) * step);
+    const record = (e: { currentTarget: HTMLInputElement }) => {
+      if (untouched) p.onChange(e.currentTarget.value);
+    };
+    return (
+      <div className="question">
+        <label htmlFor={inputId}>{prompt}</label>
+        <div className="slider">
+          <span aria-hidden="true">{min}</span>
+          <input
+            type="range"
+            id={inputId}
+            className={untouched ? "untouched" : undefined}
+            min={min}
+            max={max}
+            step={step}
+            value={untouched ? mid : v}
+            aria-valuetext={untouched ? "Not answered" : undefined}
+            onChange={(e) => p.onChange(e.target.value)}
+            onPointerUp={record}
+            // Not Tab or Shift: moving focus onto the slider must not answer it.
+            onKeyUp={(e) => /^(Arrow|Home|End|Page)/.test(e.key) && record(e)}
+            aria-invalid={invalid}
+            aria-describedby={describedBy}
+          />
+          <span aria-hidden="true">{max}</span>
+        </div>
+        <div className="slider-value">
+          <output htmlFor={inputId} aria-live="off">
+            {untouched ? "Not answered" : v}
+          </output>
+          {!untouched && (
+            <button
+              type="button"
+              onClick={() => {
+                p.onChange("");
+                document.getElementById(inputId)?.focus(); // the button goes away
+              }}
+            >
+              Clear answer
+            </button>
+          )}
+        </div>
+        <ErrorText id={errId} error={p.error} />
+      </div>
+    );
+  }
+
   return (
     <div className="question">
       <label htmlFor={inputId}>{prompt}</label>

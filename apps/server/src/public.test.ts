@@ -31,6 +31,10 @@ Years?
 ::: {.date #arrived min=2026-01-01 max=2026-12-31}
 Arrived?
 :::
+
+::: {.number #score slider min=0 max=10 step=2}
+Score?
+:::
 `;
 
 type Opts = { opensAt?: Date; closesAt?: Date; closed?: boolean; versions?: number };
@@ -104,6 +108,7 @@ describe("public survey API", () => {
       "role",
       "years",
       "arrived",
+      "score",
     ]);
   });
 
@@ -146,7 +151,7 @@ describe("public survey API", () => {
 
   it("stores valid answers with only version and time, and sets no cookie", async () => {
     const w = await world();
-    const answers = { role: "Visiting scholar", years: 3, arrived: "2026-02-28" };
+    const answers = { role: "Visiting scholar", years: 3, arrived: "2026-02-28", score: 4 };
     const res = await w.submit({ versionId: w.versionId, answers }, { cookie: "pf_session=x" });
     expect(res.status).toBe(201);
     expect(res.headers.get("set-cookie")).toBeNull();
@@ -202,12 +207,13 @@ describe("public survey API", () => {
 
   it("rejects invalid answers with 422 and per-question errors", async () => {
     const w = await world();
-    const answers = { years: 99, extra: "x", arrived: "2026-02-30" };
+    const answers = { years: 99, extra: "x", arrived: "2026-02-30", score: 3 };
     const res = await w.submit({ versionId: w.versionId, answers });
     expect(res.status).toBe(422);
     const { errors } = await read(res);
-    expect(Object.keys(errors).sort()).toEqual(["arrived", "extra", "role", "years"]);
+    expect(Object.keys(errors).sort()).toEqual(["arrived", "extra", "role", "score", "years"]);
     expect(errors.arrived).toBe("Enter a date like 2026-03-15."); // #124
+    expect(errors.score).toBe("Pick a value from 0 to 10 in steps of 2."); // #125
     expect(await count(w.versionId)).toBe(0);
   });
 
