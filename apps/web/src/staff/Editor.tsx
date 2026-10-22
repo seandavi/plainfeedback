@@ -35,6 +35,7 @@ export const SNIPPETS = {
   likert: `::: {.likert #ID scale="1-5" low="Poor" mid="Okay" high="Excellent"}\nRate each part of the event:\n- Content\n- Venue\n:::`,
   text: `::: {.text #ID multiline maxlength=2000}\nAny other comments?\n:::`,
   number: `::: {.number #ID min=0 max=60}\nHow many years have you worked in this field?\n:::`,
+  date: `::: {.date #ID}\nWhen did you arrive?\n:::`,
 };
 const SNIPPET_LABELS: Record<keyof typeof SNIPPETS, string> = {
   choice: "Single choice",
@@ -42,6 +43,7 @@ const SNIPPET_LABELS: Record<keyof typeof SNIPPETS, string> = {
   likert: "Rating grid (Likert)",
   text: "Free text",
   number: "Number",
+  date: "Date",
 };
 const freshId = (type: string, text: string) => {
   let n = 1;

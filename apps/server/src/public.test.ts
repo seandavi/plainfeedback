@@ -27,6 +27,10 @@ Your role?
 ::: {.number #years min=0 max=50}
 Years?
 :::
+
+::: {.date #arrived min=2026-01-01 max=2026-12-31}
+Arrived?
+:::
 `;
 
 type Opts = { opensAt?: Date; closesAt?: Date; closed?: boolean; versions?: number };
@@ -99,6 +103,7 @@ describe("public survey API", () => {
     expect(body.model.pages[0].questions.map((q: { id: string }) => q.id)).toEqual([
       "role",
       "years",
+      "arrived",
     ]);
   });
 
@@ -141,7 +146,7 @@ describe("public survey API", () => {
 
   it("stores valid answers with only version and time, and sets no cookie", async () => {
     const w = await world();
-    const answers = { role: "Visiting scholar", years: 3 };
+    const answers = { role: "Visiting scholar", years: 3, arrived: "2026-02-28" };
     const res = await w.submit({ versionId: w.versionId, answers }, { cookie: "pf_session=x" });
     expect(res.status).toBe(201);
     expect(res.headers.get("set-cookie")).toBeNull();
@@ -197,10 +202,12 @@ describe("public survey API", () => {
 
   it("rejects invalid answers with 422 and per-question errors", async () => {
     const w = await world();
-    const res = await w.submit({ versionId: w.versionId, answers: { years: 99, extra: "x" } });
+    const answers = { years: 99, extra: "x", arrived: "2026-02-30" };
+    const res = await w.submit({ versionId: w.versionId, answers });
     expect(res.status).toBe(422);
     const { errors } = await read(res);
-    expect(Object.keys(errors).sort()).toEqual(["extra", "role", "years"]);
+    expect(Object.keys(errors).sort()).toEqual(["arrived", "extra", "role", "years"]);
+    expect(errors.arrived).toBe("Enter a date like 2026-03-15."); // #124
     expect(await count(w.versionId)).toBe(0);
   });
 
@@ -419,7 +426,11 @@ describe("client address for the per-client limit (#34)", () => {
     const res = await app.request(`${url}/responses`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.77" },
-      body: JSON.stringify({ versionId: w.versionId, answers: { role: "Staff" }, ticket }),
+      body: JSON.stringify({
+        versionId: w.versionId,
+        answers: { role: "Staff", arrived: "2026-05-01" },
+        ticket,
+      }),
     });
     expect(res.status).toBe(201);
     expect(lines.length).toBeGreaterThan(0);

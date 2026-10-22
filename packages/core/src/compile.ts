@@ -3,6 +3,7 @@
 import { columnsFor } from "./compat";
 import {
   ID_PATTERN,
+  isIsoDate,
   LIKERT_MAX_POINTS,
   type Question,
   type QuestionType,
@@ -16,13 +17,14 @@ export type CompileResult =
   | { model: Survey; errors?: never }
   | { model?: never; errors: CompileError[] };
 
-const TYPES: QuestionType[] = ["choice", "multi", "likert", "text", "number"];
+const TYPES: QuestionType[] = ["choice", "multi", "likert", "text", "number", "date"];
 const ATTRS: Record<QuestionType, string[]> = {
   choice: ["other", "dropdown"],
   multi: ["other"],
   likert: ["scale", "low", "mid", "high"],
   text: ["maxlength", "multiline"],
   number: ["min", "max"],
+  date: ["min", "max"],
 };
 const FLAGS = new Set(["required", "multiline", "other", "dropdown"]);
 
@@ -262,7 +264,7 @@ function finish(
 
   const common = { id: id ?? "", prompt, required: attrs.has("required") };
   const items = b.items.map((it) => it.text);
-  if ((type === "text" || type === "number") && items.length > 0)
+  if ((type === "text" || type === "number" || type === "date") && items.length > 0)
     err(
       b.items[0]?.line ?? b.line,
       `A .${type} question doesn't take a list. Remove the '- ' items.`,
@@ -364,6 +366,25 @@ function finish(
       const max = num("max");
       if (min !== undefined && max !== undefined && min > max)
         e("'min' must not be larger than 'max'.");
+      q = {
+        ...common,
+        type,
+        ...(min !== undefined ? { min } : {}),
+        ...(max !== undefined ? { max } : {}),
+      };
+      break;
+    }
+    case "date": {
+      const date = (k: string) => {
+        const v = str(k);
+        if (v !== undefined && !isIsoDate(v))
+          e(`'${k}' must be a date written as YYYY-MM-DD, like ${k}=2026-03-15, not "${v}".`);
+        return v;
+      };
+      const min = date("min");
+      const max = date("max");
+      if (min !== undefined && max !== undefined && min > max)
+        e("'min' must not be later than 'max'.");
       q = {
         ...common,
         type,

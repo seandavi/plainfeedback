@@ -45,7 +45,7 @@ De-identified event-feedback surveys for the Common Fund Data Ecosystem (CFDE) m
 
 ## Survey JSON model
 
-`pages[] -> questions[]`. Each question has a stable author-set slug `id`, `type` (choice, multi, likert, text, number), `required`, options or statements, and an optional `visibleIf` (unused until phase 3). Likert scale anchors are stored in the version so exports stay interpretable. Answers are keyed by question id.
+`pages[] -> questions[]`. Each question has a stable author-set slug `id`, `type` (choice, multi, likert, text, number, date), `required`, options or statements, and an optional `visibleIf` (unused until phase 3). Likert scale anchors are stored in the version so exports stay interpretable. Answers are keyed by question id.
 
 ## Markdown grammar (overview)
 
