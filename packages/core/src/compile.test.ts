@@ -532,6 +532,8 @@ describe("slider (#125)", () => {
     ],
     ["min=0 max=10 step=1", "'step' only applies to a slider. Add 'slider' or remove 'step'."],
     ["slider=yes min=0 max=10", "Write 'slider' on its own, without a value."],
+    ["slider min=0 max=10001", "A slider can have at most 10000 steps. Use a larger 'step'."],
+    ["slider min=-1e308 max=1e308", "A slider can have at most 10000 steps. Use a larger 'step'."],
   ])("%s is an error", (attrs, message) => {
     expect(errorsOf(num(attrs))).toEqual([{ line: 3, message }]);
   });

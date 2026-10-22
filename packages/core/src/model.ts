@@ -10,6 +10,14 @@ export const TEXT_DEFAULT_MAXLENGTH = 2000;
  * the participant page waits out the remainder, so a fast human is never dropped. */
 export const MIN_SUBMIT_MS = 3000;
 export const LIKERT_MAX_POINTS = 11;
+/** Most steps a slider may have (#125): keeps `(v - min) / step` well inside double precision. */
+export const SLIDER_MAX_STEPS = 10_000;
+
+/** Whether `x` is a whole number of `step`s from `from`, with a relative float tolerance (#125). */
+export function onGrid(x: number, from: number, step: number): boolean {
+  const n = (x - from) / step;
+  return Number.isFinite(n) && Math.abs(n - Math.round(n)) <= 1e-9 * Math.max(1, Math.abs(n));
+}
 // zod's ISO date regex is anchored and fixed-length (no backtracking) and checks leap years.
 const ISO_DATE = z.iso.date();
 /** A real calendar date written `YYYY-MM-DD` (#124). Within such strings `<` is date order. */

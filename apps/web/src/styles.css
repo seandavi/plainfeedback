@@ -103,8 +103,7 @@ input[type="checkbox"] {
   accent-color: var(--accent);
 }
 .slider input.untouched {
-  accent-color: var(--control-border);
-  opacity: 0.6;
+  accent-color: var(--control-border); /* grey, not the accent; "Not answered" says it in text */
 }
 .slider-value {
   display: flex;

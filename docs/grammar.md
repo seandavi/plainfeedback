@@ -212,7 +212,7 @@ How likely are you to come back next year?
 - `step` is the distance between the values a participant can pick. It defaults
   to `1`, must be greater than 0 and must divide the range evenly:
   `slider min=0 max=1 step=0.25` works, `slider min=0 max=10 step=3` is an
-  error. `step` applies to sliders only.
+  error. A slider has at most 10000 steps. `step` applies to sliders only.
 - A slider shows its value next to it, or "Not answered" until the participant
   moves or taps it. Leaving it untouched leaves an optional question unanswered.
   Once picked, a "Clear answer" button undoes the pick.

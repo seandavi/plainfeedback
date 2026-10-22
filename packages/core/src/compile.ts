@@ -5,8 +5,10 @@ import {
   ID_PATTERN,
   isIsoDate,
   LIKERT_MAX_POINTS,
+  onGrid,
   type Question,
   type QuestionType,
+  SLIDER_MAX_STEPS,
   type Survey,
   surveySchema,
   TEXT_DEFAULT_MAXLENGTH,
@@ -377,8 +379,9 @@ function finish(
       if (slider && step !== undefined && Number.isFinite(step)) {
         if (step <= 0) e("'step' must be a number greater than 0.");
         else if (min !== undefined && max !== undefined && min < max) {
-          const n = (max - min) / step;
-          if (Math.abs(n - Math.round(n)) > 1e-9)
+          if (!((max - min) / step <= SLIDER_MAX_STEPS))
+            e(`A slider can have at most ${SLIDER_MAX_STEPS} steps. Use a larger 'step'.`);
+          else if (!onGrid(max, min, step))
             e(
               `'step' must divide the range from min to max evenly (here max − min is ${max - min}).`,
             );

@@ -258,6 +258,11 @@ describe("slider (#125)", () => {
     expect(validateAnswers(s, { x: 12 })).toEqual({ x: "Enter a number of at most 10." });
     expect(validateAnswers(s, { x: -2 })).toEqual({ x: "Enter a number of at least 0." });
     expect(validateAnswers(m("slider min=0 max=1 step=0.1"), { x: 0.3 })).toEqual({});
+    const big = m("slider min=0 max=10000000 step=1000");
+    expect(validateAnswers(big, { x: 9_999_000 })).toEqual({});
+    expect(validateAnswers(big, { x: 9_999_001 })).toEqual({
+      x: "Pick a value from 0 to 10000000 in steps of 1000.",
+    });
     expect(validateAnswers(m("min=0 max=10"), { x: 3 })).toEqual({});
   });
 
