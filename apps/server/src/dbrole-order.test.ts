@@ -6,7 +6,8 @@ import { runMigrations } from "./migrate";
 // #103: the real order on a new deployment is db/ init grants on an empty database, then migrations.
 test("after init grants on an empty DB then migrations, plainfeedback_app cannot UPDATE responses or survey_versions", async () => {
   const adminUrl = process.env.DATABASE_URL;
-  if (!adminUrl) throw new Error("DATABASE_URL is required for DB tests");
+  if (!adminUrl)
+    throw new Error("DATABASE_URL is required for DB tests: run `export $(just db-up)`");
   const admin = createDb(adminUrl).$client;
   await admin.query(`do $$ begin
     if not exists (select from pg_roles where rolname = 'plainfeedback_app') then

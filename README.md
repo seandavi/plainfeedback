@@ -35,7 +35,17 @@ cp .env.example .env     # sets DATABASE_URL for the host; add OIDC_* to sign in
 just up db               # Postgres only
 just migrate             # apply migrations (explicit; never run on app start)
 just dev                 # server on :3000, web on :5173
-just lint typecheck test # tests need DATABASE_URL pointing at Postgres
+```
+
+### Run the tests
+
+No `.env` or credentials needed: `just db-up` starts a throwaway Postgres (port 55432, no volume) and prints its `DATABASE_URL`.
+
+```sh
+pnpm install --frozen-lockfile
+export $(just db-up)
+just lint typecheck test
+just db-down
 ```
 
 ## Self-hosting with Docker Compose
