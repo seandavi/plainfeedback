@@ -41,17 +41,19 @@ export function usePath() {
 }
 
 /** Sets the tab title once a page knows it (undefined while loading). After an in-app navigation
- * also focuses the page's <h1>, so screen readers announce the new page (WCAG 2.4.2, #68). */
+ * also focuses the page's <h1>, so screen readers announce the new page (WCAG 2.4.2, #68).
+ * A page that is being left (URL already changed) does nothing (#131). */
 export function usePageTitle(title: string | undefined) {
+  const [path] = useState(() => location.pathname);
   useEffect(() => {
-    if (title === undefined) return;
+    if (title === undefined || location.pathname !== path) return;
     document.title = `${title} – plainfeedback`;
     const h1 = moved && document.querySelector<HTMLElement>("main h1");
     if (!h1) return;
     moved = false;
     h1.tabIndex = -1;
     h1.focus();
-  }, [title]);
+  }, [title, path]);
 }
 
 const MESSAGE = "You have unsaved changes. Leave this page and lose them?";
