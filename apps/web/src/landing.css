@@ -1,0 +1,424 @@
+/* Hallmark · shape: Feature Stack (draw da4db0) · genre: modern-minimal · theme: Cobalt (deal 3/3, seed survey-tool-event-organizers-b8c7·9d1922d9·2026-11-05·r0) · job: sign up (sign in, in the hero and the footer)
+ * hero: Stage · nav: masthead · footer: mast · signature: the markdown on graphite beside the live form it compiles to
+ * imagery: screenshots 4 (capture of the running app, sample data) · axes: light/grotesk-sans/cool · posture: restrained · modes: light+dark · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H4 E4 S5 R4 V4 · weakest: R, the code panes and the captures both ask for attention; the captures sit in paper frames and only the two code panes are graphite */
+/* Hallmark · waive 77 · head on five columns beside five ruled rows on seven · what respondents are promised is a table of five rows, cookies through deleting */
+/* Hallmark · dismissed 58 · the window holds the exported response, whose JSON keys count as words */
+/* Hallmark · finish-review: subagent · 7 findings · 6 resolved, 1 partial then fixed (promises borders on phones) · gap: no ASCII field behind the hero; left out on purpose */
+/* Colour and type tokens come from styles.css (:root); these are the page scale. */
+:root {
+  --frame: 82rem;
+  --gutter: 64px;
+  --gap-columns: 32px;
+  --text-lead: 1.3125rem;
+  --text-title: 1.5625rem;
+  --text-section: clamp(2.25rem, 3.6vw, 3.25rem);
+  --text-display: clamp(2.75rem, 4.6vw, 4.25rem);
+  --section-gap-s: 120px;
+  --section-gap: 144px;
+  --space-3xl: 96px;
+}
+@media (max-width: 60rem) {
+  :root {
+    --gutter: 24px;
+    --section-gap-s: 80px;
+    --section-gap: 96px;
+  }
+}
+@media (max-width: 40rem) {
+  :root {
+    --gutter: 16px;
+    --section-gap-s: 56px;
+    --section-gap: 72px;
+    --gap-columns: 16px;
+  }
+}
+
+.landing main {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+.landing a {
+  font-weight: 500;
+  white-space: nowrap;
+}
+.frame {
+  width: 100%;
+  max-width: var(--frame);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+.landing h1 {
+  text-wrap: balance;
+  font-size: var(--text-display);
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  max-width: 14ch;
+  margin: 0;
+}
+.landing h2 {
+  text-wrap: balance;
+  font-size: var(--text-section);
+  line-height: 1.05;
+  letter-spacing: -0.028em;
+  max-width: 18ch;
+  margin: 0;
+}
+.landing .lead {
+  font-size: var(--text-lead);
+  line-height: 1.45;
+  color: var(--ink-2);
+  max-width: 40ch;
+  margin: var(--space-md) 0 0;
+}
+.caption {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  margin: var(--space-sm) 0 0;
+  max-width: 65ch;
+}
+
+/* Keys: a face on a real bottom edge; the primary is the one cobalt key. */
+.key {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 var(--space-lg);
+  border: 1px solid var(--key-edge);
+  border-radius: var(--radius-input);
+  background: var(--key-face);
+  color: var(--fg);
+  box-shadow: var(--shadow-key);
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    transform var(--dur-micro) var(--ease-out),
+    box-shadow var(--dur-micro) var(--ease-out);
+}
+.key:hover {
+  transform: translateY(-1px);
+}
+.key:active {
+  transform: translateY(2px);
+  box-shadow: var(--shadow-key-press);
+}
+.key:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.landing .key--primary {
+  background: var(--accent);
+  border-color: var(--accent-edge);
+  color: var(--accent-ink);
+  box-shadow: var(--shadow-key-accent);
+  font-weight: 600;
+}
+@media (prefers-reduced-motion: reduce) {
+  .key {
+    transition: none;
+  }
+  .key:hover,
+  .key:active {
+    transform: none;
+  }
+}
+
+/* Masthead: the wordmark centred over a hairline, one link and the key at the edges. */
+.mast-nav {
+  border-bottom: 1px solid var(--line);
+}
+.mast-nav__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  min-height: 72px;
+  gap: var(--space-md);
+}
+.mast-nav__row > :last-child {
+  justify-self: end;
+  min-height: 40px;
+}
+.wordmark {
+  font-weight: 600;
+  font-size: var(--text-xl);
+  letter-spacing: -0.03em;
+}
+
+/* Hero (Stage): the text on five columns, the editor on seven, bleeding off the right edge. */
+.hero__grid {
+  display: grid;
+  gap: var(--space-xl) var(--space-2xl);
+  align-items: center;
+  min-height: min(calc(100dvh - 73px), 56rem);
+  padding-block: var(--space-2xl);
+}
+.hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md) var(--space-lg);
+  margin: var(--space-xl) 0 0;
+}
+.shot {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  background: var(--bg-2);
+  outline: 1px solid var(--rule-2);
+  outline-offset: -1px;
+  box-shadow: var(--shadow-card);
+}
+.shot picture,
+.shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+@media (min-width: 60rem) {
+  .hero__grid {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    column-gap: var(--space-2xl);
+  }
+}
+
+/* Feature stack: the head held on the left while the captures pass on the right. */
+.stack {
+  padding-block: var(--section-gap-s) var(--section-gap);
+  border-top: 1px solid var(--line);
+}
+.stack__grid {
+  display: grid;
+  gap: var(--space-xl) var(--gap-columns);
+}
+.stack__shots {
+  display: grid;
+  gap: var(--space-3xl);
+}
+.shot-figure {
+  margin: 0;
+}
+.shot-figure figcaption {
+  margin-top: var(--space-sm);
+  font-size: var(--text-md);
+  color: var(--ink-2);
+  max-width: 48ch;
+}
+.shot--dialog {
+  max-width: 30rem;
+}
+.shot--phone {
+  max-width: 19rem;
+}
+@media (min-width: 60rem) {
+  .stack__grid {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  }
+  .stack__pin {
+    position: sticky;
+    top: var(--space-xl);
+    align-self: start;
+  }
+}
+
+/* Mapping: markdown on graphite beside the live form it makes. */
+.mapping {
+  padding-block: var(--section-gap-s);
+  background: var(--bg-2);
+}
+.mapping__panes {
+  display: grid;
+  gap: var(--gap-columns);
+  margin-top: var(--space-2xl);
+  align-items: start;
+}
+.code-figure {
+  display: grid;
+  margin: 0;
+  min-width: 0;
+}
+.code-figure .caption {
+  order: 1;
+}
+.code-pane {
+  margin: 0;
+  padding: var(--space-lg) var(--space-lg) var(--space-lg) 0;
+  border-radius: var(--cut) 4px;
+  background: var(--graphite);
+  color: var(--graphite-ink);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.7;
+  overflow-x: auto;
+  counter-reset: line;
+}
+.code-pane .line {
+  display: block;
+  padding-left: 3.5em;
+  position: relative;
+  white-space: pre-wrap; /* long lines wrap under their own text, as in the editor */
+  overflow-wrap: break-word;
+}
+.code-pane .line::before {
+  counter-increment: line;
+  content: counter(line);
+  position: absolute;
+  left: 0;
+  width: 2.5em;
+  text-align: right;
+  color: var(--graphite-muted);
+}
+.code-pane .fence {
+  color: var(--accent-2);
+}
+.mapping__form {
+  min-width: 0;
+  padding: var(--space-lg) var(--space-xl);
+  border-radius: var(--cut) 4px;
+  background: var(--bg);
+  outline: 1px solid var(--line);
+  outline-offset: -1px;
+}
+.mapping__form h3 {
+  font-size: var(--text-title);
+  margin: 0 0 var(--space-lg);
+}
+.mapping .caption {
+  margin-top: var(--space-md);
+}
+@media (min-width: 60rem) {
+  .mapping__panes {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  }
+  .mapping .code-figure {
+    position: sticky; /* the source stays beside the longer form it makes */
+    top: var(--space-xl);
+  }
+}
+@supports (corner-shape: bevel) {
+  .code-pane,
+  .mapping__form {
+    corner-shape: bevel round bevel round;
+  }
+}
+
+/* Promises: a ruled table, the head beside it. */
+.promises {
+  padding-block: var(--section-gap);
+}
+.promises__grid {
+  display: grid;
+  gap: var(--space-xl) var(--gap-columns);
+}
+.promises table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.promises th,
+.promises td {
+  text-align: left;
+  vertical-align: baseline;
+  padding: var(--space-lg) var(--space-md) var(--space-lg) 0;
+  border-bottom: 1px solid var(--line);
+}
+.promises tr:first-child > * {
+  border-top: 1px solid var(--rule-2);
+}
+.promises th {
+  font-size: var(--text-title);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  width: 40%;
+}
+.promises td {
+  font-size: var(--text-lead);
+  color: var(--ink-2);
+}
+@media (max-width: 40rem) {
+  .promises th,
+  .promises td {
+    display: block;
+    width: auto;
+  }
+  .promises th {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+  .promises td,
+  .promises tr:first-child > td {
+    padding-top: var(--space-2xs);
+    border-top: 0;
+  }
+}
+@media (min-width: 60rem) {
+  .promises__grid {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  }
+}
+
+/* Exports: three facts beside a real export row. */
+.exports {
+  padding-block: var(--section-gap-s) var(--section-gap);
+  border-top: 1px solid var(--line);
+}
+.exports__grid {
+  display: grid;
+  gap: var(--space-xl) var(--space-2xl);
+  align-items: center;
+}
+.facts {
+  margin: var(--space-xl) 0 0;
+}
+.facts div {
+  padding: var(--space-md) 0;
+  border-top: 1px solid var(--line);
+}
+.facts dt {
+  font-weight: 600;
+}
+.facts dd {
+  margin: var(--space-2xs) 0 0;
+  color: var(--ink-2);
+}
+@media (min-width: 60rem) {
+  .exports__grid {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  }
+}
+
+/* Mast footer: the wordmark large over the links. */
+.mast-foot {
+  padding-block: var(--space-2xl);
+  background: var(--graphite);
+  color: var(--graphite-ink);
+}
+.mast-foot a {
+  color: var(--graphite-ink);
+}
+.mast-foot a:hover {
+  color: var(--accent-2);
+}
+.mast-foot__word {
+  font-weight: 600;
+  font-size: var(--text-section);
+  letter-spacing: -0.03em;
+  line-height: 1;
+  margin: 0 0 var(--space-xl);
+}
+.mast-foot__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-xl);
+  list-style: none;
+  padding: 0 0 var(--space-lg);
+  margin: 0 0 var(--space-lg);
+  border-bottom: 1px solid var(--graphite-2);
+}
+.mast-foot p {
+  margin: 0;
+}
+.mast-foot .caption {
+  color: var(--graphite-muted);
+  margin-top: var(--space-xs);
+}

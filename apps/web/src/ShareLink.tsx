@@ -38,7 +38,7 @@ export function ShareLink({
   }, [focus, link]);
 
   if (failed) return <p role="alert">Could not load the survey link.</p>;
-  if (!link) return <p>Loading link...</p>;
+  if (!link) return <p>Loading link…</p>;
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(link.url);
@@ -50,7 +50,7 @@ export function ShareLink({
   return (
     <section aria-label="Share this survey" className="share">
       {!link.published && (
-        <p>Not published yet: the link shows a "not found" page until you publish.</p>
+        <p>Not published yet: the link shows a “not found” page until you publish.</p>
       )}
       <div className="share-url">
         <input

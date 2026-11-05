@@ -79,21 +79,26 @@ export function toDiagnostics(doc: Text, errors: CompileError[]): Diagnostic[] {
 }
 
 const theme = EditorView.theme({
-  "&": { color: "var(--fg)", backgroundColor: "var(--bg)", height: "100%" },
+  // Code runs on graphite in both modes (the Cobalt theme, #141); the tokens are in styles.css.
+  "&": { color: "var(--graphite-ink)", backgroundColor: "var(--graphite)", height: "100%" },
   ".cm-content": {
-    fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+    fontFamily: "var(--font-mono)",
     fontVariantLigatures: "none", // "ffi" must read as three letters
-    caretColor: "var(--fg)",
+    caretColor: "var(--graphite-ink)",
   },
-  ".cm-gutters": { backgroundColor: "var(--panel)", color: "var(--muted)", border: "none" },
-  ".cm-activeLine, .cm-activeLineGutter": { backgroundColor: "var(--panel)" },
+  ".cm-gutters": {
+    backgroundColor: "var(--graphite)",
+    color: "var(--graphite-muted)",
+    border: "none",
+  },
+  ".cm-activeLine, .cm-activeLineGutter": { backgroundColor: "var(--graphite-2)" },
   "&.cm-focused": { outline: "3px solid var(--accent)" },
   // drawSelection() paints its own caret and selection, so caretColor alone leaves the base
   // theme's black caret and light selection in dark mode. The focused selector must match the base
   // theme's specificity to win.
-  ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--fg)" },
+  ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--graphite-ink)" },
   "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground":
-    { backgroundColor: "var(--selection)" },
+    { backgroundColor: "var(--graphite-selection)" },
   ".cm-tooltip": {
     color: "var(--fg)",
     backgroundColor: "var(--panel)",
