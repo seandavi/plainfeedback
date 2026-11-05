@@ -1,12 +1,15 @@
 import "./zod-jitless"; // first: see the file
-import { APP_NAME } from "@plainfeedback/core";
 import { lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { ParticipantPage } from "./ParticipantPage";
+import "@fontsource/ibm-plex-sans/latin-400.css";
+import "@fontsource/ibm-plex-sans/latin-500.css";
+import "@fontsource/ibm-plex-sans/latin-600.css";
 import "./styles.css";
 
 // Loaded on demand so participants never download the editor (CodeMirror).
 const StaffApp = lazy(() => import("./staff/StaffApp").then((m) => ({ default: m.StaffApp })));
+const Landing = lazy(() => import("./Landing").then((m) => ({ default: m.Landing })));
 
 const path = location.pathname;
 const survey = /^\/s\/([^/]+)\/?$/.exec(path);
@@ -20,11 +23,8 @@ createRoot(document.getElementById("root")!).render(
       <StaffApp />
     </Suspense>
   ) : (
-    <main>
-      <h1>{APP_NAME}</h1>
-      <p>
-        <a href="/app">Staff sign-in</a>
-      </p>
-    </main>
+    <Suspense fallback={null}>
+      <Landing />
+    </Suspense>
   ),
 );

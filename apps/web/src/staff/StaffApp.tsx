@@ -293,49 +293,78 @@ function GroupPage({ me, g }: { me: Me; g: string }) {
     <>
       <Crumbs items={[["Groups", paths.groups], [group.name]]} />
       <h1>{group.name}</h1>
-      <h2>Events</h2>
-      {events.length === 0 ? (
-        <p>No events yet.</p>
-      ) : (
-        <ul className="list">
-          {events.map((x) => (
-            <li key={x.id}>
-              <Link href={paths.event(g, x.slug)}>{x.title}</Link>{" "}
-              <span className="meta">
-                {x.slug}
-                {x.startsOn && `, ${eventDates(x)}`}
-              </span>{" "}
-              {isOwner(me, group) && (
-                <ConfirmButton
-                  label="Delete"
-                  name={x.title}
-                  title="Delete event"
-                  onConfirm={() => act.run(() => api.deleteEvent(g, x.slug))}
-                >
-                  Permanently delete {x.title} with all its surveys and responses? This cannot be
-                  undone. Backups keep a copy until they expire.
-                </ConfirmButton>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      {act.error !== undefined && <ErrorNote error={act.error} />}
-      {canEdit(me, group) && (
-        <CreateForm
-          legend="New event"
-          slugLabel="Short name (used in staff links and exports)"
-          slugHint="Filled in from the title. Lowercase letters, digits and hyphens, e.g. fall-2026."
-          onCreate={create}
-        >
-          <label>
-            Starts on <input type="date" name="startsOn" />
-          </label>
-          <label>
-            Ends on <input type="date" name="endsOn" />
-          </label>
-        </CreateForm>
-      )}
+      <section className="with-side" aria-labelledby="events-h">
+        <div>
+          <h2 id="events-h">Events</h2>
+          {events.length === 0 ? (
+            <p className="empty">No events yet.</p>
+          ) : (
+            <section
+              className="table-wrap"
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: scrollable region must be keyboard-focusable
+              tabIndex={0}
+              aria-label={`Events of ${group.name}`}
+            >
+              <table>
+                <caption className="sr-only">Events of {group.name}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Event</th>
+                    <th scope="col">Dates</th>
+                    {isOwner(me, group) && (
+                      <th scope="col">
+                        <span className="sr-only">Actions</span>
+                      </th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {events.map((x) => (
+                    <tr key={x.id}>
+                      <th scope="row">
+                        <Link href={paths.event(g, x.slug)}>{x.title}</Link>{" "}
+                        <span className="meta">{x.slug}</span>
+                      </th>
+                      <td>{x.startsOn ? eventDates(x) : <span className="meta">no dates</span>}</td>
+                      {isOwner(me, group) && (
+                        <td className="row-actions-cell">
+                          <ConfirmButton
+                            label="Delete"
+                            name={x.title}
+                            title="Delete event"
+                            onConfirm={() => act.run(() => api.deleteEvent(g, x.slug))}
+                          >
+                            Permanently delete {x.title} with all its surveys and responses? This
+                            cannot be undone. Backups keep a copy until they expire.
+                          </ConfirmButton>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
+          {act.error !== undefined && <ErrorNote error={act.error} />}
+        </div>
+        {canEdit(me, group) && (
+          <div className="side">
+            <CreateForm
+              legend="New event"
+              slugLabel="Short name (used in staff links and exports)"
+              slugHint="Filled in from the title. Lowercase letters, digits and hyphens, e.g. fall-2026."
+              onCreate={create}
+            >
+              <label>
+                Starts on <input type="date" name="startsOn" />
+              </label>
+              <label>
+                Ends on <input type="date" name="endsOn" />
+              </label>
+            </CreateForm>
+          </div>
+        )}
+      </section>
       <Members me={me} group={group} g={g} />
       <Tokens me={me} group={group} g={g} />
     </>
@@ -466,92 +495,141 @@ function EventPage({ me, g, e }: { me: Me; g: string; e: string }) {
       <Crumbs items={[["Groups", paths.groups], [group.name, paths.group(g)], [event.title]]} />
       <h1>{event.title}</h1>
       {event.startsOn && <p className="meta">{eventDates(event)}</p>}
-      <h2>Surveys</h2>
-      {surveys.length === 0 ? (
-        <p>No surveys yet.</p>
-      ) : (
-        <ul className="list">
-          {surveys.map((x) => (
-            <li key={x.slug}>
-              <Link href={paths.survey(g, e, x.slug)}>{x.title || x.slug}</Link>{" "}
-              <span className="meta">
-                {x.title && `${x.slug}, `}
-                {x.latestVersion ? `published v${x.latestVersion}, ${surveyStatus(x)}` : "draft"}
-              </span>{" "}
-              {x.latestVersion !== null && (
-                <Link href={paths.responses(g, e, x.slug)}>
-                  {x.responseCount === 1 ? "1 response" : `${x.responseCount ?? 0} responses`}
-                </Link>
-              )}{" "}
-              {canEdit(me, group) ? (
-                <label className="meta">
+      <section className="with-side" aria-labelledby="surveys-h">
+        <div>
+          <h2 id="surveys-h">Surveys</h2>
+          {surveys.length === 0 ? (
+            <p className="empty">No surveys yet.</p>
+          ) : (
+            <section
+              className="table-wrap"
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: scrollable region must be keyboard-focusable
+              tabIndex={0}
+              aria-label={`Surveys of ${event.title}`}
+            >
+              <table>
+                <caption className="sr-only">Surveys of {event.title}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Survey</th>
+                    <th scope="col">Status</th>
+                    <th scope="col" className="num">
+                      Responses
+                    </th>
+                    <th scope="col">Wave</th>
+                    <th scope="col">
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {surveys.map((x) => (
+                    <tr key={x.slug}>
+                      <th scope="row">
+                        <Link href={paths.survey(g, e, x.slug)}>{x.title || x.slug}</Link>{" "}
+                        {x.title && <span className="meta">{x.slug}</span>}
+                      </th>
+                      <td className="nowrap">
+                        {x.latestVersion
+                          ? `published v${x.latestVersion}, ${surveyStatus(x)}`
+                          : "draft"}
+                      </td>
+                      <td className="num">
+                        {x.latestVersion !== null ? (
+                          <Link href={paths.responses(g, e, x.slug)}>
+                            {x.responseCount === 1
+                              ? "1 response"
+                              : `${x.responseCount ?? 0} responses`}
+                          </Link>
+                        ) : (
+                          <span className="meta">none</span>
+                        )}
+                      </td>
+                      <td>
+                        {canEdit(me, group) ? (
+                          <label>
+                            <span className="sr-only">Wave</span>
+                            <select
+                              value={x.waveLabel ?? ""}
+                              onChange={(ev) =>
+                                act.run(() =>
+                                  api.setWave(event.id, x.slug, waveOf(ev.target.value)),
+                                )
+                              }
+                            >
+                              <WaveOptions />
+                            </select>
+                          </label>
+                        ) : (
+                          (x.waveLabel ?? <span className="meta">not a wave</span>)
+                        )}
+                      </td>
+                      <td className="row-actions-cell">
+                        <span className="row-actions">
+                          {canEdit(me, group) && (
+                            <Duplicate g={g} event={event} events={events} slug={x.slug} />
+                          )}
+                          {(isOwner(me, group) || (canEdit(me, group) && !x.latestVersion)) && (
+                            <ConfirmButton
+                              label="Delete"
+                              name={x.slug}
+                              title="Delete survey"
+                              onConfirm={() => act.run(() => api.deleteSurvey(event.id, x.slug))}
+                            >
+                              Permanently delete {x.slug} with all its versions and responses? This
+                              cannot be undone. Backups keep a copy until they expire.
+                            </ConfirmButton>
+                          )}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
+          {act.error !== undefined && <ErrorNote error={act.error} />}
+        </div>
+        {(canEdit(me, group) || isOwner(me, group)) && (
+          <div className="side">
+            {canEdit(me, group) && (
+              <CreateForm
+                legend="New survey"
+                slugLabel="Short name (used in exports and staff links)"
+                slugHint="Filled in from the title. Participants never see it. E.g. pre, post, followup."
+                onCreate={create}
+              >
+                <label>
                   Wave{" "}
-                  <select
-                    value={x.waveLabel ?? ""}
-                    onChange={(ev) =>
-                      act.run(() => api.setWave(event.id, x.slug, waveOf(ev.target.value)))
-                    }
-                  >
+                  <select name="waveLabel">
                     <WaveOptions />
                   </select>
                 </label>
-              ) : (
-                x.waveLabel && <span className="meta">{x.waveLabel}</span>
-              )}{" "}
-              {canEdit(me, group) && (
-                <Duplicate g={g} event={event} events={events} slug={x.slug} />
-              )}{" "}
-              {(isOwner(me, group) || (canEdit(me, group) && !x.latestVersion)) && (
-                <ConfirmButton
-                  label="Delete"
-                  name={x.slug}
-                  title="Delete survey"
-                  onConfirm={() => act.run(() => api.deleteSurvey(event.id, x.slug))}
-                >
-                  Permanently delete {x.slug} with all its versions and responses? This cannot be
-                  undone. Backups keep a copy until they expire.
-                </ConfirmButton>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      {act.error !== undefined && <ErrorNote error={act.error} />}
-      {canEdit(me, group) && (
-        <CreateForm
-          legend="New survey"
-          slugLabel="Short name (used in exports and staff links)"
-          slugHint="Filled in from the title. Participants never see it. E.g. pre, post, followup."
-          onCreate={create}
-        >
-          <label>
-            Wave{" "}
-            <select name="waveLabel">
-              <WaveOptions />
-            </select>
-          </label>
-          <label>
-            Start from{" "}
-            <select name="template" defaultValue="blank">
-              {Object.entries(TEMPLATES).map(([k, t]) => (
-                <option key={k} value={k}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-            <span className="meta">
-              To reuse another survey, use Duplicate next to it (it keeps the question ids).
-            </span>
-          </label>
-        </CreateForm>
-      )}
-      {isOwner(me, group) && (
-        <DeleteResponses
-          eventId={event.id}
-          surveys={surveys.filter((x) => x.latestVersion).map((x) => x.slug)}
-          onDone={data.reload}
-        />
-      )}
+                <label>
+                  Start from{" "}
+                  <select name="template" defaultValue="blank">
+                    {Object.entries(TEMPLATES).map(([k, t]) => (
+                      <option key={k} value={k}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="meta">
+                    To reuse another survey, use Duplicate next to it (it keeps the question ids).
+                  </span>
+                </label>
+              </CreateForm>
+            )}
+            {isOwner(me, group) && (
+              <DeleteResponses
+                eventId={event.id}
+                surveys={surveys.filter((x) => x.latestVersion).map((x) => x.slug)}
+                onDone={data.reload}
+              />
+            )}
+          </div>
+        )}
+      </section>
     </>
   );
 }
@@ -566,17 +644,17 @@ function EditorPage({ me, g, e, s }: { me: Me; g: string; e: string; s: string }
   const { group, event } = data.data;
   return (
     <>
-      <Crumbs
-        items={[
-          ["Groups", paths.groups],
-          [group.name, paths.group(g)],
-          [event.title, paths.event(g, e)],
-          [s],
-        ]}
-      />
-      <p>
+      <div className="page-nav">
+        <Crumbs
+          items={[
+            ["Groups", paths.groups],
+            [group.name, paths.group(g)],
+            [event.title, paths.event(g, e)],
+            [s],
+          ]}
+        />
         <Link href={paths.responses(g, e, s)}>Responses and downloads</Link>
-      </p>
+      </div>
       <Editor eventId={event.id} slug={s} readOnly={!canEdit(me, group)} />
     </>
   );

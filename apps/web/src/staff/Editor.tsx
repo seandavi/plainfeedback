@@ -215,6 +215,7 @@ export function Editor({
             >
               Publish…
             </button>
+            {dirty && <span className="meta">Save the draft before publishing.</span>}
             <InsertMenu
               onPick={(type) =>
                 code.current?.insert(SNIPPETS[type].replace("ID", freshId(type, text)))
@@ -247,7 +248,6 @@ export function Editor({
         {status}
       </p>
       {error !== undefined && <ErrorNote error={error} />}
-      {dirty && <p className="meta">Save the draft before publishing.</p>}
       {latest && share}
 
       <div className="split">
@@ -287,25 +287,27 @@ export function Editor({
         </section>
         <section aria-labelledby="preview-h" className="pane preview">
           <h2 id="preview-h">Preview</h2>
-          {errors.length > 0 && good && (
-            <p className="banner">The preview shows the last version without problems.</p>
-          )}
-          {good ? (
-            <div className={errors.length > 0 ? "stale" : undefined}>
-              <h3 className="preview-title">{good.title}</h3>
-              {good.intro && <Markdown text={good.intro} />}
-              <SurveyForm
-                key={`${round}/${good.pages
-                  .flatMap((p) => p.questions)
-                  .map((q) => `${q.id}:${q.type}`)
-                  .join()}`}
-                model={good}
-                mode="preview"
-              />
-            </div>
-          ) : (
-            <p>Nothing to preview until the survey has no problems.</p>
-          )}
+          <div className="preview-body">
+            {errors.length > 0 && good && (
+              <p className="banner">The preview shows the last version without problems.</p>
+            )}
+            {good ? (
+              <div className={errors.length > 0 ? "stale" : undefined}>
+                <h3 className="preview-title">{good.title}</h3>
+                {good.intro && <Markdown text={good.intro} />}
+                <SurveyForm
+                  key={`${round}/${good.pages
+                    .flatMap((p) => p.questions)
+                    .map((q) => `${q.id}:${q.type}`)
+                    .join()}`}
+                  model={good}
+                  mode="preview"
+                />
+              </div>
+            ) : (
+              <p>Nothing to preview until the survey has no problems.</p>
+            )}
+          </div>
         </section>
       </div>
 

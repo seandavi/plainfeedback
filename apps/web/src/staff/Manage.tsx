@@ -126,113 +126,117 @@ export function Members({ me, group, g }: { me: Me; group: Group; g: string }) {
     });
   };
   return (
-    <section aria-labelledby="members-h">
-      <h2 id="members-h">Members</h2>
-      <p className="meta">
-        Owner: everything below, plus members and deleting responses. Creator: create and edit
-        events and surveys. Viewer: read surveys and see and download responses.
-      </p>
-      <section
-        className="table-wrap"
-        // biome-ignore lint/a11y/noNoninteractiveTabindex: scrollable region must be keyboard-focusable
-        tabIndex={0}
-        aria-label={`Members of ${group.name}`}
-      >
-        <table>
-          <caption className="sr-only">Members of {group.name}</caption>
-          <thead>
-            <tr>
-              <th scope="col">Email</th>
-              <th scope="col">Role</th>
-              {manage && <th scope="col">Actions</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((m) => (
-              <tr key={m.userId}>
-                <th scope="row">{m.email}</th>
-                <td>
-                  {manage ? (
-                    <RoleSelect
-                      label={`Role of ${m.email}`}
-                      value={m.role}
-                      onChange={(role) => {
-                        setNote("");
-                        run(async () => {
-                          await api.setMember(g, m.userId, role);
-                          setNote(`${m.email} is now ${role}.`);
-                        });
-                      }}
-                    />
-                  ) : (
-                    m.role
+    <section className="with-side" aria-labelledby="members-h">
+      <div>
+        <h2 id="members-h">Members</h2>
+        <p className="meta">
+          Owner: everything below, plus members and deleting responses. Creator: create and edit
+          events and surveys. Viewer: read surveys and see and download responses.
+        </p>
+        <section
+          className="table-wrap"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: scrollable region must be keyboard-focusable
+          tabIndex={0}
+          aria-label={`Members of ${group.name}`}
+        >
+          <table>
+            <caption className="sr-only">Members of {group.name}</caption>
+            <thead>
+              <tr>
+                <th scope="col">Email</th>
+                <th scope="col">Role</th>
+                {manage && <th scope="col">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((m) => (
+                <tr key={m.userId}>
+                  <th scope="row">{m.email}</th>
+                  <td>
+                    {manage ? (
+                      <RoleSelect
+                        label={`Role of ${m.email}`}
+                        value={m.role}
+                        onChange={(role) => {
+                          setNote("");
+                          run(async () => {
+                            await api.setMember(g, m.userId, role);
+                            setNote(`${m.email} is now ${role}.`);
+                          });
+                        }}
+                      />
+                    ) : (
+                      m.role
+                    )}
+                  </td>
+                  {manage && (
+                    <td>
+                      <ConfirmButton
+                        label="Remove"
+                        name={m.email}
+                        title="Remove member"
+                        onConfirm={() => run(() => api.removeMember(g, m.userId))}
+                      >
+                        Remove {m.email} from {group.name}? They lose access to its events and
+                        surveys, and their API tokens for it stop working.
+                      </ConfirmButton>
+                    </td>
                   )}
-                </td>
-                {manage && (
-                  <td>
-                    <ConfirmButton
-                      label="Remove"
-                      name={m.email}
-                      title="Remove member"
-                      onConfirm={() => run(() => api.removeMember(g, m.userId))}
-                    >
-                      Remove {m.email} from {group.name}? They lose access to its events and
-                      surveys, and their API tokens for it stop working.
-                    </ConfirmButton>
-                  </td>
-                )}
-              </tr>
-            ))}
-            {invites.map((i) => (
-              <tr key={`invite:${i.email}`}>
-                <th scope="row">
-                  {i.email} <span className="badge">pending</span>
-                </th>
-                <td>{i.role}</td>
-                {manage && (
-                  <td>
-                    <ConfirmButton
-                      label="Revoke"
-                      name={i.email}
-                      title="Revoke invite"
-                      onConfirm={() => run(() => api.revokeInvite(g, i.email))}
-                    >
-                      Revoke the invite for {i.email}? They will not join {group.name} when they
-                      sign in.
-                    </ConfirmButton>
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-      <p role="status" className="status">
-        {note}
-      </p>
-      {error !== undefined && <ErrorNote error={error} />}
+                </tr>
+              ))}
+              {invites.map((i) => (
+                <tr key={`invite:${i.email}`}>
+                  <th scope="row">
+                    {i.email} <span className="badge">pending</span>
+                  </th>
+                  <td>{i.role}</td>
+                  {manage && (
+                    <td>
+                      <ConfirmButton
+                        label="Revoke"
+                        name={i.email}
+                        title="Revoke invite"
+                        onConfirm={() => run(() => api.revokeInvite(g, i.email))}
+                      >
+                        Revoke the invite for {i.email}? They will not join {group.name} when they
+                        sign in.
+                      </ConfirmButton>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+        <p role="status" className="status">
+          {note}
+        </p>
+        {error !== undefined && <ErrorNote error={error} />}
+      </div>
       {manage && (
-        <form className="create" onSubmit={add}>
-          <fieldset>
-            <legend>Add a member</legend>
-            <label>
-              Email <input name="email" type="email" required />
-              <span className="meta">
-                Not signed in yet? They get a pending invite that takes effect at their first
-                sign-in.
-              </span>
-            </label>
-            <label>
-              Role{" "}
-              <select name="role" defaultValue="viewer">
-                {ROLES.map((r) => (
-                  <option key={r}>{r}</option>
-                ))}
-              </select>
-            </label>
-            <button type="submit">Add member</button>
-          </fieldset>
-        </form>
+        <div className="side">
+          <form className="create" onSubmit={add}>
+            <fieldset>
+              <legend>Add a member</legend>
+              <label>
+                Email <input name="email" type="email" required />
+                <span className="meta">
+                  Not signed in yet? They get a pending invite that takes effect at their first
+                  sign-in.
+                </span>
+              </label>
+              <label>
+                Role{" "}
+                <select name="role" defaultValue="viewer">
+                  {ROLES.map((r) => (
+                    <option key={r}>{r}</option>
+                  ))}
+                </select>
+              </label>
+              <button type="submit">Add member</button>
+            </fieldset>
+          </form>
+        </div>
       )}
     </section>
   );
@@ -275,118 +279,124 @@ export function Tokens({ me, group, g }: { me: Me; group: Group; g: string }) {
       <summary>
         <h2 id="tokens-h">Advanced: API tokens</h2>
       </summary>
-      <p className="meta">
-        {all ? "All tokens for this group." : "Your tokens for this group."} A token can do what you
-        can do here, at most its role, until it expires or is revoked.
-      </p>
-      {created && (
-        <div role="alert" className="secret">
-          <p>
-            <strong>Copy the token "{created.name}" now.</strong> It is shown only once and cannot
-            be retrieved later. Treat it like a password.
+      <div className="with-side">
+        <div>
+          <p className="meta">
+            {all ? "All tokens for this group." : "Your tokens for this group."} A token can do what
+            you can do here, at most its role, until it expires or is revoked.
           </p>
-          <input
-            readOnly
-            aria-label="New API token"
-            value={created.token}
-            onFocus={(e) => e.target.select()}
-          />
-          <div className="actions">
-            <button
-              type="button"
-              onClick={() =>
-                navigator.clipboard?.writeText(created.token).then(
-                  () => setCopied(true),
-                  () => setCopied(false),
-                )
-              }
+          {created && (
+            <div role="alert" className="secret">
+              <p>
+                <strong>Copy the token "{created.name}" now.</strong> It is shown only once and
+                cannot be retrieved later. Treat it like a password.
+              </p>
+              <input
+                readOnly
+                aria-label="New API token"
+                value={created.token}
+                onFocus={(e) => e.target.select()}
+              />
+              <div className="actions">
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigator.clipboard?.writeText(created.token).then(
+                      () => setCopied(true),
+                      () => setCopied(false),
+                    )
+                  }
+                >
+                  Copy token
+                </button>
+                <button type="button" onClick={() => setCreated(undefined)}>
+                  I have saved it
+                </button>
+              </div>
+              {copied && <p role="status">Copied to the clipboard.</p>}
+            </div>
+          )}
+          {tokens.data.length === 0 ? (
+            <p>No tokens yet.</p>
+          ) : (
+            <section
+              className="table-wrap"
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: scrollable region must be keyboard-focusable
+              tabIndex={0}
+              aria-label={`API tokens of ${group.name}`}
             >
-              Copy token
-            </button>
-            <button type="button" onClick={() => setCreated(undefined)}>
-              I have saved it
-            </button>
-          </div>
-          {copied && <p role="status">Copied to the clipboard.</p>}
+              <table>
+                <caption className="sr-only">API tokens of {group.name}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">User</th>
+                    <th scope="col">Role</th>
+                    <th scope="col">Created</th>
+                    <th scope="col">Expires</th>
+                    <th scope="col">Last used</th>
+                    <th scope="col">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tokens.data.map((t) => (
+                    <tr key={t.id}>
+                      <th scope="row">{t.name}</th>
+                      <td>{t.email}</td>
+                      <td>{t.role}</td>
+                      <td>{when(t.createdAt)}</td>
+                      <td>{when(t.expiresAt)}</td>
+                      <td>{when(t.lastUsedAt)}</td>
+                      <td>
+                        {t.revokedAt ? (
+                          "Revoked"
+                        ) : (
+                          <ConfirmButton
+                            label="Revoke"
+                            name={t.name}
+                            title="Revoke token"
+                            onConfirm={() => run(() => api.revokeToken(g, t.id))}
+                          >
+                            Revoke the token "{t.name}" ({t.email})? Anything using it stops working
+                            immediately.
+                          </ConfirmButton>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
+          {error !== undefined && <ErrorNote error={error} />}
         </div>
-      )}
-      {tokens.data.length === 0 ? (
-        <p>No tokens yet.</p>
-      ) : (
-        <section
-          className="table-wrap"
-          // biome-ignore lint/a11y/noNoninteractiveTabindex: scrollable region must be keyboard-focusable
-          tabIndex={0}
-          aria-label={`API tokens of ${group.name}`}
-        >
-          <table>
-            <caption className="sr-only">API tokens of {group.name}</caption>
-            <thead>
-              <tr>
-                <th scope="col">Name</th>
-                <th scope="col">User</th>
-                <th scope="col">Role</th>
-                <th scope="col">Created</th>
-                <th scope="col">Expires</th>
-                <th scope="col">Last used</th>
-                <th scope="col">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tokens.data.map((t) => (
-                <tr key={t.id}>
-                  <th scope="row">{t.name}</th>
-                  <td>{t.email}</td>
-                  <td>{t.role}</td>
-                  <td>{when(t.createdAt)}</td>
-                  <td>{when(t.expiresAt)}</td>
-                  <td>{when(t.lastUsedAt)}</td>
-                  <td>
-                    {t.revokedAt ? (
-                      "Revoked"
-                    ) : (
-                      <ConfirmButton
-                        label="Revoke"
-                        name={t.name}
-                        title="Revoke token"
-                        onConfirm={() => run(() => api.revokeToken(g, t.id))}
-                      >
-                        Revoke the token "{t.name}" ({t.email})? Anything using it stops working
-                        immediately.
-                      </ConfirmButton>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      )}
-      {error !== undefined && <ErrorNote error={error} />}
-      {options.length > 0 && (
-        <form className="create" onSubmit={create}>
-          <fieldset>
-            <legend>New API token</legend>
-            <label>
-              Name <input name="name" required maxLength={200} />
-            </label>
-            <label>
-              Role{" "}
-              <select name="role" defaultValue={options[0]}>
-                {options.map((r) => (
-                  <option key={r}>{r}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Expires after (days){" "}
-              <input name="days" type="number" min={1} max={365} defaultValue={90} required />
-            </label>
-            <button type="submit">Create token</button>
-            {createError !== undefined && <ErrorNote error={createError} />}
-          </fieldset>
-        </form>
-      )}
+        {options.length > 0 && (
+          <div className="side">
+            <form className="create" onSubmit={create}>
+              <fieldset>
+                <legend>New API token</legend>
+                <label>
+                  Name <input name="name" required maxLength={200} />
+                </label>
+                <label>
+                  Role{" "}
+                  <select name="role" defaultValue={options[0]}>
+                    {options.map((r) => (
+                      <option key={r}>{r}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Expires after (days){" "}
+                  <input name="days" type="number" min={1} max={365} defaultValue={90} required />
+                </label>
+                <button type="submit">Create token</button>
+                {createError !== undefined && <ErrorNote error={createError} />}
+              </fieldset>
+            </form>
+          </div>
+        )}
+      </div>
     </details>
   );
 }
@@ -433,7 +443,7 @@ export function DeleteResponses({
             ))}
           </select>
         </label>
-        <p className="meta">To delete a single response, open the survey's responses page.</p>
+        <p className="meta">To delete a single response, open the survey’s responses page.</p>
         <label>
           Submitted before <input name="before" type="date" />
           <span className="meta">UTC. Leave empty to delete all.</span>

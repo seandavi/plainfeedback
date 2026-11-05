@@ -79,7 +79,7 @@ export function Responses({
   return (
     <>
       <h1>Responses: {slug}</h1>
-      <p>
+      <p className="response-count">
         <strong>{count === 1 ? "1 response" : `${count} responses`}</strong>, all published
         versions.
       </p>
@@ -88,7 +88,7 @@ export function Responses({
         survey does not ask for them. Handle what you see and download as confidential.
       </p>
       <p className="actions">
-        <a className="button" href={api.exportUrl(eventId, slug, "csv")} download>
+        <a className="button quiet" href={api.exportUrl(eventId, slug, "csv")} download>
           Download CSV
         </a>
         <a className="button" href={api.exportUrl(eventId, slug, "jsonl")} download>

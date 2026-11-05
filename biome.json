@@ -5,6 +5,8 @@
       "!**/dist",
       "!**/node_modules",
       "!.claude",
+      "!.agents",
+      "!.hallmark",
       "!docs/openapi.json",
       "!docs/_site",
       "!docs/.quarto"
